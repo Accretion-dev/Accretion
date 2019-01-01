@@ -1,0 +1,114 @@
+# 示例文件, 用来管理一个不存在的项目的特性
+
+* [d] 2018-12-28 第一条特性
+  tree: 前端->左侧边栏
+  tags: 前端, 左侧边栏
+  rate: 5
+  desc:
+    动画一定要炫
+    我要五彩斑斓的黑
+    注意缩进，这几行内容全部都是desc的一部分
+  stat:
+    2018-12-28   proposed
+    2018-12-28   developing: assigned to Fmajor
+  disc:
+    * pros:
+      这个特性不错
+    * cons:
+      五彩斑斓的黑做不到，其他特性不错，开发中 by Fmajor
+    * comment:
+      随便写一些评论
+* [f] 2018-12-28 增加状态栏
+  tree:
+    前端->状态栏
+    前端->用户自定义
+  tags: 前端, 状态栏, 用户自定义
+  desc:
+    增加状态栏
+  stat:
+    2018-12-28     proposed
+    2018-12-28   developing: assigned to Fmajor
+    2018-12-28     finished
+* [r] 2018-12-28 兼容IE6
+  tree: 前端
+  tags: 前端, 兼容性
+  desc:
+    这个项目应该兼容IE6
+  stat:
+    2018-12-28: proposed
+    2018-12-28: rejected
+      谁提的？打死！ by Fmajor
+* [d] 2018-12-28 兼容Firefox
+  tree: 前端
+  tags: 前端, 兼容性
+  desc:
+    这个项目应该兼容Firefox
+  stat:
+    2018-12-28: proposed
+    2018-12-28: developing: assigned to Fmajor
+  disc:
+    comments:
+      这个可以有 by Fmajor
+* [p] 2018-12-28 增加自定义快捷键
+  tree: 前端->编辑器
+  tags: 前端, 编辑器
+  desc:
+    为富文本编辑器增加自定义快捷键的借口
+  stat:
+    2018-12-28  proposed
+    2018-12-28    planed
+      这个提议不错，之后会开发的，不过稍微有些复杂，加入计划，有时间开发 by Fmajor
+* [?] 2018-12-28 加入圣诞节彩蛋
+  tree: 前端->按钮
+  tags: 前端, 编辑器
+  desc:
+    加入圣诞节彩蛋，给人一个惊喜(吓)
+  stat:
+    2018-12-28     proposed
+    2018-12-28 under debate
+  disc:
+    * comments:
+      阿里刚加彩蛋出事儿了，我们不能加 by 0x00
+      我们不是2b的业务，加个也无妨 by 0xFF
+      可以加到控制台里啊 by 0x77
+      楼上几个精分了吧？？？ by Fmajor
+* [ ] 2018-12-28 我想要这个特性
+  tree:
+    前端->编辑器
+    前端->用户自定义
+  tags: 前端, 编辑器, 用户自定义
+  desc:
+    blablablabla
+* [ ] 2018-12-28 我想要另外一个特性
+  tree:
+    前端->编辑器
+    前端->用户自定义
+  tags: 前端, 编辑器, 用户自定义
+  desc:
+    blablablabla
+* [ ] 2018-12-28 后端特性一
+  tree:
+    后端->数据库
+  tags: 后端, 数据库
+  desc:
+    blablablabla
+* [ ] 2018-12-28 后端特性二
+  tree:
+    后端->爬虫
+  tags: 后端, 爬虫
+  desc:
+    blablablabla
+* [ ] 2018-12-28 后端特性三
+  tree:
+    后端->API
+  tags: 后端, API
+  desc:
+    blablablabla
+* [ ] 2018-12-28 后端特性四
+  tree:
+    后端->API
+  tags: 后端, API
+  desc:
+    blablablabla
+
+" vim: ts=2 fdm=indent
