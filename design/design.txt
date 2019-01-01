@@ -38,6 +38,11 @@
   * 远程控制接口
     [ ] Telegram机器人
 * Lightcone: 时间、事件管理和可视化模块
+  * 特性概述:
+    * 支持的数据类型:
+      * 时刻类数据
+      * 时段类数据
+  * 数据类型:
 * 网站建设: Accretion网站的搭建
   prop:
     prio: 在Accretion的beta版发布之后着手开始设计
