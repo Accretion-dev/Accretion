@@ -23,6 +23,21 @@ module.exports = {
   */
   loading: { color: '#fff' },
 
+  // custom middleware
+  router: {
+    middleware: 'storeState',
+    extendRoutes (routes, resolve) {
+      routes.forEach(item => {
+        if (!item.path.endsWith('/')) {
+          item.path = item.path + '/'
+        }
+        if (!item.pathToRegexpOptions) {
+          item.pathToRegexpOptions = { strict: true }
+        }
+      })
+      // console.log(routes)
+    }
+  },
   /*
   ** Global CSS
   */
@@ -33,6 +48,7 @@ module.exports = {
   ** Plugins to load before mounting the App
   */
   plugins: [
+    '~/plugins/index'
   ],
 
   /*
