@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+# init a nuxt of the latest version
+## ? Project description: The backend of Accretion
+## ? Use a custom server framework: express
+## ? Use a custom UI framework: none
+## ? Choose rendering mode: Universal
+## ? Use axios module: yes
+## ? Use eslint: yes
+## ? Use prettier: no
+## ? Choose a package manager: npm
+npx create-nuxt-app brainhole
+cd brainhole
+

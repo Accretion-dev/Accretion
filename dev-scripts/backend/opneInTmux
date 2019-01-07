@@ -1,0 +1,21 @@
+#!/bin/bash
+SessionName="Accretion"
+tmux new-session -s $SessionName -d >/dev/null 2>&1 || echo "session ${SessionName} already exist"
+
+windowName="database"
+tmux kill-window -t $SessionName:$windowName >/dev/null 2>&1
+tmux new-window -a -t $SessionName -n $windowName -d
+tmux send-keys -t $SessionName:$windowName "make database" ENTER
+
+windowName="dev"
+tmux kill-window -t $SessionName:$windowName >/dev/null 2>&1
+tmux new-window -a -t $SessionName -n $windowName -d
+tmux send-keys -t $SessionName:$windowName "cat README.md" ENTER
+tmux split-window -h -t $SessionName:$windowName
+tmux send-keys -t $SessionName:$windowName "make brainhole-watch" ENTER
+tmux split-window -v -t $SessionName:$windowName
+tmux send-keys -t $SessionName:$windowName "make brainhole-dev" ENTER
+
+echo "use:"
+echo "  tmux at"
+echo "to get the dev environment"
