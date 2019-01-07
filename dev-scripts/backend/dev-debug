@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+watched="$PWD/server"
+if [[ ! -e ".inspect-port.txt" ]]; then
+  echo "no .inspect-port.txt file, use default port 12345"
+  port=12345
+else
+  port=$(cat .inspect-port.txt)
+fi
+sleep 3
+echo "==========================================================="
+cross-env NODE_ENV=development NODE_OPTIONS="--max-old-space-size=16384" nodemon --inspect --inspect-port="$port" server/index.js --watch server

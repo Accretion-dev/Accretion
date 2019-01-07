@@ -1,0 +1,30 @@
+#!/bin/bash
+configFile=configs/config.js
+mongodConfigFile=configs/mongod.yml
+database=`cat $configFile | grep '^\s"database"' | tail -n 1 | cut -d ':' -f2 | cut -d \" -f2`
+databaseDir=`cat $configFile | grep '^\s"databaseDir"' | tail -n 1 | cut -d ':' -f2 | cut -d \" -f2`
+if [[ -z "$database" || -z "$databaseDir" ]]; then
+  echo "unknown database:$database or databaseDir:$databaseDir, check the config file:$configFile"
+  exit 1
+fi
+
+version=`mongod --version | grep "db version"`
+if [[ "$version" < "db version v3.4.0" ]]; then
+	echo "you should use mongodb with the version >= 3.4"
+	echo "the current version is $version"
+	exit 1
+fi
+
+databasePath="$databaseDir/$database"
+mkdir -p $databasePath
+if [[ "$database" == "test" ]]; then
+	cat <<-EOF
+	===============Accretion================
+	* You are using the "test" database
+	* Accretion is thus in the test mode
+	* The content of it will be overwrite by the frontend each time the frontend is started
+	* If you want to use Accretion normally, change the "database" in ${configFile} to "product"
+	===============Accretion================
+	EOF
+fi
+mongod --dbpath $databasePath --config $mongodConfigFile

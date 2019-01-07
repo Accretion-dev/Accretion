@@ -1,1 +1,5 @@
 *.swp
+database/
+data/
+node_modules
+temp
