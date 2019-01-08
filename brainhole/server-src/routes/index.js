@@ -18,7 +18,8 @@ function viewReq (req) {
   return data
 }
 
-function mountRouters (app) {
+// entry of route
+function routes (app) {
   let router = express.Router()
   router.get('/', (req, res, next) => {
     res.send(`<pre>${viewReq(req)}</pre>`)
@@ -35,4 +36,4 @@ function mountRouters (app) {
   app.use('/auth/', auth)
   return app
 }
-export default mountRouters
+export default routes

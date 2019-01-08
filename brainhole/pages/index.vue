@@ -12,6 +12,7 @@
         Welcome {{ $store.state.username }}
       </h3>
       <div class="links">
+        <!-- nav vie frontend -->
         <Button to="/login/">
           login
         </Button>
@@ -35,6 +36,7 @@ export default {
   },
   methods: {
     urlto (url) {
+      // fetch page from backend
       window.location.href = url
     }
   }

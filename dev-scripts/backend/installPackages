@@ -12,6 +12,7 @@ npm i passport --save
 npm i passport-local --save
 npm i passport-local-mongoose --save
 npm i sass --save
+npm i node-yaml --save
 # dev packages
 npm i babel-cli --save-dev
 npm i babel-core --save-dev
