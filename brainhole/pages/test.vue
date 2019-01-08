@@ -62,9 +62,6 @@ export default {
       // console.log(JSON.parse(JSON.stringify(params)))
       this.$router.push(data)
     },
-    urlto (url) {
-      window.location.href = url
-    }
   },
 }
 </script>

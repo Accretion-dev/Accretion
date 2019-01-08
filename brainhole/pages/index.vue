@@ -35,10 +35,6 @@ export default {
     Logo
   },
   methods: {
-    urlto (url) {
-      // fetch page from backend
-      window.location.href = url
-    }
   }
 }
 </script>
