@@ -19,7 +19,7 @@
         <Button @click="urlto('/auth/logout/')">
           logout
         </Button>
-        <Button @click="urlto('/test/')">
+        <Button @click="$router.push({name: 'root-test', params: {previousUrl: 'homePage'}})">
           test
         </Button>
       </div>
