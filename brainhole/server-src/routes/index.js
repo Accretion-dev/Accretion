@@ -1,0 +1,38 @@
+import api from './api'
+import auth from './auth'
+import _ from 'lodash'
+import express from 'express'
+import authRedirect from '../../common/authRedirect'
+const au = authRedirect
+
+function viewReq (req) {
+  console.log(req)
+  let data = JSON.stringify(
+    _.pick(req, [
+      'hostname',
+      'user',
+      'url',
+      'route',
+    ]), null, 2
+  )
+  return data
+}
+
+function mountRouters (app) {
+  let router = express.Router()
+  router.get('/', (req, res, next) => {
+    res.send(`<pre>${viewReq(req)}</pre>`)
+  })
+  router.ws('/', (ws, req) => {
+    ws.send(JSON.stringify({
+      ok: true
+    }))
+    ws.send(viewReq(req))
+  })
+  app.use(au)
+  app.use('/test/', router)
+  app.use('/api/', api)
+  app.use('/auth/', auth)
+  return app
+}
+export default mountRouters

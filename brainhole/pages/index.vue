@@ -6,17 +6,21 @@
         brainhole
       </h1>
       <h2 class="subtitle">
-        The backend of Accretion
+        Brainhole backend for Accretion
       </h2>
+      <h3 v-if="$store.state.username">
+        Welcome {{ $store.state.username }}
+      </h3>
       <div class="links">
-        <a
-          href="https://nuxtjs.org/"
-          target="_blank"
-          class="button--green">Documentation</a>
-        <a
-          href="https://github.com/nuxt/nuxt.js"
-          target="_blank"
-          class="button--grey">GitHub</a>
+        <Button to="/login/">
+          login
+        </Button>
+        <Button @click="urlto('/auth/logout/')">
+          logout
+        </Button>
+        <Button @click="urlto('/test/')">
+          test
+        </Button>
       </div>
     </div>
   </section>
@@ -28,6 +32,11 @@ import Logo from '~/components/Logo.vue'
 export default {
   components: {
     Logo
+  },
+  methods: {
+    urlto (url) {
+      window.location.href = url
+    }
   }
 }
 </script>
