@@ -6,7 +6,7 @@ import authRedirect from '../../common/authRedirect'
 const au = authRedirect
 
 function viewReq (req) {
-  console.log(req)
+  // console.log(req)
   let data = JSON.stringify(
     _.pick(req, [
       'hostname',
@@ -21,6 +21,7 @@ function viewReq (req) {
 // entry of route
 function routes (app) {
   let router = express.Router()
+
   router.get('/', (req, res, next) => {
     res.send(`<pre>${viewReq(req)}</pre>`)
   })
@@ -30,8 +31,9 @@ function routes (app) {
     }))
     ws.send(viewReq(req))
   })
-  app.use(au)
   app.use('/test/', router)
+
+  app.use(au) // mount with no path, act as middleware
   app.use('/api/', api)
   app.use('/auth/', auth)
   return app

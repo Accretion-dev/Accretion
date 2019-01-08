@@ -1,13 +1,22 @@
-import express from 'express'
-import ws from './ws'
-let router = express.Router()
+import wsserver from '../wsserver'
+let {echo, brainhole} = wsserver
+let express = require('express')
+let router = express.Router({mergeParams: true})
 
 router.get('/', (req, res, next) => {
-  res.redirect('help')
+  ws.send(JSON.stringify({
+    '/': 'show all command list'
+  }))
 })
-router.get('/help/', (req, res, next) => {
-  res.send('help')
+
+router.ws('/', (ws, req) => {
+  ws.send(JSON.stringify({
+    '/echo/': 'echo everything back',
+    '/brainhole/': 'echo everything back by brainhole'
+  }))
+  ws.close(1000)
 })
-router.use('/ws/', ws)
+router.ws('/echo/', echo)
+router.ws('/brainhole/', brainhole)
 
 export default router

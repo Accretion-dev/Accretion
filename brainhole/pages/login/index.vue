@@ -115,6 +115,7 @@ export default {
             '/auth/login/',
             this.formData
           ).then(msg => {
+            console.log('login msg:', msg)
             this.$store.state.username = this.formData.username
             // let ws = new WebSocket('ws://127.0.0.1:3000/api/ws/brainhole/')
             // console.log(ws)
@@ -131,7 +132,11 @@ export default {
             //   console.log('open msg:', msg)
             //   ws.send('hello from client')
             // }
-            this.$router.push({path: '/'})
+            if (this.$route.query.redirect) {
+              this.$router.push({path: this.$route.query.redirect})
+            } else {
+              this.$router.push('/')
+            }
           }).catch(error => {
             console.log('error:', error)
             this.error = error.response.data

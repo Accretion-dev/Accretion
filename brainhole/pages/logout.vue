@@ -24,9 +24,6 @@ export default {
     Logo
   },
   created () {
-    if (!this.$store.state.username) {
-      this.$router.push('/login/')
-    }
   },
   methods: {
   }

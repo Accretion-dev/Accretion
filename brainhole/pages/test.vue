@@ -36,9 +36,6 @@ export default {
     '$route.params': 'onRouteChange'
   },
   created () {
-    if (!this.$store.state.username) {
-      this.$router.push('/login/')
-    }
   },
   methods: {
     onRouteChange (from, to) {
