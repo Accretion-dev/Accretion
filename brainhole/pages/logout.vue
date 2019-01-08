@@ -29,9 +29,6 @@ export default {
     }
   },
   methods: {
-    urlto (url) {
-      window.location.href = url
-    }
   }
 }
 </script>

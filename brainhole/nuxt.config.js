@@ -1,4 +1,5 @@
 const pkg = require('./package')
+const extendRoutes = require('./server/routes/extendRoutes').default
 
 module.exports = {
   mode: 'universal',
@@ -26,17 +27,7 @@ module.exports = {
   // custom middleware
   router: {
     middleware: 'storeState',
-    extendRoutes (routes, resolve) {
-      routes.forEach(item => {
-        if (!item.path.endsWith('/')) {
-          item.path = item.path + '/'
-        }
-        if (!item.pathToRegexpOptions) {
-          item.pathToRegexpOptions = { strict: true }
-        }
-      })
-      // console.log(routes)
-    }
+    extendRoutes
   },
   /*
   ** Global CSS

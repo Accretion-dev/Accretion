@@ -12,13 +12,14 @@
         Welcome {{ $store.state.username }}
       </h3>
       <div class="links">
+        <!-- nav vie frontend -->
         <Button to="/login/">
           login
         </Button>
         <Button @click="urlto('/auth/logout/')">
           logout
         </Button>
-        <Button @click="urlto('/test/')">
+        <Button @click="$router.push({name: 'root-test', params: {previousUrl: 'homePage'}})">
           test
         </Button>
       </div>
@@ -34,9 +35,6 @@ export default {
     Logo
   },
   methods: {
-    urlto (url) {
-      window.location.href = url
-    }
   }
 }
 </script>
