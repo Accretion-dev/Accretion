@@ -10,18 +10,12 @@ let whiteListPrefix = [
   '/_nuxt',
   '/static',
 ]
+let activeSessions = { }
 export default function (req, res, next) {
-  console.log('backend:', req.url)
+  console.log('backend:', req.url, req.user)
   if (!req.user) {
     // not login
-    if (req.url.endsWith('.websocket')) { // process websockets connect
-      let ws = req.ws
-      ws.send(JSON.stringify({
-        ok: false,
-        message: 'should login first'
-      }))
-      return ws.close()
-    } else if (req.originalUrl.startsWith('/api')) {
+    if (req.originalUrl.startsWith('/api')) {
       return res.status(401).send(JSON.stringify({
         ok: false,
         message: 'should login first',
@@ -30,7 +24,7 @@ export default function (req, res, next) {
       let url = req.originalUrl
       let needLogin = needLoginPrefix.some(_ => url.startsWith(_))
       if (needLogin) {
-        console.log(`${url} redirect to login`, req)
+        console.log(`${url} redirect to login`)
         let redirectURL = `/login/?redirect=${url}`
         if (res.redirect) {
           return res.redirect(redirectURL)

@@ -3,6 +3,7 @@ import express from 'express'
 import Models from '../models/models'
 const {User} = Models
 let router = express.Router()
+import sessions from '../api/sessions'
 
 router.post('/register/', async (req, res) => {
   let {username, password} = req.body
@@ -45,6 +46,24 @@ router.post('/login/', function(req, res, next) {
 router.get('/logout/', function (req, res) {
   req.logout()
   res.redirect('/')
+})
+
+router.get('/ws/', function(req, res, next) {
+  if (req.user) {
+    sessions[req.user.username] = {
+      sid: req.cookies['connect.sid'],
+      timestamp: new Date()
+    }
+    return res.status(200).send({
+      username: req.user.username,
+      sid: req.cookies['connect.sid'],
+    })
+  } else {
+    return res.status(401).send({
+      ok: false,
+      message: 'not login'
+    })
+  }
 })
 
 export default router

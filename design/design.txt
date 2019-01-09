@@ -76,9 +76,8 @@
   * 想到其他的再写
 * 技术栈选择和讨论
   * 后端
-    * express.js: 框架
+    * nuxt.js(express.js): 框架
       * passportjs: 用于认证的中间件
-      * express-ws: ws支持
       * mongoose: mongodb模型的面向对象化
     * monodb: 数据库
   * 前端

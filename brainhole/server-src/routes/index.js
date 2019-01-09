@@ -25,12 +25,12 @@ function routes (app) {
   router.get('/', (req, res, next) => {
     res.send(`<pre>${viewReq(req)}</pre>`)
   })
-  router.ws('/', (ws, req) => {
-    ws.send(JSON.stringify({
-      ok: true
-    }))
-    ws.send(viewReq(req))
-  })
+  //router.ws('/', (ws, req) => {
+  //  ws.send(JSON.stringify({
+  //    ok: true
+  //  }))
+  //  ws.send(viewReq(req))
+  //})
   app.use('/test/', router)
 
   app.use('/api/', api)
