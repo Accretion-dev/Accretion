@@ -1,12 +1,11 @@
-import wsserver from '../wsserver'
+import wsserver from '../api/wsserver'
 let {echo, brainhole} = wsserver
 let express = require('express')
 let router = express.Router({mergeParams: true})
 
 router.get('/', (req, res, next) => {
-  ws.send(JSON.stringify({
-    '/': 'show all command list'
-  }))
+  let user = req.user
+  res.status(200).send(`you are ${user}`)
 })
 
 router.ws('/', (ws, req) => {

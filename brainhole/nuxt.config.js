@@ -43,13 +43,6 @@ module.exports = {
   ],
 
   /*
-  ** ServerMiddleware
-  */
-  ServerMiddleware: [
-    '~/common/authRedirect'
-  ],
-
-  /*
   ** Nuxt.js modules
   */
   modules: [

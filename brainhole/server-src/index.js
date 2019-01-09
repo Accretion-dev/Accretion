@@ -9,6 +9,7 @@ import mongoose from 'mongoose'
 import database_init from './models'
 import globalConfig from "../configs/config.js"
 import yaml from 'node-yaml'
+import authRedirect from '../common/authRedirect'
 
 const express = require('express')
 const session = require("express-session")
@@ -21,6 +22,7 @@ const port = globalConfig.port
 d.app = app
 d.consola = consola
 d.m = mongoose
+d.express = express
 
 app.set('port', port)
 app.set('strict routing', true)
@@ -34,6 +36,7 @@ app.use(session({
 }))
 app.use(passport.initialize())
 app.use(passport.session())
+// app.use(authRedirect) // redirct to login page if not auth
 
 let expressWs = require('express-ws')(app)
 // mount routers for backend
@@ -46,6 +49,7 @@ config.dev = !(process.env.NODE_ENV === 'production')
 d.nuxtConfig = config
 d.config = globalConfig
 d.yaml = yaml
+d.app = app
 let databaseConfig = yaml.readSync('../configs/mongod.yml')
 d.databaseConfig = databaseConfig
 
@@ -62,6 +66,8 @@ async function start() {
   // Init Nuxt.js
   await database_init({config: globalConfig, databaseConfig})
   const nuxt = new Nuxt(config)
+  const server = nuxt.server
+  global.d.nuxt = nuxt
 
   // Build only in dev mode
   if (config.dev) {
@@ -74,6 +80,7 @@ async function start() {
 
   // Listen the server
   app.listen(port, host)
+
   consola.ready({
     message: `Server listening on http://${host}:${port}`,
     badge: true

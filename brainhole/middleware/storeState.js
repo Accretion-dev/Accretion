@@ -1,4 +1,3 @@
-import authRedirect from '../common-src/authRedirect' // must from common-src
 import cookie from 'cookie'
 let loginPrefix = [
   '/test',
@@ -6,7 +5,8 @@ let loginPrefix = [
   '/horizon'
 ]
 export default function ({route, redirect, req, store}) {
-  console.log('frontend:', route.path, req)
+  // console.log('frontend:', route.path, req)
+  console.log('frontend:', route.path)
   if (req && req.user) {
     if (req.user.username !== store.state.username) {
       store.state.username = req.user.username

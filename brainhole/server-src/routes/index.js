@@ -3,7 +3,6 @@ import auth from './auth'
 import _ from 'lodash'
 import express from 'express'
 import authRedirect from '../../common/authRedirect'
-const au = authRedirect
 
 function viewReq (req) {
   // console.log(req)
@@ -20,8 +19,9 @@ function viewReq (req) {
 
 // entry of route
 function routes (app) {
-  let router = express.Router()
+  app.use(authRedirect) // mount with no path, act as middleware
 
+  let router = express.Router()
   router.get('/', (req, res, next) => {
     res.send(`<pre>${viewReq(req)}</pre>`)
   })
@@ -33,7 +33,6 @@ function routes (app) {
   })
   app.use('/test/', router)
 
-  app.use(au) // mount with no path, act as middleware
   app.use('/api/', api)
   app.use('/auth/', auth)
   return app

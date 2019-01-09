@@ -12,5 +12,5 @@ export default function (routes, resolve) {
       delete item.pathToRegexpOptions
     }
   })
-  console.log('new routes:', routes)
+  // console.log('new routes:', routes)
 }
