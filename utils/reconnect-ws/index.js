@@ -1,125 +1,47 @@
+import EventEmitter from './event-emitter'
 const isNode=new Function("try {return this===global;}catch(e){return false;}");
-
 if (isNode()) {
   global.WebSocket = require('ws')
   global.Promise = require('promise')
 }
 
-// function oneOffWsPromise ({url, data}) {
-//   return new Promise((resolve, reject) => {
-//     var server = new WebSocket(url)
-//     server.onopen = () => {
-//       server.send(JSON.stringify(data))
-//     }
-//     server.onmessage = (message) => {
-//       let data = JSON.parse(message.data)
-//       server.close()
-//       resolve(data)
-//     }
-//     server.onerror = (error) => {
-//       reject(error)
-//     }
-//   })
-// }
-// function reuseWSbyIDPromise ({ws, data}) {
-//   // must have the id parameter
-//   return new Promise((resolve, reject) => {
-//     let id = data.id
-//     let callback = (event) => {
-//       let data = JSON.parse(event.data)
-//       if (data.id === id) {
-//         ws.removeEventListener('message', callback)
-//         resolve(data)
-//       }
-//     }
-//     ws.addEventListener('message', callback)
-//     if (ws.readyState === WebSocket.OPEN) {
-//       ws.send(JSON.stringify(data))
-//     } else {
-//       let callback = () => {
-//         ws.send(JSON.stringify(data))
-//         ws.removeEventListener('open', callback)
-//       }
-//       ws.addEventListener('open', callback)
-//     }
-//   })
-// }
-function Sleep (time) {
-  let start, end
-  start = new Date()
-  while (true) {
-    end = new Date()
-    if (end - start > time) {
-      break
-    }
-  }
-  // console.log('sleep ', end - start)
-}
-
-class EventEmitter {
-  constructor () {
-    this.listeners = new Map()
-  }
-  on (label, callback) {
-    this.listeners.has(label) || this.listeners.set(label, [])
-    this.listeners.get(label).push(callback)
-  }
-  list (label) {
-    return this.listeners.get(label)
-  }
-  off (label, callback) {
-    let index = -1
-    let functions = this.listeners.get(label) || []
-    functions.some(item => {
-      if (item === callback) {
-        return true
-      } else {
-        return false
-      }
-    })
-    if (index > -1) {
-      return functions.splice(index, 1)
-    } else {
-      return false
-    }
-  }
-  emit (label, ...args) {
-    let listeners = this.listeners.get(label)
-    if (listeners && listeners.length) {
-      listeners.forEach((listener) => {
-        listener(...args)
-      })
-      return true
-    }
-    return false
-  }
-}
-
 class ReWebSocket extends EventEmitter {
   constructor (configs, ...args) {
     super()
+    /* each time you lose the connection, we will try max reconnectMaxCount times and then throw error
+       if your total retry times is larger than reconnectTotalMaxCount, we will also throw a error
+    */
     this.reconnectMaxCount = configs.reconnectMaxCount === undefined ? 5 : configs.reconnectMaxCount
-    this.reconnectTotalMaxCount = configs.reconnectTotalMaxCount === undefined ? 50 : configs.reconnectTotalMaxCount
     this.reconnectTime = configs.reconnectTime || 2
     this.reconnectDelay = configs.reconnectDelay || 0
+    // name to use in the log output
     this.name = configs.name || ''
+    // force reconnect event in normal close
     this.forceReconnect = configs.forceReconnect || false
     this._reconnectCount = 0
     this._reconnectTotalCount = 0
+
     this.subscribe_history = []
-    this.raise = configs.raise === undefined ? true : configs.raise === undefined
-    // badRate = {time: 600, maxCount: 3}
+    this.raise = configs.raise === undefined ? true : configs.raise
     this.badRate = configs.badRate
     this.startTime = new Date()
     this.reconnect_history = []
     // on open
-    this._onopens = []
+    this._onopens = [] // store callbacks when ws is open
     this._onopen = event => {
+      // redo onopens
+      if (this._onopens.length) {
+        for (let eachCallback of this._onopens) {
+          eachCallback(event)
+        }
+      }
+      // then redo subscribe
       if (this._reconnectCount > 0) {
-        if (this.subscribe_history) {
+        if (this.subscribe_history.length) {
           console.info(`${this.name} reconnect ${this.url} successfully!! redo subscribe`, this.subscribe_history, `reconnectMaxCount: ${configs.reconnectMaxCount}`)
           let reconnectCount = this._reconnectCount
           this._subscribe_do()
+          // all subscribes must have reply, or do reconnect again
           setTimeout(() => {
             if (this.ws.subscribe_list_wait.length !== 0) {
               this._reconnectCount = reconnectCount
@@ -127,14 +49,10 @@ class ReWebSocket extends EventEmitter {
             }
           }, this.reconnectTime * 1000 + this.reconnectDelay)
         } else {
-          console.info(`${this.name} reconnect ${this.url} successfully!!`)
+          console.info(`${this.name} reconnect ${this.url} successfully!! nothing to subscribe`)
         }
+        // the reconnect is now successful, reset reconnectCount to 0
         this._reconnectCount = 0
-      }
-      if (this._onopens.length) {
-        for (let eachCallback of this._onopens) {
-          eachCallback(event)
-        }
       }
     }
     // on close
@@ -177,6 +95,7 @@ class ReWebSocket extends EventEmitter {
       }
     }
 
+    // init behaviors
     this.args = args
     this.ws = new WebSocket(...args)
     this.ws.__rews__ = this.name
@@ -197,8 +116,8 @@ class ReWebSocket extends EventEmitter {
     // console.error(event)
     if (this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
       this._reconnectTotalCount += 1
-      console.log(`${this.name}  reconnecting ${this.url} tries: ${this._reconnectCount}|${this.reconnectMaxCount}, total tries: ${this._reconnectTotalCount}|${this.reconnectTotalMaxCount}`)
-      if (this._reconnectCount < this.reconnectMaxCount && this._reconnectTotalCount < this.reconnectTotalMaxCount) {
+      console.log(`${this.name}  reconnecting ${this.url} tries: ${this._reconnectCount}|${this.reconnectMaxCount}, total tries: ${this._reconnectTotalCount}`)
+      if (this._reconnectCount < this.reconnectMaxCount) {
         setTimeout(() => {
           // console.log(this._onopen, this._onclose, this._onerror, this._onmessage)
           this.reconnect_history.push(new Date())
@@ -209,7 +128,7 @@ class ReWebSocket extends EventEmitter {
         }, this.reconnectTime * 1000)
       } else {
         if (this.raise) {
-          throw Error(`${this.name}  Max reconnect number reached for ${this.url}! with single:${this._reconnectCount}, total: ${this._reconnectTotalCount}`)
+          throw Error(`${this.name}  Max reconnect number reached for ${this.url}! with single:${this._reconnectCount}`)
         } else {
           console.error(`${this.name}  Max reconnect number reached for ${this.url}!`)
         }
@@ -296,6 +215,7 @@ class ReWebSocket extends EventEmitter {
     this.subscribe_message_data = {}
     this.subscribe_history.forEach(item => {
       let id = item.id
+      // send subscribe command and push the id into wait list
       if (!this.ws.subscribe_list_wait.includes(id)) {
         this.ws.subscribe_list_wait.push(id)
         try {
@@ -318,6 +238,7 @@ class ReWebSocket extends EventEmitter {
           this.ws.subscribe_list.push(data.id)
           this.subscribe_message_data[data.id] = data
           if (this.ws.subscribe_list_wait.length === 0) {
+            // replace onmessage function to receive subscription message
             this.ws.onmessage = this._onmessage
             console.log(`subscribe successfully!`, this.subscribe_history.map(o => o.id), this.name)
             if (wsoff) {
@@ -339,18 +260,23 @@ class ReWebSocket extends EventEmitter {
       }
     }
   }
-  subscribe (data) {
-    this.subscribe_history.push(data)
-    if (this.ws.readyState === WebSocket.OPEN) {
+  subscribe (datas) {
+    // datas is a array of data, all data should have id
+    // return a promise, you should add new ws.onmessage after this promise is resolved
+    if (!datas.every(_ => !!_.id)) {
+      throw Error('all subscribe data must have id')
+    }
+    this.subscribe_history = datas
+    if (this.ws.readyState === WebSocket.OPEN) { // when you add a subscription after ws is open
       return new Promise((resolve, reject) => {
         this._subscribe_do(resolve, reject)
       })
     } else {
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve, reject) => { // when you add a subscription before ws is open
         let callback = (event) => {
           this._subscribe_do(resolve, reject, callback)
         }
-        this.wson('open', callback, true)
+        this.wson('open', callback, true) // add this callback into ws.open callbacks
       })
     }
   }
@@ -394,6 +320,7 @@ class ReWebSocket extends EventEmitter {
     })
   }
   static onePromise ({url, data, sleep, config}) {
+    // connect to a ws, send data, wait for response and then close
     return new Promise((resolve, reject) => {
       let callback = () => {
         let timeout = config && config.timeout

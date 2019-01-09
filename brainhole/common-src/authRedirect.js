@@ -12,7 +12,6 @@ export default function (req, res, next, fromFrontEnd) {
   // } else {
   //   console.log('null')
   // }
-
   // Already login
   if (req.user) {
     if (next) {
