@@ -26,11 +26,11 @@ const defaultUser = {
 var d = global.d = {}
 d.www = www
 
-var relogin = false
 
 async function main () {
+  let relogin = false
   let login
-  try {
+  try { // for normal use, no this step (user should already login)
     login = await www.post( '/auth/login/', defaultUser )
   } catch (e) {
     console.log('=====login error======')
@@ -43,19 +43,39 @@ async function main () {
   }, `ws://${host}:${port}/api/ws/`)
   ws.wson('open', async event => {
     let info
+    if (relogin) { // for normal use, this process redirect to the login page
+      try {
+        await www.post( '/auth/login/', defaultUser )
+      } catch (e) {
+        throw Error('relogin error')
+      }
+    }
     try {
       info = await www.get('/auth/ws/')
     } catch (e) {
       console.log('=====need relogin=====')
-      throw e
+      if (relogin) {
+        throw Error('can not auth event after relogin')
+      } else {
+        relogin = true
+      }
+      ws.ws.close(1000)
+      return
     }
     let {username, sid} = info.data
-    ws.send(JSON.stringify({
-      "client-name": ws.name,
-      "client-type": 'test client',
-      username,
-      sid,
-    }))
+    try {
+      let wsLoginGood = await ws.init({
+        id: 'ws-auth',
+        "client-name": ws.name,
+        "client-type": 'test client',
+        username,
+        sid,
+      })
+      console.log('wsLoginGood:', wsLoginGood)
+      relogin = false
+    } catch (e) {
+      console.error('wsLoginBad:', e)
+    }
     ws.subscribe([
       {id: 'echo0', command: 'subscribe', configs: {from: 'echo0'}},
       {id: 'echo1', command: 'subscribe', configs: {from: 'echo1'}},

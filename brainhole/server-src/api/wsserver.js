@@ -13,10 +13,11 @@ class Subwss extends EventEmitter {
     this.wss = new WebSocketServer(wsconfig)
     this.wss.on('connection', (ws, req) => {
       global.d.req = req
-      console.log('client connected', req)
+      console.log('client connected')
       let timer = setTimeout(() => {
         if (ws.readyState <= 1) {
-          ws.close(1001, 'not auth in time')
+          // no auth in time
+          ws.close(1001)
         }
       }, 5000)
       /* response format
@@ -40,12 +41,14 @@ class Subwss extends EventEmitter {
         }
         console.log('server receive:', message)
         if (!ws._initData) {
+          // the initial data should have a id
           ws._initData = message
-          console.log(sessions, ws._initData.username, ws._initData.sid)
+          console.log("init data and current session:", sessions, message)
           if (sessions[ws._initData.username] && sessions[ws._initData.username].sid === ws._initData.sid) {
             clearTimeout(timer)
             ws.sequence += 1
             ws.send(JSON.stringify({
+              id: message.id,
               ok: true,
               message: 'login successfully'
             }))
@@ -54,7 +57,7 @@ class Subwss extends EventEmitter {
             clearTimeout(timer)
             console.log('ws auth failed!!!')
             if (ws.readyState <= 1) {
-              ws.close(1002, 'need relogin')
+              ws.close(1002)
             }
           }
           return
@@ -122,7 +125,7 @@ class Subwss extends EventEmitter {
               sequence: ws.sequence,
             }))
           } catch (e) {
-            console.error(e)
+            console.log('register subscribe error:', e)
           }
           console.log(`register a subscribe ${id} from `, ws._initData)
         }

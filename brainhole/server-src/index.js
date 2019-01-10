@@ -14,7 +14,7 @@ import Subwss from './api/wsserver.js'
 const express = require('express')
 const session = require("express-session")
 const consola = require('consola')
-const cors = require('cors')
+// const cors = require('cors')
 const { Nuxt, Builder } = require('nuxt')
 const app = express()
 const host = globalConfig.host
