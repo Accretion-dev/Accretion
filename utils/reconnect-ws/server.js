@@ -32,7 +32,14 @@ class Subwss extends EventEmitter {
         }
         console.log('server receive:', message)
         if (!ws._initData) {
+          ws.sequence += 1
           ws._initData = message
+          ws.send(JSON.stringify({
+            id: message.id,
+            sequence: ws.sequence,
+            ok: true,
+            message: 'init ok'
+          }))
           return
         }
         // do subscribe

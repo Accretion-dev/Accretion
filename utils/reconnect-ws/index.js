@@ -28,11 +28,11 @@ class ReWebSocket extends EventEmitter {
     this.reconnect_history = []
     // on open
     this._onopens = [] // store callbacks when ws is open
-    this._onopen = event => {
+    this._onopen = async event => {
       // redo onopens
       if (this._onopens.length) {
         for (let eachCallback of this._onopens) {
-          eachCallback(event)
+          await eachCallback(event)
         }
       }
       // then redo subscribe
@@ -61,6 +61,7 @@ class ReWebSocket extends EventEmitter {
       this.ws._meetclose = true
       if (this.forceReconnect || !event.reason) {
         if (!this.ws._meeterror) {
+          console.log(`${this.name}: ${this.url} abnormally closed with no reason`)
           this._reconnect(event)
         }
       } else {
@@ -221,9 +222,11 @@ class ReWebSocket extends EventEmitter {
         try {
           this.ws.send(JSON.stringify(item))
         } catch (error) {
-          console.log(item)
-          console.error('rews send subscribe error', error)
+          console.log('rews send subscribe error:', error.message, item)
           this.ws.close()
+          if (reject) {
+            return reject(error)
+          }
           // throw error
         }
       }
@@ -245,6 +248,7 @@ class ReWebSocket extends EventEmitter {
               this.wsoff('open', wsoff)
             }
             if (resolve) {
+              // do not return here
               resolve(this.subscribe_message_data)
             }
           }
@@ -284,10 +288,42 @@ class ReWebSocket extends EventEmitter {
     try {
       this.ws.send(data)
     } catch (error) {
-      console.log(data)
-      console.error('rews send error', error)
+      console.log('rews send error:', error.message, data)
       throw error
     }
+  }
+  init (data) {
+    // assume this is the first data send to server, the server will repeat the id
+    return new Promise((resolve, reject) => {
+      let id = data.id
+      let callback = (event) => {
+        let data = JSON.parse(event.data)
+        if (data.id === id) {
+          this.ws.onmessage = this._onmessage
+          return resolve(data)
+        }
+      }
+      this.ws.onmessage = callback
+      if (this.ws.readyState === WebSocket.OPEN) {
+        try {
+          this.ws.send(JSON.stringify(data))
+        } catch (error) {
+          console.error('init send error:', error.message, data)
+          return reject(error)
+        }
+      } else {
+        let callback = () => {
+          try {
+            this.ws.send(JSON.stringify(data))
+          } catch (error) {
+            console.error('init send error:', error.message, data)
+            return reject(error)
+          }
+          this.ws.open = this._onopen
+        }
+        this.ws.onopen = callback
+      }
+    })
   }
   promised (data) {
     return new Promise((resolve, reject) => {
@@ -296,7 +332,7 @@ class ReWebSocket extends EventEmitter {
         let data = JSON.parse(event.data)
         if (data.id === id) {
           this.ws.onmessage = this._onmessage
-          resolve(data)
+          return resolve(data)
         }
       }
       this.ws.onmessage = callback
@@ -304,14 +340,16 @@ class ReWebSocket extends EventEmitter {
         try {
           this.ws.send(JSON.stringify(data))
         } catch (error) {
-          console.error('send error!', error)
+          console.error('send error:', error.message, data)
+          return reject(error)
         }
       } else {
         let callback = () => {
           try {
             this.ws.send(JSON.stringify(data))
           } catch (error) {
-            console.error('send error!', error)
+            console.error('send error:', error.message, data)
+            return reject(error)
           }
           this.ws.open = this._onopen
         }
@@ -332,7 +370,7 @@ class ReWebSocket extends EventEmitter {
           timer = setTimeout(() => {
             timeoutError = true
             server.close()
-            reject(new Error(`timeout ${timeout}`))
+            return reject(new Error(`timeout ${timeout}`))
           }, timeout * 1000)
         }
         server.onopen = () => {
@@ -343,20 +381,20 @@ class ReWebSocket extends EventEmitter {
             console.log(data)
             console.error('one promise send error', error)
             server.close()
-            reject(error)
+            return reject(error)
           }
         }
         server.onmessage = (message) => {
           clearTimeout(timer)
           let data = JSON.parse(message.data)
           server.close()
-          resolve(data)
+          return resolve(data)
         }
         server.onerror = (error) => {
           if (!timeoutError) {
             clearTimeout(timer)
             server.close()
-            reject(error)
+            return reject(error)
           }
         }
       }
