@@ -2,19 +2,15 @@ import mongoose from 'mongoose'
 const {Schema} = mongoose
 
 const User = {
-  nestedKeys: [
-    'username'
-  ],
   schema: {
     username: { type: String },
     password: { type: String },
     active: { type: Boolean },
-    group: { type: mongoose.Schema.Types.ObjectId, default: null },
+    group: { type: Schema.Types.ObjectId, default: null },
     createTime: { type: Date, default: Date.now }
   }
 }
 const Metadata = {
-  nestedKeys: 'all',
   schema: {
     name: { type: String, index: true, required: true },
     type: { type: String, index: true },
@@ -22,7 +18,6 @@ const Metadata = {
   }
 }
 const Relation = {
-  nestedKeys: 'all',
   schema: {
     name: { type: String, index: true, required: true },
     type: { type: String, index: true },
@@ -31,25 +26,32 @@ const Relation = {
 }
 
 const Tag = {
-  nestedKeys: 'all',
   schema: {
     name: { type: String, index: true, required: true },
     type: { type: String, index: true },
   }
 }
 const Catalogue = {
-  nestedKeys: 'all',
   schema: {
     name: { type: String, index: true, required: true },
     type: { type: String, index: true },
   }
 }
 
+const History = {
+  schema: {
+    time: { type: Date, default: Date.now },
+    operation: { type: String, index: true },
+    field: { type: String, index: true },
+    model: { type: String, index: true},
+    id: { type: Schema.Types.ObjectId },
+    result: { type: Schema.Types.Mixed },
+    data: { type: Schema.Types.Mixed },
+    meta: { type: Schema.Types.Mixed },
+  }
+}
+
 const Article = {
-  nestedKeys: [
-    'title',
-    'abstract',
-  ],
   schema: {
     title: { type: String, index: true },
     author: { type: String, index: true },
@@ -62,10 +64,6 @@ const Article = {
   }
 }
 const Website = {
-  nestedKeys: [
-    'title',
-    'url',
-  ],
   schema: {
     title: { type: String, index: true },
     url: { type: String, index: true },
@@ -75,10 +73,6 @@ const Website = {
   }
 }
 const File = {
-  nestedKeys: [
-    'path',
-    'description',
-  ],
   schema: {
     path: { type: String, index: true },
     description: { type: String, index: true },
@@ -88,10 +82,6 @@ const File = {
   }
 }
 const Book = {
-  nestedKeys: [
-    'title',
-    'abstract',
-  ],
   schema: {
     title: { type: String, index: true },
     author: { type: String, index: true },
@@ -106,10 +96,6 @@ const Book = {
   }
 }
 const Snippet = {
-  nestedKeys: [
-    'name',
-    'language',
-  ],
   schema: {
     name: { type: String, index: true },
     language: { type: String, index: true },
@@ -119,9 +105,6 @@ const Snippet = {
   }
 }
 const Info = {
-  nestedKeys: [
-    'name',
-  ],
   schema: {
     name: { type: String, index: true },
     bulk: {
@@ -129,6 +112,20 @@ const Info = {
     }
   }
 }
+
+const Config = {
+  schema: {
+    name: { type: String, index: true },
+    value: { type: Schema.Types.Mixed }
+  }
+}
+const UserConfig = {
+  schema: {
+    name: { type: String, index: true },
+    value: { type: Schema.Types.Mixed }
+  }
+}
+
 export default {
   User,
   Metadata, Catalogue, Tag, Relation,
@@ -138,4 +135,7 @@ export default {
   Book,
   Snippet,
   Info,
+  Config,
+  UserConfig,
+  History,
 }
