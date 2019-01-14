@@ -27,18 +27,28 @@
     {
       "name": "image",
       "format": "video"
+    },
+    {
+      "name": "debug",
+      "format": "boolean"
     }
   ],
   "Relation": [
     {
       "name": "\u76f8\u540c\u89c2\u70b9",
       "symmetrical": true,
-      "type": "article"
+      "type": "article",
+      "flags": {
+        "debug": true
+      }
     },
     {
       "name": "\u76f8\u53cd\u89c2\u70b9",
       "symmetrical": true,
-      "type": "article"
+      "type": "article",
+      "flags": {
+        "debug": true
+      }
     },
     {
       "name": "\u76f8\u5173",

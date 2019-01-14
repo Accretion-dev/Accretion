@@ -1,12 +1,16 @@
 import mongoose from 'mongoose'
 const {Schema} = mongoose
 
+// most search can be done by searchKey
+// but there are possible duplicated entry with same searchKey
+// throw error in this case
+
 const User = {
   schema: {
     username: { type: String },
     password: { type: String },
     active: { type: Boolean },
-    group: { type: Schema.Types.ObjectId, default: null },
+    group: { type: String, default: null },
     createTime: { type: Date, default: Date.now }
   }
 }
@@ -20,6 +24,7 @@ const Metadata = {
 const Relation = {
   schema: {
     name: { type: String, index: true, required: true },
+    reverse_name: { type: String, index: true },
     type: { type: String, index: true },
     symmetric: { type: Boolean, index: true },
   }
@@ -29,12 +34,15 @@ const Tag = {
   schema: {
     name: { type: String, index: true, required: true },
     type: { type: String, index: true },
+    description: { type: String },
+    display_name: { type: String },
   }
 }
 const Catalogue = {
   schema: {
     name: { type: String, index: true, required: true },
     type: { type: String, index: true },
+    description: { type: String },
   }
 }
 
@@ -44,7 +52,7 @@ const History = {
     operation: { type: String, index: true },
     field: { type: String, index: true },
     model: { type: String, index: true},
-    id: { type: Schema.Types.ObjectId },
+    query: { type: Schema.Types.Mixed },
     result: { type: Schema.Types.Mixed },
     data: { type: Schema.Types.Mixed },
     meta: { type: Schema.Types.Mixed },
@@ -53,7 +61,7 @@ const History = {
 
 const Article = {
   schema: {
-    title: { type: String, index: true },
+    title: { type: String, index: true, required: true },
     author: { type: String, index: true },
     editor: { type: String, index: true },
     abstract: { type: String, index: true },
@@ -66,7 +74,7 @@ const Article = {
 const Website = {
   schema: {
     title: { type: String, index: true },
-    url: { type: String, index: true },
+    url: { type: String, index: true, required: true },
     bulk: {
       content: { type: String },
     }
@@ -74,7 +82,8 @@ const Website = {
 }
 const File = {
   schema: {
-    path: { type: String, index: true },
+    name: { type: String, index: true, required: true },
+    path: { type: String, index: true, required: true },
     description: { type: String, index: true },
     bulk: {
       content: { type: String },
@@ -83,7 +92,7 @@ const File = {
 }
 const Book = {
   schema: {
-    title: { type: String, index: true },
+    title: { type: String, index: true, required: true },
     author: { type: String, index: true },
     editor: { type: String, index: true },
     abstract: { type: String, index: true },
@@ -97,7 +106,7 @@ const Book = {
 }
 const Snippet = {
   schema: {
-    name: { type: String, index: true },
+    name: { type: String, index: true, required: true },
     language: { type: String, index: true },
     bulk: {
       content: { type: String },
@@ -106,7 +115,7 @@ const Snippet = {
 }
 const Info = {
   schema: {
-    name: { type: String, index: true },
+    name: { type: String, index: true, required: true },
     bulk: {
       content: { type: String },
     }
@@ -115,14 +124,21 @@ const Info = {
 
 const Config = {
   schema: {
-    name: { type: String, index: true },
+    name: { type: String, index: true, required: true },
     value: { type: Schema.Types.Mixed }
   }
 }
 const UserConfig = {
   schema: {
-    name: { type: String, index: true },
+    name: { type: String, index: true, required: true },
     value: { type: Schema.Types.Mixed }
+  }
+}
+
+const IDs = {
+  schema: {
+    name: { type: String, index: true },
+    count: { type: Number }
   }
 }
 
@@ -138,4 +154,5 @@ export default {
   Config,
   UserConfig,
   History,
+  IDs,
 }

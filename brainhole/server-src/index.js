@@ -59,7 +59,7 @@ d.databaseConfig = databaseConfig
 
 // auth
 // let User = require('./models/models').default.User
-const Models = require('./models/models').default
+const {Models, api} = require('./models/models').default
 let User = Models.User
 const LocalStrategy = require('passport-local').Strategy
 passport.use(new LocalStrategy(User.authenticate()))

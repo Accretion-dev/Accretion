@@ -13,5 +13,7 @@ brainhole-watch:
 	cd brainhole; npm run watch
 brainhole-dev:
 	cd brainhole; npm run dev
+brainhole-test:
+	cd brainhole; npm run test
 tmux:
 	./dev-scripts/backend/opneInTmux

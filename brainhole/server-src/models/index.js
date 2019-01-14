@@ -1,11 +1,29 @@
 import mongoose from 'mongoose'
-import Models from './models'
+import testData from '../../test/data/testdata.json'
+import debugApi from './debugApi'
+import __ from './models'
+const {Models, api} = __
 const consola = require('consola')
 const User = Models.User
 
-async function initTestDatabase () {
+async function initIDs () {
+  let names = Object.keys(Models)
+  for (let name of names) {
+    let good = await Models.IDs.findOne({name})
+    if (!good) {
+      await Models.IDs.insertMany([{name, count: 1}])
+    }
+  }
+}
+
+async function initTestDatabase ({config, databaseConfig}) {
+  if (config.unittest) {
+    console.log('clean database and fill with test data')
+    let dropResult = await mongoose.connection.db.dropDatabase()
+  }
+  await initIDs()
   // create default user
-  let exist = await User.findOne({username: 'accretion'}).exec()
+  let exist = await User.findOne({username: 'accretion'})
   if (!exist) {
     let user = new User({
       username: 'accretion',
@@ -15,15 +33,18 @@ async function initTestDatabase () {
     await user.save()
   }
   // init with test data
-  // TODO
+  if (config.unittest) {
+    console.log('doing unittest for api')
+    let da = new debugApi()
+  }
 }
 async function initProductDatabase () {
-  // TODO: low
+  await initIDs()
 }
 
 async function init ({config, databaseConfig}) {
   let {bindIp: ip, port} = databaseConfig.net
-  let databaseName = databaseConfig.database
+  let databaseName = config.database
   try {
     await mongoose.connect(`mongodb://${ip}:${port}/accretion`, { useNewUrlParser: true })
   } catch (e) {
@@ -33,7 +54,7 @@ async function init ({config, databaseConfig}) {
     consola.error(msg)
   }
   if (databaseName === "test") {
-    await initTestDatabase()
+    await initTestDatabase({config, databaseConfig})
   } else {
     await initProductDatabase()
   }

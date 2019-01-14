@@ -26,21 +26,22 @@ Metadata = [
     {'name': 'time', 'format': 'time'},
     {'name': 'editable', 'format': 'boolean'},
     {'name': 'image', 'format': 'video'},
+    {'name': 'debug', 'format': 'boolean'},
 ]
 
 Relation = [
-  {'name': '相同观点', 'symmetrical':True,  'type':'article'},
-  {'name': '相反观点', 'symmetrical':True,  'type':'article'},
-  {'name': '相关',     'symmetrical':True, 'type':'article'},
-  {'name': '进阶',     'symmetrical':False, 'reverse_name':'被进阶', 'type': 'article'},
-  {'name': '引用',     'symmetrical':False, 'reverse_name':'被引用', 'type': 'cross'},
-  {'name': '同义词',   'symmetrical':True, 'type': 'tag'},
-  {'name': '反义词',   'symmetrical':True, 'type': 'tag'},
-  {'name': '歧义',     'symmetrical':True, 'type': 'tag'},
-  {'name': '翻译',     'symmetrical':True, 'type': 'tag'},
-  {'name': '缩写',     'symmetrical':False, 'reverse_name':'被缩写', 'type': 'tag'},
-  {'name': '联想',     'symmetrical':True, 'type': 'tag'},
-  {'name': '引申',     'symmetrical':True, 'reverse_name':'被引申', 'type': 'tag'},
+    {'name': '相同观点', 'symmetrical':True,  'type':'article', 'flags': {'debug': True}},
+    {'name': '相反观点', 'symmetrical':True,  'type':'article', 'flags': {'debug': True}},
+    {'name': '相关',     'symmetrical':True, 'type':'article'},
+    {'name': '进阶',     'symmetrical':False, 'reverse_name':'被进阶', 'type': 'article'},
+    {'name': '引用',     'symmetrical':False, 'reverse_name':'被引用', 'type': 'cross'},
+    {'name': '同义词',   'symmetrical':True, 'type': 'tag'},
+    {'name': '反义词',   'symmetrical':True, 'type': 'tag'},
+    {'name': '歧义',     'symmetrical':True, 'type': 'tag'},
+    {'name': '翻译',     'symmetrical':True, 'type': 'tag'},
+    {'name': '缩写',     'symmetrical':False, 'reverse_name':'被缩写', 'type': 'tag'},
+    {'name': '联想',     'symmetrical':True, 'type': 'tag'},
+    {'name': '引申',     'symmetrical':True, 'reverse_name':'被引申', 'type': 'tag'},
 ]
 
 # construct clc
