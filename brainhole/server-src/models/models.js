@@ -105,7 +105,6 @@ let methods, schemaData
 
 
 /* operation type:
-1. aggregate, findOne
 2. create, modify, delete
 */
 
@@ -117,36 +116,9 @@ async function getNextSequenceValue(name) {
   )
   return doc.value.count;
 }
-async function processWiths ({ operation, withs, entry, model }) {
-  let keys = Object.keys(withs)
-  let result = {todo: {model, id:entry.id, operation}}
-  for (let key of keys) {
-    let api = `${key}API`
-    result[key] = await APIs[api]({ operation, data: withs[key], entry, key})
-  }
-  return result
-}
-
 /*
   seperate data into 'simple' ones and 'with' ones
 */
-function extractWiths ({ data, schema }) {
-  let withs = new Set(schema.__withs__)
-  let keys = new Set(Object.keys(data))
-  let result = {
-    simple: {},
-    withs: {},
-  }
-  keys.forEach(key => {
-    if (withs.has(key)) {
-      result.withs[key] = data[key]
-    } else {
-      result.simple[key] = data[key]
-    }
-  })
-  return result
-}
-
 /* Api entry function
     operation: create, delete and modify, aggregate, findOne
     * agregate and findOne:
@@ -163,119 +135,273 @@ function extractWiths ({ data, schema }) {
         modify top models
 */
 // TODO: add history and transaction
-async function api ({ operation, data, field, model, query, meta }) {
+/* different behavior with different combine of operation, data and query
+  operation can be
+    * '+': add or create
+    * '-': delete
+    * '*': modify
+  if operation is '+'
+    if !field:
+      create new document
+        processWiths
+    else:
+      add new 'tag' in field
+        if (field.indexOf('.')) >= 0
+          let [fieldPrefix, ..fieldSuffix]
+          data = data[fieldPrefix]
+          field = fieldSuffix.join('')
+        else
+          data = data[field]
+          field = ''
+        xxxAPI({operation, data, field, entry})
+        // in xxxAPI, again test field, if not ''
+        // should extract data, split field and call another API
+    elif operation is '-':
+      if !field:
+        processWiths // data change to null for all withsName
+        delete this document
+      else:
+        only delete some 'tag'
+        if (field.indexOf('.')) >= 0
+          let [fieldPrefix, ..fieldSuffix]
+          data = data[fieldPrefix]
+          field = fieldSuffix.join('')
+        else
+          data = data[field]
+          field = ''
+        xxxAPI({operation, data, field, entry})
+        // in xxxAPI, again test field, if not ''
+        // should extract data, split field and call another API
+    elif operation is '*':
+      if !field:
+        modify simple keys
+        processWiths
+          for each xxxAPI, if operations is modified
+            if data.id, get subentry with id
+            elif data[primarykey]
+              get subentry with primarykey
+              check duplicate
+                duplicate only happend at metadatas
+      else:
+        if (field.indexOf('.')) >= 0
+          let [fieldPrefix, ..fieldSuffix]
+          data = data[fieldPrefix]
+          field = fieldSuffix.join('')
+        else
+          data = data[field]
+          field = ''
+        xxxAPI({operation, data, field})
+*/
+let SubWiths = {
+  'metadatas': ['flags'],
+  'tags': ['metadatas', 'flags'],
+  'catalogues': ['metadatas', 'flags'],
+  'relations': ['metadatas', 'flags'],
+}
+function extractWiths ({ data, model, sub }) {
+  let thisWiths
+  if (sub) {
+    thisWiths = SubWiths
+  } else {
+    thisWiths = Withs
+  }
+  let withs = thisWiths[model]
+  if (!withs.length) {
+    return {
+      simple: data,
+      withs: {},
+    }
+  }
+  withs = new Set(withs)
+  let keys = new Set(Object.keys(data))
+  let result = {
+    simple: {},
+    withs: {},
+  }
+  keys.forEach(key => {
+    if (withs.has(key)) {
+      result.withs[key] = data[key]
+    } else {
+      result.simple[key] = data[key]
+    }
+  })
+  return result
+}
+
+async function processWiths ({ operation, prefield, field, entry, withs, sub }) {
+  let keys = Object.keys(withs)
+  let result = {}
+  for (let key of keys) {
+    if (!withs[key]) continue
+    let api = `${key}API`
+    result[key] = await APIs[api]({ operation, prefield: prefield+`-${key}`, field, entry, data: withs[key]})
+  }
+  return result
+}
+
+async function querySubID ({field, query, searchKey}) {
+  let query_id
+  let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
+  if (!(query_key in query || query_key+"_id" in query)) throw Error(`should have ${query_key} or ${query_key}_id: ${query}`)
+  // search for xx
+  if (query_key+"_id" in query) {
+    query_id = query[query_key+"_id"]
+  } else if (query_key in query) {
+    let oldquery = query
+    query = query[query_key]
+    delete oldquery[query_key]
+    if ('id' in query) {
+      query_id = query['id']
+    } else if (searchKey in query) {
+      let thisModel = query_key[0].toUpperCase() + query_key.slice(1)
+      let r = await Models[thisModel].find({[searchKey]: query[searchKey]})
+      if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${query} in ${thisModel}`)
+      query_id = r.id
+    } else {
+      throw Error(`should have 'id' or '${searchKey}' in ${query} in ${field}`)
+    }
+  }
+  query[query_key+"_id"] = query_id
+  return query_id
+}
+
+async function querySub({entry, data, searchKey, field}) {
+  let result
+  if ('id' in data) {
+    result = entry[field].find(_ => _.id === data.id )
+    if (!result) throw Error(`id ${data.id} not exists in ${field}`)
+    return result
+  } else if ('__query__' in data) {
+    let query = data.query
+    delete data.__query__
+
+    let query_id = await querySubID({field, query, searchKey})
+    // search for xxxxs
+    result = entry[field].filter(_ => _[query_key+'_id'] === query_id )
+    if (result.length !== 1) {
+      if (!(result.length)) {
+        throw Error(`${searchKey}: ${searchKey} not found in ${field}`)
+      } else {
+        throw Error(`${searchKey}: ${searchKey} more than one in ${field}`)
+      }
+    }
+    return result[0]
+  } else {
+    throw Error(`do not have 'id' or '__query__' in ${field}, don't know how to query`)
+  }
+}
+function extractField ({model, field, data, sub}) {
+  let fieldPrefix, fieldSuffix, newdata
+  let thisWiths = sub ? SubWiths : Withs
+  if (field.indexOf('.') >= 0)  {
+    [fieldPrefix, ...fieldSuffix] = field.split('.')
+    fieldSuffix = fieldSuffix.join('.')
+  }
+  else {
+    fieldPrefix = field
+    fieldSuffix = ''
+  }
+  newdata = data[fieldPrefix]
+  if (!newdata) throw Error(`should provide data with field: ${field} in model ${model}`)
+  if (!thisWiths[model].includes(fieldPrefix)) throw Error(`no field ${field} found in model ${model}`)
+  if (!APIs[`${fieldPrefix}API`]) throw Error(`Do not have api for ${field}`)
+  return {newdata, fieldPrefix, fieldSuffix}
+}
+
+async function apiSingle ({operation, model, field, data, entry, query, meta}) {
+  let withs, simple, result
+
+  let {fieldPrefix, fieldSuffix, newdata} = extractField({model, field, data})
+  let __ = await APIs[`${fieldPrefix}API`]({operation, prefield: model, field: fieldSuffix, entry, data: newdata})
+  simple = await entry.save()
+  result = simple
+  withs = result
+  let modelID = simple.id
+  // add transaction here
+  let history = new Models.History({
+    operation, modelID, model, field, data, query, result, withs, meta
+  }); await history.save()
+  return {operation, modelID, model, field, data, query, result, withs, meta}
+}
+
+
+async function api ({ operation, data, query, model, meta, field }) {
   let Model = mongoose.models[model]
-  let schema = Model.schema
   if (!Model) throw Error(`unknown model ${model}`)
-  if (operation === 'aggregate' || operation === 'findOne') {
+
+  if (operation === 'aggregate' || operation === 'findOne') { // search
     let result = await Model.aggregate(data)
     // result is query aggregate result
-    return {operation, data, field, model, result, query, meta}
-  } else if (operation === 'create') {
+    return {operation, model, field, data, query, result, meta}
+  } else if (operation === '+') {
     if (!field) { // e.g, create new Article, with some initial Tag, Cataloge...
-      let {simple, withs} = extractWiths({data, schema})
+      let {simple, withs} = extractWiths({data, model})
       simple.id = await getNextSequenceValue(model)
       let entry = new Model(simple)
-      withs = await processWiths({operation, withs, entry, model})
-      simple = await entry.save()
-      let result = {withs, simple}
+      withs = await processWiths({operation, prefield: model, field, entry, withs})
+      let result = await entry.save()
+      let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, field, model, query, result, meta, data
+        operation, modelID, model, field, data, query, result, withs, meta,
       }); await history.save()
-      return {operation, data, field, model, result, query, meta}
+      return {operation, modelID, model, field, data, query, result, withs, meta}
     } else { // e.g. add new tag, add new catalogues
       let entry = await Model.find(query)
       if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
       entry = entry[0]
-      let Field = structTree[model][field]
-      if (!Field) throw Error(`no field ${field} found in model ${model}`)
-      if (!Model.schema.__withs__.includes(field)) throw Error(`field ${field} is a simple field, use modify instead`)
-      data = data[field]
-      if (!data) throw Error(`should provide data.${field}`)
-      if (!APIs[`${field}API`]) throw Error(`Do not have api for ${field}`)
-      let __ = await APIs[`${field}API`]({operation, data, entry, model, field})
-      let simple = await entry.save()
-      let result = {field: __, simple}
-      // add transaction here
-      let history = new Models.History({
-        operation, field, model, query, result, meta, data
-      }); await history.save()
-      return {operation, data, field, model, result, query, meta}
+
+      let result = await apiSingle({operation, model, field, data, entry, query, meta})
+      return result
     }
-  } else if (operation === 'modify') { // modify top models (simple fields and nested fields)
+  } else if (operation === '*') { // modify top models (simple fields and nested fields)
     let entry = await Model.find(query)
     if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
     entry = entry[0]
+
     if (!field) {
-      // most api call from frontend will just modify simple filed (no withs)
-      // api call from backend can modify both simple and withs fields
-      let {simple, withs} = extractWiths({data, schema})
+      let {simple, withs} = extractWiths({data, model})
       entry.set(simple)
-      // TODO: hooks here
-      // e.g. modify a tag should tell all models that have this tag
-      // do not wait for this action, will send a error message later if meet error
-      withs = await processWiths({operation, withs, entry, model})
+      withs = await processWiths({operation, prefield: model, field, entry, withs})
       simple = await entry.save()
-      let result = {withs, simple}
+      let result = simple
+      let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, field, model, query, result, meta, data
+        operation, modelID, model, field, data, query, result, withs, meta
       }); await history.save()
-      return {operation, data, field, model, result, query, meta}
+      return {operation, modelID, model, field, data, query, result, withs, meta}
     } else {
-      let Field = structTree[model][field]
-      if (!Field) throw Error(`no field ${field} found in model ${model}`)
-      data = data[field]
-      if (!data) throw Error(`should provide data.${field}`)
-      // move into api functions
-      // let subentry = Field.id(data._id)
-      // if (!subentry) throw Error(`subdocument ${field} with id ${data._id} not exists!`)
-      if (!APIs[`${field}API`]) throw Error(`Do not have api for ${field}`)
-      let __ = await APIs[`${field}API`]({operation, data, entry, model, field})
-      let simple = await entry.save()
-      let result = {simple, field: __}
-      // add transaction here
-      let history = new Models.History({
-        operation, field, model, query, result, meta, data
-      }); await history.save()
-      return {operation, data, field, model, result, query, meta}
+      let result = await apiSingle({operation, model, field, data, entry, query, meta})
+      return result
     }
-  } else if (operation === 'delete') {
+  } else if (operation === '-') {
     let entry = await Model.find(query)
     if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
     entry = entry[0]
+
     if (!field) {
-      // TODO: remove all reverse and nested reverse hook, modify result
       let withs = {}
-      if (Model.__withs__) {
-        for (let thiswith of Model.__withs__) {
+      if (Withs[model]) {
+        for (let thiswith of Withs[model]) {
           withs[thiswith] = null
         }
       }
-      withs = await processWiths({operation, withs, entry, model})
+      withs = await processWiths({operation, prefield: model, field, entry, withs})
       let simple = await entry.remove()
-      let result = {withs, simple}
+      let result = simple
+      let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, field, model, query, result, meta, data
+        operation, modelID, model, field, data, query, result, withs, meta
       }); await history.save()
-      return {operation, data, field, model, result, query, meta}
+      return {operation, modelID, model, field, data, query, result, withs, meta}
     } else {
-      let Field = structTree[model][field]
-      if (!Field) throw Error(`no field ${field} found in model ${model}`)
-      data = data[field]
-      if (!data) throw Error(`should provide data.${field}`)
-      if (!APIs[`${field}API`]) throw Error(`Do not have api for ${field}`)
-      let __ = await APIs[`${field}API`]({operation, data, entry, model, field})
-      let simple = await entry.save()
-      let result = {simple, field:__}
-      // add transaction here
-      let history = new Models.History({
-        operation, field, model, query, result, meta, data
-      }); await history.save()
-      return {operation, data, field, model, result, meta, query}
+      let result = await apiSingle({operation, model, field, data, entry, query, meta})
+      return result
     }
+  } else {
+    throw Error(`operation should be one of '+', '-', '*', not ${operation}`)
   }
 }
 
@@ -283,16 +409,16 @@ async function api ({ operation, data, field, model, query, meta }) {
   return result
   have hooks
 */
-async function flagsAPI ({operation, data, entry, field}) {
-  // simple, just modify flags, no revert back
-  // remember to make modified flag for the Mixed field
-  if (operation === 'create') {
+async function flagsAPI ({operation, prefield, field, entry, data}) {
+  // field should always be '' or undefined
+  // prefield could be any
+  if (field) throw Error('field should always be blank or undefined, debug it!')
+  if (operation === '+') {
     entry.flags = data
-    entry.markModified('flags')
-  } else if (operation === 'modify') {
+  } else if (operation === '*') {
     entry.flags = Object.assign(entry.flags, data)
     entry.markModified('flags')
-  } else if (operation === 'delete') {
+  } else if (operation === '-') {
     let keys = Object.keys(data)
     for (let key of keys) {
       delete entry.flags[key]
@@ -300,15 +426,55 @@ async function flagsAPI ({operation, data, entry, field}) {
     entry.markModified('flags')
   }
 }
-async function metadatasAPI ({operation, data, entry, field}) {
-  if (operation === 'create') { // data should be array
-    for (let eachdata of data) {
-      let metadata = data.metadata
-      let metadataObj = await mongoose.models.Metadata.findById(metadata.id)
-      if (!metadataObj) throw Error(`No metadata with id:${metadata.id} exists!`)
+async function metadatasAPI ({operation, prefield, field, data, entry}) {
+  // field could be flags, that's to `operate` flags instead of metadata
+  const name = "metadatas"
+  const searchKey = "name"
+  if (field) {
+    entry = await querySub({entry, data, searchKey, field: name})
+    let {fieldPrefix, fieldSuffix, newdata} = extractField({model: name, field, data})
+    let __ = await APIs[`${fieldPrefix}API`]({operation, prefield: prefield+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata})
+    return { [fieldPrefix]: __ }
+  } else {
+    if (operation === '+') { // data should be array
+      let result = []
+      for (let eachdata of data) {
+        let {simple, withs} = extractWiths({data: eachdata, model: name, sub: true})
+        simple.id = await getNextSequenceValue(prefield)
+
+        // modify simple in the function
+        let query_id = await querySubID({field: name, query: simple, searchKey})
+
+        let index = entry[name].push(simple)
+        let thisentry = entry[name][index - 1]
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
+        let thisresult = {simple, withs}
+        result.push(thisresult)
+      }
+      return result
+    } else if (operation === '*') {
+      let result = []
+      for (let eachdata of data) {
+        let thisentry = await querySub({entry, data: eachdata, searchKey, field: name})
+        let {simple, withs} = extractWiths({data, model: name, sub: true})
+        thisentry.set(simple)
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
+        let thisresult = {simple, withs}
+        result.push(thisresult)
+      }
+      return result
+    } else if (operation === '-') {
+      let result = []
+      for (let eachdata of data) {
+        let thisentry = await querySub({entry, data: eachdata, searchKey, field: name})
+        let {simple, withs} = extractWiths({data, model: name, sub: true})
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
+        thisentry.remove()
+        let thisresult = {simple, withs}
+        result.push(thisresult)
+      }
+      return result
     }
-  } else if (operation === 'modify') {
-  } else if (operation === 'delete') {
   }
 }
 async function tagsAPI ({operation, data, entry, field}) {
@@ -409,7 +575,6 @@ todos.forEach(ModelName => {
     [type+"_id"]: { type: Number },
   }
   subSchema[type] = new Schema(schemaData)
-  subSchema[type].__withs__ = subWiths[type]
   WithsDict[withName].forEach(key => {
     let Model = models[key]
     let schemaDict = Model.schema
@@ -428,7 +593,6 @@ schemaData = {
   to_id: { type: Number },
 }
 subSchema.relation = new Schema(schemaData)
-subSchema.relation.__withs__ = subWiths["Relation"]
 WithRelation.forEach(key => {
   let Model = models[key]
   let schemaDict = Model.schema
@@ -540,7 +704,6 @@ outputNames.forEach(key => {
   let Model = models[key]
   let schemaDict = Model.schema
   Schemas[key] = new Schema(schemaDict, {collection: key})
-  Schemas[key].__withs__ = Withs[key]
 })
 
 // plugin user
@@ -587,4 +750,4 @@ if (d.main) {
   console.log('model info:', {Withs, subSchema, structTree, Schemas, foreignSchemas, Models, outputNames, WithsDict})
 }
 
-export default {Models, api, WithsDict, All}
+export default {Models, api, WithsDict, All, Withs}

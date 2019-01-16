@@ -1,8 +1,7 @@
 import mongoose from 'mongoose'
-import testData from '../../test/data/testdata.json'
-import debugApi from './debugApi'
+import fillDemo from './fillDemo'
 import __ from './models'
-const {Models, api} = __
+const {Models, api, Withs} = __
 const consola = require('consola')
 const User = Models.User
 
@@ -14,10 +13,20 @@ async function initIDs () {
       await Models.IDs.insertMany([{name, count: 1}])
     }
   }
+  let models = Object.keys(Withs)
+  for (let name of models) {
+    for (let withname of Withs[name]) {
+      if (['flags'].includes(withname)) continue
+      let good = await Models.IDs.findOne({name: `${name}-${withname}`})
+      if (!good) {
+        await Models.IDs.insertMany([{name: `${name}-${withname}`, count: 1}])
+      }
+    }
+  }
 }
 
 async function initTestDatabase ({config, databaseConfig}) {
-  if (config.unittest) {
+  if (config.demoData) {
     console.log('clean database and fill with test data')
     let dropResult = await mongoose.connection.db.dropDatabase()
   }
@@ -33,9 +42,9 @@ async function initTestDatabase ({config, databaseConfig}) {
     await user.save()
   }
   // init with test data
-  if (config.unittest) {
-    console.log('doing unittest for api')
-    let da = new debugApi()
+  if (config.demoData) {
+    console.log('fill with demoData')
+    let da = new fillDemo()
   }
 }
 async function initProductDatabase () {
