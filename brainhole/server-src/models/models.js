@@ -270,9 +270,11 @@ async function querySubID ({field, query, searchKey}) {
 
 async function querySub({entry, data, searchKey, field}) {
   let result, rawquery, fullquery
+  let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
   if ('id' in data) {
     result = entry[field].find(_ => _.id === data.id )
-    if (!result) throw Error(`id ${data.id} not exists in ${field}`)
+    if (!result)
+      throw Error(`id ${data.id} not exists in ${field}`)
     return result
   } else if ('__query__' in data) {
     fullquery = data
@@ -291,7 +293,7 @@ async function querySub({entry, data, searchKey, field}) {
     }
     return result[0]
   } else {
-    throw Error(`do not have 'id' or '__query__' in ${field}, don't know how to query`)
+    throw Error(`do not have 'id' or '__query__' in ${field}, don't know how to query, entry:${entry}, data:${data}`)
   }
 }
 function extractField ({model, field, data, sub}) {
@@ -421,7 +423,11 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
     entry.flags = data
     return entry.flags
   } else if (operation === '*') {
-    entry.flags = Object.assign(entry.flags, data)
+    if (!entry.flags) {
+      entry.flags = data
+    } else {
+      entry.flags = Object.assign(entry.flags, data)
+    }
     entry.markModified('flags')
     return entry.flags
   } else if (operation === '-') {
@@ -437,11 +443,27 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "metadatas"
   const searchKey = "name"
+  const query_key = name.slice(0,-1)+'_id'
   if (field) {
-    entry = await querySub({entry, data, searchKey, field: name})
-    let {fieldPrefix, fieldSuffix, newdata} = extractField({model: name, field, data})
-    let __ = await APIs[`${fieldPrefix}API`]({operation, prefield: prefield+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata})
-    return { [fieldPrefix]: __ }
+    let result = []
+    for (let eachdata of data) {
+      let thisentry = await querySub({entry, data: eachdata, searchKey, field: name})
+      let {fieldPrefix, fieldSuffix, newdata} = extractField({
+        model: name,
+        field,
+        data:eachdata,
+        sub: true
+      })
+      let __ = await APIs[`${fieldPrefix}API`]({
+        operation,
+        prefield: prefield+`-${fieldPrefix}`,
+        field: fieldSuffix,
+        entry: thisentry,
+        data: newdata
+      })
+      result.push({[fieldPrefix]: __})
+    }
+    return result
   } else {
     if (operation === '+') { // data should be array
       let result = []
@@ -463,10 +485,12 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
       let result = []
       for (let eachdata of data) {
         let thisentry = await querySub({entry, data: eachdata, searchKey, field: name})
-        let {simple, withs} = extractWiths({data, model: name, sub: true})
+        let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         thisentry.set(simple)
+        simple.id = thisentry.id
+        simple[query_key] = thisentry[query_key]
         withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
-        let thisresult = {simple, withs}
+        let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
       }
       return result
@@ -474,10 +498,12 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
       let result = []
       for (let eachdata of data) {
         let thisentry = await querySub({entry, data: eachdata, searchKey, field: name})
-        let {simple, withs} = extractWiths({data, model: name, sub: true})
+        let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
+        simple.id = thisentry.id
+        simple[query_key] = thisentry[query_key]
         thisentry.remove()
-        let thisresult = {simple, withs}
+        let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
       }
       return result

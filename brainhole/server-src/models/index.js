@@ -5,12 +5,14 @@ const {Models, api, Withs} = __
 const consola = require('consola')
 const User = Models.User
 
-async function initIDs () {
+async function initIDs ({config}) {
   let names = Object.keys(Models)
+  let offset = 1 // if unittest, models should have different offset 
   for (let name of names) {
     let good = await Models.IDs.findOne({name})
     if (!good) {
-      await Models.IDs.insertMany([{name, count: 1}])
+      await Models.IDs.insertMany([{name, count: offset}])
+      if (config.unittest) offset += 1000
     }
   }
   let models = Object.keys(Withs)
@@ -19,18 +21,22 @@ async function initIDs () {
       if (['flags'].includes(withname)) continue
       let good = await Models.IDs.findOne({name: `${name}-${withname}`})
       if (!good) {
-        await Models.IDs.insertMany([{name: `${name}-${withname}`, count: 1}])
+        await Models.IDs.insertMany([{name: `${name}-${withname}`, count: offset}])
+        if (config.unittest) offset += 1000
       }
     }
   }
 }
 
 async function initTestDatabase ({config, databaseConfig}) {
-  if (config.demoData) {
-    console.log('clean database and fill with test data')
+  if (config.demoData || config.unittest) {
+    consola.ready({
+      message: `clean database`,
+      badge: true
+    })
     let dropResult = await mongoose.connection.db.dropDatabase()
   }
-  await initIDs()
+  await initIDs({config})
   // create default user
   let exist = await User.findOne({username: 'accretion'})
   if (!exist) {
