@@ -116,9 +116,7 @@ async function getNextSequenceValue(name) {
   )
   return doc.value.count;
 }
-/*
-  seperate data into 'simple' ones and 'with' ones
-*/
+
 /* Api entry function
     operation: create, delete and modify, aggregate, findOne
     * agregate and findOne:
@@ -198,6 +196,93 @@ let SubWiths = {
   'catalogues': ['metadatas', 'flags'],
   'relations': ['metadatas', 'flags'],
 }
+async function querySubID ({field, query}) {
+  let query_id, rawquery, fullquery
+  let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
+  if (!(query_key in query || query_key+"_id" in query)) throw Error(`should have ${query_key} or ${query_key}_id: ${query}`)
+  // search for xx
+  if (query_key+"_id" in query) {
+    query_id = query[query_key+"_id"]
+    rawquery = query
+    fullquery = query
+  } else if (query_key in query) {
+    fullquery = query
+    query = query[query_key]
+    if ('id' in query) {
+      query_id = query['id']
+    } else {
+      let thisModel = query_key[0].toUpperCase() + query_key.slice(1)
+      let r = await Models[thisModel].find(query)
+      if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${query} in ${thisModel}`)
+      query_id = r[0].id
+    }
+    fullquery[query_key+"_id"] = query_id
+    rawquery = Object.assign({}, fullquery)
+    delete fullquery[query_key]
+  }
+  return {query_id, rawquery, fullquery}
+}
+async function querySub({entry, data, field}) {
+  let result, rawquery, fullquery
+  let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
+  if ('id' in data) {
+    result = entry[field].find(_ => _.id === data.id )
+    if (!result)
+      throw Error(`id ${data.id} not exists in ${field}`)
+    return result
+  } else if ('__query__' in data) {
+    fullquery = data
+    let query = data.__query__
+    delete fullquery.__query__
+
+    let {query_id} = await querySubID({field, query})
+    // search for xxxxs
+    result = entry[field].filter(_ => _[query_key+'_id'] === query_id )
+    if (result.length !== 1) {
+      if (!(result.length)) {
+        throw Error(`query:${query} not found in ${field}`)
+      } else {
+        throw Error(`query:${query} more than one in ${field}`)
+      }
+    }
+    return result[0]
+  } else {
+    throw Error(`do not have 'id' or '__query__' in ${field}, don't know how to query, entry:${entry}, data:${data}`)
+  }
+}
+function extractField ({model, field, data, sub}) {
+  let fieldPrefix, fieldSuffix, newdata
+  let thisWiths = sub ? SubWiths : Withs
+  if (field.indexOf('.') >= 0)  {
+    [fieldPrefix, ...fieldSuffix] = field.split('.')
+    fieldSuffix = fieldSuffix.join('.')
+  }
+  else {
+    fieldPrefix = field
+    fieldSuffix = ''
+  }
+  newdata = data[fieldPrefix]
+  if (!newdata) throw Error(`should provide data with field: ${field} in model ${model}`)
+  if (!thisWiths[model].includes(fieldPrefix)) throw Error(`no field ${field} found in model ${model}`)
+  if (!APIs[`${fieldPrefix}API`]) throw Error(`Do not have api for ${field}`)
+  return {newdata, fieldPrefix, fieldSuffix}
+}
+async function apiSingle ({operation, model, field, data, entry, query, meta}) {
+  let withs, simple, result
+
+  let {fieldPrefix, fieldSuffix, newdata} = extractField({model, field, data})
+  let __ = await APIs[`${fieldPrefix}API`]({operation, prefield: model, field: fieldSuffix, entry, data: newdata})
+  withs = {[fieldPrefix]: __}
+  simple = await entry.save()
+  result = simple
+  let modelID = simple.id
+  // add transaction here
+  let history = new Models.History({
+    operation, modelID, model, field, data, query, result, withs, meta
+  }); await history.save()
+  return {operation, modelID, model, field, data, query, result, withs, meta}
+}
+
 function extractWiths ({ data, model, sub }) {
   let thisWiths
   if (sub) {
@@ -227,7 +312,6 @@ function extractWiths ({ data, model, sub }) {
   })
   return result
 }
-
 async function processWiths ({ operation, prefield, field, entry, withs, sub }) {
   let keys = Object.keys(withs)
   let result = {}
@@ -238,99 +322,6 @@ async function processWiths ({ operation, prefield, field, entry, withs, sub }) 
   }
   return result
 }
-
-async function querySubID ({field, query, searchKey}) {
-  let query_id, rawquery, fullquery
-  let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
-  if (!(query_key in query || query_key+"_id" in query)) throw Error(`should have ${query_key} or ${query_key}_id: ${query}`)
-  // search for xx
-  if (query_key+"_id" in query) {
-    query_id = query[query_key+"_id"]
-    rawquery = query
-    fullquery = query
-  } else if (query_key in query) {
-    fullquery = query
-    query = query[query_key]
-    if ('id' in query) {
-      query_id = query['id']
-    } else if (searchKey in query) {
-      let thisModel = query_key[0].toUpperCase() + query_key.slice(1)
-      let r = await Models[thisModel].find({[searchKey]: query[searchKey]})
-      if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${query} in ${thisModel}`)
-      query_id = r[0].id
-    } else {
-      throw Error(`should have 'id' or '${searchKey}' in ${query} in ${field}`)
-    }
-    fullquery[query_key+"_id"] = query_id
-    rawquery = Object.assign({}, fullquery)
-    delete fullquery[query_key]
-  }
-  return {query_id, rawquery, fullquery}
-}
-
-async function querySub({entry, data, searchKey, field}) {
-  let result, rawquery, fullquery
-  let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
-  if ('id' in data) {
-    result = entry[field].find(_ => _.id === data.id )
-    if (!result)
-      throw Error(`id ${data.id} not exists in ${field}`)
-    return result
-  } else if ('__query__' in data) {
-    fullquery = data
-    let query = data.__query__
-    delete fullquery.__query__
-
-    let {query_id} = await querySubID({field, query, searchKey})
-    // search for xxxxs
-    result = entry[field].filter(_ => _[query_key+'_id'] === query_id )
-    if (result.length !== 1) {
-      if (!(result.length)) {
-        throw Error(`${searchKey}: ${searchKey} not found in ${field}`)
-      } else {
-        throw Error(`${searchKey}: ${searchKey} more than one in ${field}`)
-      }
-    }
-    return result[0]
-  } else {
-    throw Error(`do not have 'id' or '__query__' in ${field}, don't know how to query, entry:${entry}, data:${data}`)
-  }
-}
-function extractField ({model, field, data, sub}) {
-  let fieldPrefix, fieldSuffix, newdata
-  let thisWiths = sub ? SubWiths : Withs
-  if (field.indexOf('.') >= 0)  {
-    [fieldPrefix, ...fieldSuffix] = field.split('.')
-    fieldSuffix = fieldSuffix.join('.')
-  }
-  else {
-    fieldPrefix = field
-    fieldSuffix = ''
-  }
-  newdata = data[fieldPrefix]
-  if (!newdata) throw Error(`should provide data with field: ${field} in model ${model}`)
-  if (!thisWiths[model].includes(fieldPrefix)) throw Error(`no field ${field} found in model ${model}`)
-  if (!APIs[`${fieldPrefix}API`]) throw Error(`Do not have api for ${field}`)
-  return {newdata, fieldPrefix, fieldSuffix}
-}
-
-async function apiSingle ({operation, model, field, data, entry, query, meta}) {
-  let withs, simple, result
-
-  let {fieldPrefix, fieldSuffix, newdata} = extractField({model, field, data})
-  let __ = await APIs[`${fieldPrefix}API`]({operation, prefield: model, field: fieldSuffix, entry, data: newdata})
-  withs = {[fieldPrefix]: __}
-  simple = await entry.save()
-  result = simple
-  let modelID = simple.id
-  // add transaction here
-  let history = new Models.History({
-    operation, modelID, model, field, data, query, result, withs, meta
-  }); await history.save()
-  return {operation, modelID, model, field, data, query, result, withs, meta}
-}
-
-
 async function api ({ operation, data, query, model, meta, field }) {
   let Model = mongoose.models[model]
   if (!Model) throw Error(`unknown model ${model}`)
@@ -411,10 +402,28 @@ async function api ({ operation, data, query, model, meta, field }) {
   }
 }
 
-/*
+async function toNextField({operation, prefield, field, entry, data, name}) {
+  let result = []
+  for (let eachdata of data) {
+    let thisentry = await querySub({entry, data: eachdata, field: name})
+    let {fieldPrefix, fieldSuffix, newdata} = extractField({
+      model: name,
+      field,
+      data:eachdata,
+      sub: true
+    })
+    let __ = await APIs[`${fieldPrefix}API`]({
+      operation,
+      prefield: prefield+`-${fieldPrefix}`,
+      field: fieldSuffix,
+      entry: thisentry,
+      data: newdata
+    })
+    result.push({[fieldPrefix]: __})
+  }
   return result
-  have hooks
-*/
+}
+
 async function flagsAPI ({operation, prefield, field, entry, data}) {
   // field should always be '' or undefined
   // prefield could be any
@@ -442,28 +451,9 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
 async function metadatasAPI ({operation, prefield, field, data, entry}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "metadatas"
-  const searchKey = "name"
   const query_key = name.slice(0,-1)+'_id'
   if (field) {
-    let result = []
-    for (let eachdata of data) {
-      let thisentry = await querySub({entry, data: eachdata, searchKey, field: name})
-      let {fieldPrefix, fieldSuffix, newdata} = extractField({
-        model: name,
-        field,
-        data:eachdata,
-        sub: true
-      })
-      let __ = await APIs[`${fieldPrefix}API`]({
-        operation,
-        prefield: prefield+`-${fieldPrefix}`,
-        field: fieldSuffix,
-        entry: thisentry,
-        data: newdata
-      })
-      result.push({[fieldPrefix]: __})
-    }
-    return result
+    return await toNextField({operation, prefield, field, data, entry, name})
   } else {
     if (operation === '+') { // data should be array
       let result = []
@@ -472,7 +462,7 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
         simple.id = await getNextSequenceValue(prefield)
 
         // modify simple in the function
-        let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple, searchKey})
+        let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
         // fullquery delete the query_key, only have query_key_id
         let index = entry[name].push(fullquery)
         let thisentry = entry[name][index - 1]
@@ -484,7 +474,7 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
     } else if (operation === '*') {
       let result = []
       for (let eachdata of data) {
-        let thisentry = await querySub({entry, data: eachdata, searchKey, field: name})
+        let thisentry = await querySub({entry, data: eachdata, field: name})
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         thisentry.set(simple)
         simple.id = thisentry.id
@@ -497,7 +487,7 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
     } else if (operation === '-') {
       let result = []
       for (let eachdata of data) {
-        let thisentry = await querySub({entry, data: eachdata, searchKey, field: name})
+        let thisentry = await querySub({entry, data: eachdata, field: name})
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
         simple.id = thisentry.id
@@ -510,6 +500,13 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
     }
   }
 }
+// TODO: some special relation: translation
+async function relationsAPI ({operation, data, entry, field}) {
+  if (operation === 'create') {
+  } else if (operation === 'modify') {
+  } else if (operation === 'delete') {
+  }
+}
 async function tagsAPI ({operation, data, entry, field}) {
   if (operation === 'create') {
   } else if (operation === 'modify') {
@@ -517,13 +514,6 @@ async function tagsAPI ({operation, data, entry, field}) {
   }
 }
 async function cataloguesAPI ({operation, data, entry, field}) {
-  if (operation === 'create') {
-  } else if (operation === 'modify') {
-  } else if (operation === 'delete') {
-  }
-}
-// TODO: some special relation: translation
-async function relationsAPI ({operation, data, entry, field}) {
   if (operation === 'create') {
   } else if (operation === 'modify') {
   } else if (operation === 'delete') {
