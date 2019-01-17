@@ -197,10 +197,17 @@ let SubWiths = {
   'catalogues': ['metadatas', 'flags'],
   'relations': ['metadatas', 'flags'],
 }
-async function querySubID ({field, query}) {
+async function querySubID ({field, query, test}) {
   let query_id, rawquery, fullquery
   let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
-  if (!(query_key in query || query_key+"_id" in query)) throw Error(`should have ${query_key} or ${query_key}_id: ${query}`)
+  if (!(query_key in query || query_key+"_id" in query)) {
+    if (test) {
+      return {fullquery: query}
+    }
+    else {
+      throw Error(`should have ${query_key} or ${query_key}_id: ${query}`)
+    }
+  }
   // search for xx
   if (query_key+"_id" in query) {
     query_id = query[query_key+"_id"]
@@ -270,18 +277,42 @@ function extractField ({model, field, data, sub}) {
 }
 async function apiSingle ({operation, model, field, data, entry, query, meta}) {
   let withs, simple, result
+  let through = []
 
   let {fieldPrefix, fieldSuffix, newdata} = extractField({model, field, data})
-  let __ = await APIs[`${fieldPrefix}API`]({operation, prefield: model, field: fieldSuffix, entry, data: newdata})
+  let __ = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata})
+  if (__.__through__) {
+    through = [...through, ...__.__through__]
+    delete __.__through__
+  }
   withs = {[fieldPrefix]: __}
   simple = await entry.save()
   result = simple
   let modelID = simple.id
   // add transaction here
   let history = new Models.History({
-    operation, modelID, model, field, data, query, result, withs, meta
-  }); await history.save()
-  return {operation, modelID, model, field, data, query, result, withs, meta}
+    operation, modelID, model, field, data, query, result, withs, meta, through
+  }); await history.save(); await processThrough(through)
+  return {operation, modelID, model, field, data, query, result, withs, meta, through}
+}
+
+async function processThrough (through) {
+  through = through.map(_ => Object.assign({}, _))
+  for (let t of through) {
+    if (t.operation === '+') {
+      delete t.operation
+      let result = new Models.Through(t)
+      await result.save()
+    } else if (t.operation === '*') {
+      let {model_id_new} = t
+      delete t.operation
+      delete t.model_id_new
+      await Models.Through.findOneAndUpdate(t, {$set: {model_id: model_id_new}})
+    } else if (t.operation === '-') {
+      delete t.operation
+      await Models.Through.findOneAndRemove(t)
+    }
+  }
 }
 
 function extractWiths ({ data, model, sub }) {
@@ -314,18 +345,48 @@ function extractWiths ({ data, model, sub }) {
   return result
 }
 async function processWiths ({ operation, prefield, field, entry, withs, sub }) {
-  let keys = Object.keys(withs)
+  let keys
+  if (operation === '-') {
+    if (sub) {
+      keys = SubWiths[sub]
+    } else {
+      keys = Withs[prefield]
+    }
+  } else {
+    keys = Object.keys(withs)
+  }
   let result = {}
+  let through = []
   for (let key of keys) {
-    if (!withs[key]) continue
+    if (operation === '-') {
+      if (!entry[key]) continue
+      if (Array.isArray(entry[key]) && !(entry[key].length)) continue
+    } else {
+      if (!withs[key]) continue
+    }
     let api = `${key}API`
-    result[key] = await APIs[api]({ operation, prefield: prefield+`-${key}`, field, entry, data: withs[key]})
+    let thisresult = await APIs[api]({
+      operation,
+      prefield: prefield+`-${key}`,
+      field,
+      entry,
+      data: withs[key]
+    })
+    if (thisresult && thisresult.__through__) {
+      through = [...through, ...thisresult.__through__]
+      delete thisresult.__through__
+    }
+    result[key] = thisresult
+  }
+  if (through.length) {
+    result.__through__ = through
   }
   return result
 }
 async function api ({ operation, data, query, model, meta, field }) {
   let Model = mongoose.models[model]
   if (!Model) throw Error(`unknown model ${model}`)
+  let through = []
 
   if (operation === 'aggregate' || operation === 'findOne') { // search
     let result = await Model.aggregate(data)
@@ -337,13 +398,17 @@ async function api ({ operation, data, query, model, meta, field }) {
       simple.id = await getNextSequenceValue(model)
       let entry = new Model(simple)
       withs = await processWiths({operation, prefield: model, field, entry, withs})
+      if (withs.__through__) {
+        through = [...through, ...withs.__through__]
+        delete withs.__through__
+      }
       let result = await entry.save()
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, modelID, model, field, data, query, result, withs, meta,
-      }); await history.save()
-      return {operation, modelID, model, field, data, query, result, withs, meta}
+        operation, modelID, model, field, data, query, result, withs, meta, through
+      }); await history.save(); await processThrough(through)
+      return {operation, modelID, model, field, data, query, result, withs, meta, through}
     } else { // e.g. add new tag, add new catalogues
       let entry = await Model.find(query)
       if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
@@ -361,14 +426,18 @@ async function api ({ operation, data, query, model, meta, field }) {
       let {simple, withs} = extractWiths({data, model})
       entry.set(simple)
       withs = await processWiths({operation, prefield: model, field, entry, withs})
+      if (withs.__through__) {
+        through = [...through, ...withs.__through__]
+        delete withs.__through__
+      }
       simple = await entry.save()
       let result = simple
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, modelID, model, field, data, query, result, withs, meta
-      }); await history.save()
-      return {operation, modelID, model, field, data, query, result, withs, meta}
+        operation, modelID, model, field, data, query, result, withs, meta, through
+      }); await history.save(); await processThrough(through)
+      return {operation, modelID, model, field, data, query, result, withs, meta, through}
     } else {
       let result = await apiSingle({operation, model, field, data, entry, query, meta})
       return result
@@ -380,20 +449,19 @@ async function api ({ operation, data, query, model, meta, field }) {
 
     if (!field) {
       let withs = {}
-      if (Withs[model]) {
-        for (let thiswith of Withs[model]) {
-          withs[thiswith] = null
-        }
-      }
       withs = await processWiths({operation, prefield: model, field, entry, withs})
+      if (withs.__through__) {
+        through = [...through, ...withs.__through__]
+        delete withs.__through__
+      }
       let simple = await entry.remove()
       let result = simple
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, modelID, model, field, data, query, result, withs, meta
-      }); await history.save()
-      return {operation, modelID, model, field, data, query, result, withs, meta}
+        operation, modelID, model, field, data, query, result, withs, meta, through
+      }); await history.save(); await processThrough(through)
+      return {operation, modelID, model, field, data, query, result, withs, meta, through}
     } else {
       let result = await apiSingle({operation, model, field, data, entry, query, meta})
       return result
@@ -441,11 +509,15 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
     entry.markModified('flags')
     return entry.flags
   } else if (operation === '-') {
-    let keys = Object.keys(data)
-    for (let key of keys) {
-      delete entry.flags[key]
+    if (data) {
+      let keys = Object.keys(data)
+      for (let key of keys) {
+        delete entry.flags[key]
+      }
+      entry.markModified('flags')
+    } else {
+      entry.flags = undefined
     }
-    entry.markModified('flags')
     return entry.flags
   }
 }
@@ -453,50 +525,106 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "metadatas"
   const query_key = name.slice(0,-1)+'_id'
+  let through = []
+  let tpath = prefield
+  let tmodel = name[0].toUpperCase() + name.slice(1,-1)
+  let result = []
+
   if (field) {
     return await toNextField({operation, prefield, field, data, entry, name})
   } else {
     if (operation === '+') { // data should be array
-      let result = []
       for (let eachdata of data) {
         let {simple, withs} = extractWiths({data: eachdata, model: name, sub: true})
         simple.id = await getNextSequenceValue(prefield)
 
         // modify simple in the function
         let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
+
+        through.push({
+          operation,
+          path: tpath,
+          path_id: simple.id,
+          model: tmodel,
+          model_id: query_id
+        })
+
         // fullquery delete the query_key, only have query_key_id
         let index = entry[name].push(fullquery)
         let thisentry = entry[name][index - 1]
-        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
+        if (withs.__through__) {
+          through = [...through, ...withs.__through__]
+          delete withs.__through__
+        }
         let thisresult = Object.assign({}, rawquery, withs)
         result.push(thisresult)
       }
+      if (through.length) { result.__through__ = through }
       return result
     } else if (operation === '*') {
-      let result = []
       for (let eachdata of data) {
         let thisentry = await querySub({entry, data: eachdata, field: name})
+
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
+        let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple, test: true})
+        simple = fullquery
+
+        if (simple[query_key] && simple[query_key] !== thisentry[query_key]) {
+          through.push({
+            operation,
+            path: tpath,
+            path_id: simple.id,
+            model: tmodel,
+            model_id: query_id,
+            model_id_new: simple[query_key],
+          })
+        }
         thisentry.set(simple)
         simple.id = thisentry.id
         simple[query_key] = thisentry[query_key]
-        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
+        if (withs.__through__) {
+          through = [...through, ...withs.__through__]
+          delete withs.__through__
+        }
         let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
       }
+      if (through.length) { result.__through__ = through }
       return result
     } else if (operation === '-') {
-      let result = []
-      for (let eachdata of data) {
-        let thisentry = await querySub({entry, data: eachdata, field: name})
-        let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
-        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
+      let entries = []
+      if (data) {
+        for (let eachdata of data) {
+          let thisentry = await querySub({entry, data: eachdata, field: name})
+          entries.push(thisentry)
+        }
+      } else {
+        entries = entry[name].map(_ => _)
+      }
+      for (let thisentry of entries) {
+        let simple = {}
+        let withs = {}
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
+        if (withs.__through__) {
+          through = [...through, ...withs.__through__]
+          delete withs.__through__
+        }
         simple.id = thisentry.id
         simple[query_key] = thisentry[query_key]
+        through.push({
+          operation,
+          path: tpath,
+          path_id: thisentry.id,
+          model: tmodel,
+          model_id: thisentry[query_key],
+        })
         thisentry.remove()
         let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
       }
+      if (through.length) { result.__through__ = through }
       return result
     }
   }
@@ -795,6 +923,7 @@ outputNames.forEach(key => {
 // init ids
 
 d.Models = Models
+d.api = api
 if (d.main) {
   console.log('model info:', {Withs, subSchema, structTree, Schemas, foreignSchemas, Models, outputNames, WithsDict})
 }

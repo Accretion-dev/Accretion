@@ -48,9 +48,10 @@ const Catalogue = {
 
 const Through = {
   schema: {
-    prefix: { type: String, index: true },
-    suffix: { type: String, index: true },
-    ids: { type: String, index: true },
+    path: { type: String, index: true },
+    path_id: { type: Number, index: true },
+    model: { type: String, index: true },
+    model_id: { type: Number, index: true },
   }
 }
 
@@ -67,6 +68,7 @@ const History = {
     simple:  { type: Schema.Types.Mixed },
     withs:  { type: Schema.Types.Mixed },
     meta: { type: Schema.Types.Mixed },
+    through: { type: Schema.Types.Mixed },
   }
 }
 
