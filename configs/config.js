@@ -14,5 +14,5 @@ export default {
 	// host and port of the backend
 	"host": "127.0.0.1",
 	"port": "3000",
-	"unittest": true,
+	"demoData": false,
 }

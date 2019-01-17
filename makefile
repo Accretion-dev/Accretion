@@ -15,5 +15,9 @@ brainhole-dev:
 	cd brainhole; npm run dev
 brainhole-test:
 	cd brainhole; npm run test
+brainhole-test-inspect:
+	cd brainhole; npm run test-inspect
+brainhole-test-profile:
+	cd brainhole; npm run test-profile
 tmux:
 	./dev-scripts/backend/opneInTmux

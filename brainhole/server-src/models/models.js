@@ -240,42 +240,46 @@ async function processWiths ({ operation, prefield, field, entry, withs, sub }) 
 }
 
 async function querySubID ({field, query, searchKey}) {
-  let query_id
+  let query_id, rawquery, fullquery
   let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
   if (!(query_key in query || query_key+"_id" in query)) throw Error(`should have ${query_key} or ${query_key}_id: ${query}`)
   // search for xx
   if (query_key+"_id" in query) {
     query_id = query[query_key+"_id"]
+    rawquery = query
+    fullquery = query
   } else if (query_key in query) {
-    let oldquery = query
+    fullquery = query
     query = query[query_key]
-    delete oldquery[query_key]
     if ('id' in query) {
       query_id = query['id']
     } else if (searchKey in query) {
       let thisModel = query_key[0].toUpperCase() + query_key.slice(1)
       let r = await Models[thisModel].find({[searchKey]: query[searchKey]})
       if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${query} in ${thisModel}`)
-      query_id = r.id
+      query_id = r[0].id
     } else {
       throw Error(`should have 'id' or '${searchKey}' in ${query} in ${field}`)
     }
+    fullquery[query_key+"_id"] = query_id
+    rawquery = Object.assign({}, fullquery)
+    delete fullquery[query_key]
   }
-  query[query_key+"_id"] = query_id
-  return query_id
+  return {query_id, rawquery, fullquery}
 }
 
 async function querySub({entry, data, searchKey, field}) {
-  let result
+  let result, rawquery, fullquery
   if ('id' in data) {
     result = entry[field].find(_ => _.id === data.id )
     if (!result) throw Error(`id ${data.id} not exists in ${field}`)
     return result
   } else if ('__query__' in data) {
-    let query = data.query
-    delete data.__query__
+    fullquery = data
+    let query = data.__query__
+    delete fullquery.__query__
 
-    let query_id = await querySubID({field, query, searchKey})
+    let {query_id} = await querySubID({field, query, searchKey})
     // search for xxxxs
     result = entry[field].filter(_ => _[query_key+'_id'] === query_id )
     if (result.length !== 1) {
@@ -313,9 +317,9 @@ async function apiSingle ({operation, model, field, data, entry, query, meta}) {
 
   let {fieldPrefix, fieldSuffix, newdata} = extractField({model, field, data})
   let __ = await APIs[`${fieldPrefix}API`]({operation, prefield: model, field: fieldSuffix, entry, data: newdata})
+  withs = {[fieldPrefix]: __}
   simple = await entry.save()
   result = simple
-  withs = result
   let modelID = simple.id
   // add transaction here
   let history = new Models.History({
@@ -415,15 +419,18 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
   if (field) throw Error('field should always be blank or undefined, debug it!')
   if (operation === '+') {
     entry.flags = data
+    return entry.flags
   } else if (operation === '*') {
     entry.flags = Object.assign(entry.flags, data)
     entry.markModified('flags')
+    return entry.flags
   } else if (operation === '-') {
     let keys = Object.keys(data)
     for (let key of keys) {
       delete entry.flags[key]
     }
     entry.markModified('flags')
+    return entry.flags
   }
 }
 async function metadatasAPI ({operation, prefield, field, data, entry}) {
@@ -443,12 +450,12 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
         simple.id = await getNextSequenceValue(prefield)
 
         // modify simple in the function
-        let query_id = await querySubID({field: name, query: simple, searchKey})
-
-        let index = entry[name].push(simple)
+        let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple, searchKey})
+        // fullquery delete the query_key, only have query_key_id
+        let index = entry[name].push(fullquery)
         let thisentry = entry[name][index - 1]
         withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
-        let thisresult = {simple, withs}
+        let thisresult = Object.assign({}, rawquery, withs)
         result.push(thisresult)
       }
       return result
