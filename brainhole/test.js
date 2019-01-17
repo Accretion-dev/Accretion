@@ -27,7 +27,7 @@ test.before('init database', async t => {
   t.pass()
 })
 
-test.skip('basic', async t => {
+test('basic', async t => {
   for (let each of All) {
     let Model = Models[each]
     let pks = getRequire(Model)
@@ -77,7 +77,7 @@ test.skip('basic', async t => {
   t.pass()
 })
 
-test.skip('flags', async t => {
+test('flags', async t => {
   let todos = WithsDict.WithFlag
   for (let each of todos) {
     let Model = Models[each]
@@ -503,7 +503,6 @@ test('metadatas+flags', async t => {
 
     refetch = await Model.findOne({id})
     t.true(refetch === null)
-    break
   }
 
   // delete Metadatas
@@ -517,10 +516,8 @@ test('metadatas+flags', async t => {
     let refetch = await Models.Metadata.findOne({id})
     t.true(refetch === null)
   }
-
   t.pass()
 })
-
 
 test.skip('test', async t => {
   let Article = Models.Article

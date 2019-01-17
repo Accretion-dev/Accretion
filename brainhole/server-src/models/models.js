@@ -509,13 +509,13 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
     entry.markModified('flags')
     return entry.flags
   } else if (operation === '-') {
-    if (data) {
+    if (data) { // delete given flags
       let keys = Object.keys(data)
       for (let key of keys) {
         delete entry.flags[key]
       }
       entry.markModified('flags')
-    } else {
+    } else { // delete all flags
       entry.flags = undefined
     }
     return entry.flags
@@ -537,19 +537,9 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
       for (let eachdata of data) {
         let {simple, withs} = extractWiths({data: eachdata, model: name, sub: true})
         simple.id = await getNextSequenceValue(prefield)
-
-        // modify simple in the function
-        let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
-
-        through.push({
-          operation,
-          path: tpath,
-          path_id: simple.id,
-          model: tmodel,
-          model_id: query_id
-        })
-
         // fullquery delete the query_key, only have query_key_id
+        let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
+        through.push({ operation, path: tpath, path_id: simple.id, model: tmodel, model_id: query_id })
         let index = entry[name].push(fullquery)
         let thisentry = entry[name][index - 1]
         withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
@@ -565,11 +555,10 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
     } else if (operation === '*') {
       for (let eachdata of data) {
         let thisentry = await querySub({entry, data: eachdata, field: name})
-
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
+        // fullquery delete the query_key, only have query_key_id
         let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple, test: true})
         simple = fullquery
-
         if (simple[query_key] && simple[query_key] !== thisentry[query_key]) {
           through.push({
             operation,
@@ -681,7 +670,6 @@ async function relationsAPI ({operation, prefield, field, data, entry}) {
     }
   }
 }
-
 
 async function tagsAPI ({operation, data, entry, field}) {
   if (operation === 'create') {
