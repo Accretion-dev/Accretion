@@ -46,6 +46,7 @@ let others = [
   'Config',
   'UserConfig',
   'IDs',
+  'Through',
 ]
 
 let WithTag = [...top]
@@ -501,12 +502,59 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
   }
 }
 // TODO: some special relation: translation
-async function relationsAPI ({operation, data, entry, field}) {
-  if (operation === 'create') {
-  } else if (operation === 'modify') {
-  } else if (operation === 'delete') {
+async function relationsAPI ({operation, prefield, field, data, entry}) {
+  // field could be flags, that's to `operate` flags instead of metadata
+  const name = "relations"
+  const query_key = name.slice(0,-1)+'_id'
+  if (field) {
+    return await toNextField({operation, prefield, field, data, entry, name})
+  } else {
+    if (operation === '+') { // data should be array
+      let result = []
+      for (let eachdata of data) {
+        let {simple, withs} = extractWiths({data: eachdata, model: name, sub: true})
+        simple.id = await getNextSequenceValue(prefield)
+        // modify simple in the function
+        let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
+        // fullquery delete the query_key, only have query_key_id
+        let index = entry[name].push(fullquery)
+        let thisentry = entry[name][index - 1]
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
+        let thisresult = Object.assign({}, rawquery, withs)
+        result.push(thisresult)
+      }
+      return result
+    } else if (operation === '*') {
+      let result = []
+      for (let eachdata of data) {
+        let thisentry = await querySub({entry, data: eachdata, field: name})
+        let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
+        thisentry.set(simple)
+        simple.id = thisentry.id
+        simple[query_key] = thisentry[query_key]
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
+        let thisresult = Object.assign({}, simple, withs)
+        result.push(thisresult)
+      }
+      return result
+    } else if (operation === '-') {
+      let result = []
+      for (let eachdata of data) {
+        let thisentry = await querySub({entry, data: eachdata, field: name})
+        let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
+        simple.id = thisentry.id
+        simple[query_key] = thisentry[query_key]
+        thisentry.remove()
+        let thisresult = Object.assign({}, simple, withs)
+        result.push(thisresult)
+      }
+      return result
+    }
   }
 }
+
+
 async function tagsAPI ({operation, data, entry, field}) {
   if (operation === 'create') {
   } else if (operation === 'modify') {
@@ -558,8 +606,7 @@ let APIs = {
   for all needed schemas
 3. add user field for AllSimple
 4. add createdAt, modifiedAt, comment for all schema
-5. add reverse field for Tag, Catalogue, Metadata and Relation
-6. generate schema
+5. generate schema
 */
 
 // 1. generate nested schemas (only with simple field), used later
@@ -699,28 +746,7 @@ Object.keys(subSchema).forEach(key => {
   let Model = subSchema[key]
   Model.add(extras)
 })
-// 5. add reverse (r) for
-//    Tag, Catalogue, Metadata and Relation
-//    subSchema
-todos = ['Tag', 'Catalogue', 'Relation', 'Metadata']
-todos.forEach(key => {
-  let Model = models[key]
-  let schemaDict = Model.schema
-  let reverseModels = WithsDict[`With${key}`]
-  let reverseDict = { }
-  reverseModels.forEach(key => {
-    reverseDict[key+'_id'] = [{ id: { type: Number } }]
-  })
-  schemaDict.r = reverseDict
-})
-top.forEach(key => { // subSchema of tops
-  let __ = ['Tag', 'Catalogue', 'Relation']
-  __.forEach(subkey => {
-    let path = `${key}__${subkey.toLowerCase()}s_id`
-    models.Metadata.schema.r[path] = [{ id: { type: Number }}]
-  })
-})
-// 6. generate schemas
+// 5. generate schemas
 let Schemas = { }
 let outputNames = [...All, 'User']
 outputNames.forEach(key => {

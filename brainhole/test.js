@@ -191,7 +191,7 @@ test('flags', async t => {
   t.pass()
 })
 
-test('metadata+flags', async t => {
+test('metadatas+flags', async t => {
   // init Metadatas
   let Metadatas = [
     {name: t.title + '-rate', format: 'string'},

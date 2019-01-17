@@ -46,6 +46,14 @@ const Catalogue = {
   }
 }
 
+const Through = {
+  schema: {
+    prefix: { type: String, index: true },
+    suffix: { type: String, index: true },
+    ids: { type: String, index: true },
+  }
+}
+
 const History = {
   schema: {
     time: { type: Date, default: Date.now },
@@ -158,4 +166,5 @@ export default {
   UserConfig,
   History,
   IDs,
+  Through,
 }
