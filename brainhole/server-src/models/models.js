@@ -521,9 +521,8 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
     return entry.flags
   }
 }
-async function metadatasAPI ({operation, prefield, field, data, entry}) {
+async function taglikeAPI ({name, operation, prefield, field, data, entry, createHook, modifyHook, deleteHook}) {
   // field could be flags, that's to `operate` flags instead of metadata
-  const name = "metadatas"
   const query_key = name.slice(0,-1)+'_id'
   let through = []
   let tpath = prefield
@@ -540,6 +539,9 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
         // fullquery delete the query_key, only have query_key_id
         let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
         through.push({ operation, path: tpath, path_id: simple.id, model: tmodel, model_id: query_id })
+        if (createHook) {
+          fullquery = await createHook({name, prefield, field, data, entry, fullquery})
+        }
         let index = entry[name].push(fullquery)
         let thisentry = entry[name][index - 1]
         withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
@@ -558,6 +560,9 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         // fullquery delete the query_key, only have query_key_id
         let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple, test: true})
+        if (modifyHook) {
+          fullquery = await modifyHook({name, prefield, field, data, entry, thisentry, fullquery})
+        }
         simple = fullquery
         if (simple[query_key] && simple[query_key] !== thisentry[query_key]) {
           through.push({
@@ -618,57 +623,16 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
     }
   }
 }
+async function metadatasAPI ({operation, prefield, field, data, entry}) {
+  // field could be flags, that's to `operate` flags instead of metadata
+  const name = "metadatas"
+  return await taglikeAPI({name, operation, prefield, field, data, entry})
+}
 // TODO: some special relation: translation
 async function relationsAPI ({operation, prefield, field, data, entry}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "relations"
-  const query_key = name.slice(0,-1)+'_id'
-  if (field) {
-    return await toNextField({operation, prefield, field, data, entry, name})
-  } else {
-    if (operation === '+') { // data should be array
-      let result = []
-      for (let eachdata of data) {
-        let {simple, withs} = extractWiths({data: eachdata, model: name, sub: true})
-        simple.id = await getNextSequenceValue(prefield)
-        // modify simple in the function
-        let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
-        // fullquery delete the query_key, only have query_key_id
-        let index = entry[name].push(fullquery)
-        let thisentry = entry[name][index - 1]
-        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
-        let thisresult = Object.assign({}, rawquery, withs)
-        result.push(thisresult)
-      }
-      return result
-    } else if (operation === '*') {
-      let result = []
-      for (let eachdata of data) {
-        let thisentry = await querySub({entry, data: eachdata, field: name})
-        let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
-        thisentry.set(simple)
-        simple.id = thisentry.id
-        simple[query_key] = thisentry[query_key]
-        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
-        let thisresult = Object.assign({}, simple, withs)
-        result.push(thisresult)
-      }
-      return result
-    } else if (operation === '-') {
-      let result = []
-      for (let eachdata of data) {
-        let thisentry = await querySub({entry, data: eachdata, field: name})
-        let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
-        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs})
-        simple.id = thisentry.id
-        simple[query_key] = thisentry[query_key]
-        thisentry.remove()
-        let thisresult = Object.assign({}, simple, withs)
-        result.push(thisresult)
-      }
-      return result
-    }
-  }
+  return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
 
 async function tagsAPI ({operation, data, entry, field}) {
