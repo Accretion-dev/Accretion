@@ -278,22 +278,22 @@ function extractField ({model, field, data, sub}) {
 async function apiSingle ({operation, model, field, data, entry, query, meta}) {
   let withs, simple, result
   let through = []
+  let other_result = []
 
   let {fieldPrefix, fieldSuffix, newdata} = extractField({model, field, data})
-  let __ = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata})
-  if (__.__through__) {
-    through = [...through, ...__.__through__]
-    delete __.__through__
-  }
-  withs = {[fieldPrefix]: __}
+  let {thisresult, thisthrough, thisother_result} = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata})
+  if (thisthrough) { through = [...through, ...thisthrough] }
+  if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+
+  withs = {[fieldPrefix]: thisresult}
   simple = await entry.save()
   result = simple
   let modelID = simple.id
   // add transaction here
   let history = new Models.History({
-    operation, modelID, model, field, data, query, result, withs, meta, through
+    operation, modelID, model, field, data, query, result, withs, meta, through, other_result
   }); await history.save(); await processThrough(through)
-  return {operation, modelID, model, field, data, query, result, withs, meta, through}
+  return {operation, modelID, model, field, data, query, result, withs, meta, through, other_result}
 }
 
 async function processThrough (through) {
@@ -357,6 +357,7 @@ async function processWiths ({ operation, prefield, field, entry, withs, sub }) 
   }
   let result = {}
   let through = []
+  let other_result = []
   for (let key of keys) {
     if (operation === '-') {
       if (!entry[key]) continue
@@ -365,28 +366,24 @@ async function processWiths ({ operation, prefield, field, entry, withs, sub }) 
       if (!withs[key]) continue
     }
     let api = `${key}API`
-    let thisresult = await APIs[api]({
+    let {thisresult, thisthrough, thisother_result} = await APIs[api]({
       operation,
       prefield: prefield+`-${key}`,
       field,
       entry,
       data: withs[key]
     })
-    if (thisresult && thisresult.__through__) {
-      through = [...through, ...thisresult.__through__]
-      delete thisresult.__through__
-    }
+    if (thisthrough) { through = [...through, ...thisthrough] }
+    if (thisother_result) { other_result = [...other_result, ...thisother_result] }
     result[key] = thisresult
   }
-  if (through.length) {
-    result.__through__ = through
-  }
-  return result
+  return {thisresult: result, thisthrough: through, thisother_result: other_result}
 }
 async function api ({ operation, data, query, model, meta, field }) {
   let Model = mongoose.models[model]
   if (!Model) throw Error(`unknown model ${model}`)
   let through = []
+  let other_result = []
 
   if (operation === 'aggregate' || operation === 'findOne') { // search
     let result = await Model.aggregate(data)
@@ -397,18 +394,18 @@ async function api ({ operation, data, query, model, meta, field }) {
       let {simple, withs} = extractWiths({data, model})
       simple.id = await getNextSequenceValue(model)
       let entry = new Model(simple)
-      withs = await processWiths({operation, prefield: model, field, entry, withs})
-      if (withs.__through__) {
-        through = [...through, ...withs.__through__]
-        delete withs.__through__
-      }
+      let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield: model, field, entry, withs})
+      if (thisthrough) { through = [...through, ...thisthrough] }
+      if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+      withs = thisresult
+
       let result = await entry.save()
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, modelID, model, field, data, query, result, withs, meta, through
+        operation, modelID, model, field, data, query, result, withs, meta, through, other_result
       }); await history.save(); await processThrough(through)
-      return {operation, modelID, model, field, data, query, result, withs, meta, through}
+      return {operation, modelID, model, field, data, query, result, withs, meta, through, other_result}
     } else { // e.g. add new tag, add new catalogues
       let entry = await Model.find(query)
       if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
@@ -425,19 +422,19 @@ async function api ({ operation, data, query, model, meta, field }) {
     if (!field) {
       let {simple, withs} = extractWiths({data, model})
       entry.set(simple)
-      withs = await processWiths({operation, prefield: model, field, entry, withs})
-      if (withs.__through__) {
-        through = [...through, ...withs.__through__]
-        delete withs.__through__
-      }
+      let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield: model, field, entry, withs})
+      if (thisthrough) { through = [...through, ...thisthrough] }
+      if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+      withs = thisresult
+
       simple = await entry.save()
       let result = simple
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, modelID, model, field, data, query, result, withs, meta, through
+        operation, modelID, model, field, data, query, result, withs, meta, through, other_result
       }); await history.save(); await processThrough(through)
-      return {operation, modelID, model, field, data, query, result, withs, meta, through}
+      return {operation, modelID, model, field, data, query, result, withs, meta, through, other_result}
     } else {
       let result = await apiSingle({operation, model, field, data, entry, query, meta})
       return result
@@ -449,19 +446,19 @@ async function api ({ operation, data, query, model, meta, field }) {
 
     if (!field) {
       let withs = {}
-      withs = await processWiths({operation, prefield: model, field, entry, withs})
-      if (withs.__through__) {
-        through = [...through, ...withs.__through__]
-        delete withs.__through__
-      }
+      let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield: model, field, entry, withs})
+      if (thisthrough) { through = [...through, ...thisthrough] }
+      if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+      withs = thisresult
+
       let simple = await entry.remove()
       let result = simple
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, modelID, model, field, data, query, result, withs, meta, through
+        operation, modelID, model, field, data, query, result, withs, meta, through, other_result
       }); await history.save(); await processThrough(through)
-      return {operation, modelID, model, field, data, query, result, withs, meta, through}
+      return {operation, modelID, model, field, data, query, result, withs, meta, through, other_result}
     } else {
       let result = await apiSingle({operation, model, field, data, entry, query, meta})
       return result
@@ -473,6 +470,8 @@ async function api ({ operation, data, query, model, meta, field }) {
 
 async function toNextField({operation, prefield, field, entry, data, name}) {
   let result = []
+  let through = []
+  let other_result = []
   for (let eachdata of data) {
     let thisentry = await querySub({entry, data: eachdata, field: name})
     let {fieldPrefix, fieldSuffix, newdata} = extractField({
@@ -481,16 +480,18 @@ async function toNextField({operation, prefield, field, entry, data, name}) {
       data:eachdata,
       sub: true
     })
-    let __ = await APIs[`${fieldPrefix}API`]({
+    let {thisresult, thisthrough, thisother_result} = await APIs[`${fieldPrefix}API`]({
       operation,
       prefield: prefield+`-${fieldPrefix}`,
       field: fieldSuffix,
       entry: thisentry,
       data: newdata
     })
-    result.push({[fieldPrefix]: __})
+    if (thisthrough) { through = [...through, ...thisthrough] }
+    if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+    result.push({[fieldPrefix]: thisresult})
   }
-  return result
+  return {thisresult: result, thisthrough: through, thisother_result: other_result}
 }
 
 async function flagsAPI ({operation, prefield, field, entry, data}) {
@@ -499,7 +500,7 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
   if (field) throw Error('field should always be blank or undefined, debug it!')
   if (operation === '+') {
     entry.flags = data
-    return entry.flags
+    return {thisresult: entry.flags}
   } else if (operation === '*') {
     if (!entry.flags) {
       entry.flags = data
@@ -507,7 +508,7 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
       entry.flags = Object.assign(entry.flags, data)
     }
     entry.markModified('flags')
-    return entry.flags
+    return {thisresult: entry.flags}
   } else if (operation === '-') {
     if (data) { // delete given flags
       let keys = Object.keys(data)
@@ -518,16 +519,17 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
     } else { // delete all flags
       entry.flags = undefined
     }
-    return entry.flags
+    return {thisresult: entry.flags}
   }
 }
 async function taglikeAPI ({name, operation, prefield, field, data, entry, createHook, modifyHook, deleteHook}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const query_key = name.slice(0,-1)+'_id'
-  let through = []
   let tpath = prefield
   let tmodel = name[0].toUpperCase() + name.slice(1,-1)
   let result = []
+  let through = []
+  let other_result = []
 
   if (field) {
     return await toNextField({operation, prefield, field, data, entry, name})
@@ -540,20 +542,22 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
         let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
         through.push({ operation, path: tpath, path_id: simple.id, model: tmodel, model_id: query_id })
         if (createHook) {
-          fullquery = await createHook({name, prefield, field, data, entry, fullquery})
+          let {thisfullquery: fullquery, thisthrough, thisother_result} = await createHook({name, prefield, field, data, entry, fullquery, withs})
+          if (thisthrough) { through = [...through, ...thisthrough] }
+          if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+          fullquery = thisfullquery
         }
         let index = entry[name].push(fullquery)
         let thisentry = entry[name][index - 1]
-        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
-        if (withs.__through__) {
-          through = [...through, ...withs.__through__]
-          delete withs.__through__
-        }
-        let thisresult = Object.assign({}, rawquery, withs)
+        let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
+        if (thisthrough) { through = [...through, ...thisthrough] }
+        if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+
+        withs = thisresult
+        thisresult = Object.assign({}, rawquery, withs)
         result.push(thisresult)
       }
-      if (through.length) { result.__through__ = through }
-      return result
+      return {thisresult: result, thisthrough: through, thisother_result: other_result}
     } else if (operation === '*') {
       for (let eachdata of data) {
         let thisentry = await querySub({entry, data: eachdata, field: name})
@@ -561,7 +565,10 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
         // fullquery delete the query_key, only have query_key_id
         let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple, test: true})
         if (modifyHook) {
-          fullquery = await modifyHook({name, prefield, field, data, entry, thisentry, fullquery})
+          let {thisfullquery: fullquery, thisthrough, thisother_result} = await modifyHook({name, prefield, field, data, entry, thisentry, fullquery})
+          if (thisthrough) { through = [...through, ...thisthrough] }
+          if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+          fullquery = thisfullquery
         }
         simple = fullquery
         if (simple[query_key] && simple[query_key] !== thisentry[query_key]) {
@@ -577,16 +584,15 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
         thisentry.set(simple)
         simple.id = thisentry.id
         simple[query_key] = thisentry[query_key]
-        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
-        if (withs.__through__) {
-          through = [...through, ...withs.__through__]
-          delete withs.__through__
-        }
-        let thisresult = Object.assign({}, simple, withs)
+        let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
+        if (thisthrough) { through = [...through, ...thisthrough] }
+        if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+
+        withs = thisresult
+        thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
       }
-      if (through.length) { result.__through__ = through }
-      return result
+      return {thisresult: result, thisthrough: through, thisother_result: other_result}
     } else if (operation === '-') {
       let entries = []
       if (data) {
@@ -600,11 +606,11 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
       for (let thisentry of entries) {
         let simple = {}
         let withs = {}
-        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
-        if (withs.__through__) {
-          through = [...through, ...withs.__through__]
-          delete withs.__through__
-        }
+        let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
+        if (thisthrough) { through = [...through, ...thisthrough] }
+        if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+
+        withs = thisresult
         simple.id = thisentry.id
         simple[query_key] = thisentry[query_key]
         through.push({
@@ -615,11 +621,10 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
           model_id: thisentry[query_key],
         })
         thisentry.remove()
-        let thisresult = Object.assign({}, simple, withs)
+        thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
       }
-      if (through.length) { result.__through__ = through }
-      return result
+      return {thisresult: result, thisthrough: through, thisother_result: other_result}
     }
   }
 }
@@ -629,6 +634,78 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
   return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
 // TODO: some special relation: translation
+async function relationsCreateHook({name, prefield, field, data, entry, fullquery, withs}) {
+  let entry_model = entry.schema.options.collection
+  let entry_id = entry.id
+  let other_model, other_id
+  let aorb, other_aorb
+  let through = []
+  let other_result = []
+
+  let {from_id, from_model, to_id, to_model} = fullquery
+  if (from_id && from_model && to_id && to_model) {
+    if (entry_id === from_id && entry_model === from_model) {
+      other_id = to_id
+      other_model = to_model
+      aorb = 'a'
+      other_aorb = 'b'
+    } else if (entry_id === to_id && entry_model === to_model) {
+      other_id = from_id
+      other_model = from_model
+      aorb = 'b'
+      other_aorb = 'a'
+    } else {
+      throw Error(`if given {from_id, from_model, to_id, to_model}, at least one pair should be the same as {entry_id, entry_model}, current is ${ {from_id, from_model, to_id, to_model} } v.s. ${ {entry_id, entry_model} }, origin data: ${data}`)
+    }
+  } else if (from_id && from_model) {
+      other_id = from_id
+      other_model = from_model
+      to_id = entry_id
+      to_model = entry_model
+      aorb = 'b'
+      other_aorb = 'a'
+  } else if (to_id && to_model) {
+      other_id = from_id
+      other_model = from_model
+      to_id = entry_id
+      to_model = entry_model
+      aorb = 'a'
+      other_aorb = 'b'
+  } else {
+    throw Error(`should have {from_id, from_model} or {to_id, to_model}`)
+  }
+  let other_fullquery = Object.assign({}, fullquery)
+  other_fullquery = Object.assign(other_fullquery, {
+    from_id, from_model, to_id, to_model,
+    other_id: entry_id,
+    other_model: entry_model,
+    aorb: other_aorb
+  })
+
+  let other_entry = await Models[other_model].find({id: other_id})
+  if (other_entry.length !== 1) {
+    throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
+  }
+  let index = other_entry[name].push(other_fullquery)
+  let thisentry = entry[name][index - 1]
+  let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield, field: null, entry: other_entry, withs, sub: name})
+  if (thisthrough) { through = [...through, ...thisthrough] }
+  if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+
+  other_result.push(Object.assign({}, other_fullquery, withs))
+
+  fullquery = Object.assign(fullquery, {
+    from_id, from_model, to_id, to_model,
+    other_id,
+    other_model,
+    aorb,
+  })
+  return {fullquery, through, other_result}
+}
+async function relationsModifyHook({name, prefield, field, data, entry, thisentry, fullquery}) {
+
+  return fullquery
+}
 async function relationsAPI ({operation, prefield, field, data, entry}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "relations"
@@ -736,11 +813,14 @@ todos.forEach(ModelName => {
 // relations of the same or the different models
 schemaData = {
   relation_id: { type: Number },
-  value: { type: Schema.Types.Mixed },
-  fromModel: { type: String },
-  toModel: { type: String },
+  parameter: { type: Schema.Types.Mixed },
+  from_model: { type: String },
   from_id: { type: Number },
+  to_model: { type: String },
   to_id: { type: Number },
+  other_model: { type: String },
+  other_id: { type: Number },
+  aorb: { type: String },
 }
 subSchema.relation = new Schema(schemaData)
 WithRelation.forEach(key => {

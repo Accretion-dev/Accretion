@@ -69,6 +69,7 @@ const History = {
     withs:  { type: Schema.Types.Mixed },
     meta: { type: Schema.Types.Mixed },
     through: { type: Schema.Types.Mixed },
+    other_result: { type: Schema.Types.Mixed },
   }
 }
 
