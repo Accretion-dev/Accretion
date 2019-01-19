@@ -284,9 +284,14 @@ async function apiSingle ({operation, model, field, data, entry, query, meta}) {
   let {thisresult, thisthrough, thisother_result} = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata})
   if (thisthrough) { through = [...through, ...thisthrough] }
   if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+  let other_entry = other_result.map(_ => _.save)
+  other_result = other_result.map(_ => !(_.save))
 
   withs = {[fieldPrefix]: thisresult}
   simple = await entry.save()
+  for (let each of other_entry) {
+    await each.save()
+  }
   result = simple
   let modelID = simple.id
   // add transaction here
@@ -397,9 +402,14 @@ async function api ({ operation, data, query, model, meta, field }) {
       let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield: model, field, entry, withs})
       if (thisthrough) { through = [...through, ...thisthrough] }
       if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+      let other_entry = other_result.map(_ => _.save)
+      other_result = other_result.map(_ => !(_.save))
       withs = thisresult
 
       let result = await entry.save()
+      for (let each of other_entry) {
+        await each.save()
+      }
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
@@ -425,9 +435,14 @@ async function api ({ operation, data, query, model, meta, field }) {
       let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield: model, field, entry, withs})
       if (thisthrough) { through = [...through, ...thisthrough] }
       if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+      let other_entry = other_result.map(_ => _.save)
+      other_result = other_result.map(_ => !(_.save))
       withs = thisresult
 
       simple = await entry.save()
+      for (let each of other_entry) {
+        await each.save()
+      }
       let result = simple
       let modelID = result.id
       // add transaction here
@@ -449,6 +464,8 @@ async function api ({ operation, data, query, model, meta, field }) {
       let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield: model, field, entry, withs})
       if (thisthrough) { through = [...through, ...thisthrough] }
       if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+      let other_entry = other_result.map(_ => _.save)
+      other_result = other_result.map(_ => !(_.save))
       withs = thisresult
 
       let simple = await entry.remove()
@@ -542,7 +559,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
         let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
         through.push({ operation, path: tpath, path_id: simple.id, model: tmodel, model_id: query_id })
         if (createHook) {
-          let {thisfullquery: fullquery, thisthrough, thisother_result} = await createHook({name, prefield, field, data, entry, fullquery, withs})
+          let {thisfullquery, thisthrough, thisother_result} = await createHook({name, prefield, field, data, entry, fullquery, withs})
           if (thisthrough) { through = [...through, ...thisthrough] }
           if (thisother_result) { other_result = [...other_result, ...thisother_result] }
           fullquery = thisfullquery
@@ -565,7 +582,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
         // fullquery delete the query_key, only have query_key_id
         let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple, test: true})
         if (modifyHook) {
-          let {thisfullquery: fullquery, thisthrough, thisother_result} = await modifyHook({name, prefield, field, data, entry, thisentry, fullquery})
+          let {thisfullquery, thisthrough, thisother_result} = await modifyHook({name, prefield, field, data, entry, thisentry, fullquery})
           if (thisthrough) { through = [...through, ...thisthrough] }
           if (thisother_result) { other_result = [...other_result, ...thisother_result] }
           fullquery = thisfullquery
@@ -633,15 +650,10 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
   const name = "metadatas"
   return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
-// TODO: some special relation: translation
-async function relationsCreateHook({name, prefield, field, data, entry, fullquery, withs}) {
-  let entry_model = entry.schema.options.collection
-  let entry_id = entry.id
+
+function extractRelationInfo ({fullquery, entry_model, entry_id, data}) {
   let other_model, other_id
   let aorb, other_aorb
-  let through = []
-  let other_result = []
-
   let {from_id, from_model, to_id, to_model} = fullquery
   if (from_id && from_model && to_id && to_model) {
     if (entry_id === from_id && entry_model === from_model) {
@@ -681,15 +693,27 @@ async function relationsCreateHook({name, prefield, field, data, entry, fullquer
     other_model: entry_model,
     aorb: other_aorb
   })
+  return {other_model, other_id, aorb, other_aorb, from_id, from_model, to_id, to_model, other_fullquery}
+}
+async function relationsCreateHook({name, prefield, field, data, entry, fullquery, withs}) {
+  let entry_model = entry.schema.options.collection
+  let entry_id = entry.id
+  let through = []
+  let other_result = []
+
+  let {other_model, other_id, aorb, other_aorb, from_id, from_model, to_id, to_model, other_fullquery} = extractRelationInfo({fullquery, entry_model, entry_id, data})
 
   let other_entry = await Models[other_model].find({id: other_id})
   if (other_entry.length !== 1) {
     throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
   }
+  other_result.push(other_entry) // marked for save
   let index = other_entry[name].push(other_fullquery)
   let thisentry = entry[name][index - 1]
   let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield, field: null, entry: other_entry, withs, sub: name})
-  if (thisthrough) { through = [...through, ...thisthrough] }
+  // the reverse relation through entry have the same ID, so no need to push self into through
+  // also we do not need thisthrough under withs
+  // if (thisthrough) { through = [...through, ...thisthrough] }
   if (thisother_result) { other_result = [...other_result, ...thisother_result] }
 
   other_result.push(Object.assign({}, other_fullquery, withs))
@@ -700,16 +724,67 @@ async function relationsCreateHook({name, prefield, field, data, entry, fullquer
     other_model,
     aorb,
   })
-  return {fullquery, through, other_result}
+  return {thisfullquery: fullquery, thisthrough: through, thisother_result: other_result}
 }
 async function relationsModifyHook({name, prefield, field, data, entry, thisentry, fullquery}) {
+  let entry_model = entry.schema.options.collection
+  let entry_id = entry.id
+  let through = []
+  let other_result = []
 
-  return fullquery
+  let {other_model, other_id, aorb, other_aorb, from_id, from_model, to_id, to_model, other_fullquery} = extractRelationInfo({fullquery, entry_model, entry_id, data})
+
+  let old_other_entry, old_other_thisentry // old ones
+  let other_entry, other_thisentry // new ones
+  old_other_entry = await Models[thisentry.other_model].find({id: thisentry.other_id})
+  if (old_other_entry.length !== 1) {
+    throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
+  }
+  other_result.push(old_other_entry) // marked for save
+  old_other_thisentry = old_other_entry[name].filter(_ => _.id === thisentry.id)
+  if (old_other_thisentry.length !== 1) {
+    throw Error(`can not get unique entry for ${other_model}.${name} by id:${thisentry.id} using ${thisentry}`)
+  }
+  if (other_id === thisentry.other_id && other_model === thisentry.other_model) {
+    old_other_thisentry.set(other_fullquery)
+    other_thisentry = old_other_thisentry
+  } else { // other entry is changed!
+    let newdata = Object.assign({}, old_other_thisentry, other_fullquery)
+    let index = old_other_entry[name].push(newdata)
+    other_thisentry = old_other_entry[name][index - 1]
+
+    old_other_thisentry.remove()
+    other_result.push(other_entry) // marked for save
+  }
+
+  let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield, field: null, entry: other_entry, withs, sub: name})
+  // if (thisthrough) { through = [...through, ...thisthrough] } // always be nothing
+  if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+
+  other_result.push(Object.assign({}, other_fullquery, withs))
+  other_result.push(other_entry)
+
+  fullquery = Object.assign(fullquery, {
+    from_id, from_model, to_id, to_model,
+    other_id,
+    other_model,
+    aorb,
+  })
+  return {thisfullquery: fullquery, thisthrough: through, thisother_result: other_result}
 }
 async function relationsAPI ({operation, prefield, field, data, entry}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "relations"
-  return await taglikeAPI({name, operation, prefield, field, data, entry})
+  return await taglikeAPI({
+    name,
+    operation,
+    prefield,
+    field,
+    data,
+    entry,
+    createHook: relationsCreateHook,
+    modifyHook: relationsModifyHook,
+  })
 }
 
 async function tagsAPI ({operation, data, entry, field}) {
