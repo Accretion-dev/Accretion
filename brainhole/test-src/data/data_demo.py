@@ -40,7 +40,6 @@ Relation = [
     {'name': '歧义',     'symmetrical':True, 'type': 'tag'},
     {'name': '翻译',     'symmetrical':True, 'type': 'tag'},
     {'name': '缩写',     'symmetrical':False, 'reverse_name':'被缩写', 'type': 'tag'},
-    {'name': '联想',     'symmetrical':True, 'type': 'tag'},
     {'name': '引申',     'symmetrical':True, 'reverse_name':'被引申', 'type': 'tag'},
 ]
 
