@@ -197,7 +197,7 @@ let SubWiths = {
   'catalogues': ['metadatas', 'flags'],
   'relations': ['metadatas', 'flags'],
 }
-async function querySubID ({field, query, test}) {
+async function querySubID ({field, query, test, model}) {
   let query_id, rawquery, fullquery
   let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
   if (!(query_key in query || query_key+"_id" in query)) {
@@ -219,7 +219,12 @@ async function querySubID ({field, query, test}) {
     if ('id' in query) {
       query_id = query['id']
     } else {
-      let thisModel = query_key[0].toUpperCase() + query_key.slice(1)
+      let thisModel
+      if (model) {
+        thisModel = model
+      } else {
+        thisModel = query_key[0].toUpperCase() + query_key.slice(1)
+      }
       let r = await Models[thisModel].find(query)
       if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${query} in ${thisModel}`)
       query_id = r[0].id
@@ -526,6 +531,44 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
     }
     entry.markModified('flags')
     return {thisresult: entry.flags}
+  } else if (operation === '-') {
+    if (data) { // delete given flags
+      let keys = Object.keys(data)
+      for (let key of keys) {
+        delete entry.flags[key]
+      }
+      entry.markModified('flags')
+    } else { // delete all flags
+      entry.flags = undefined
+    }
+    return {thisresult: entry.flags}
+  }
+}
+async function familyAPI ({operation, prefield, field, entry, data, type}) {
+  // field should always be '' or undefined
+  // prefield could be any
+  // type must be fathers or chindren
+  let result = []
+  let other_result = []
+  let model = entry.schema.options.collection
+  if (field) throw Error('field should always be blank or undefined, debug it!')
+  if (operation === '+') {
+    let fullquerys = []
+    for (let each of data) {
+      each = Object.assign({}, each)
+      each.id = await getNextSequenceValue(prefield)
+      let {query_id, rawquery, fullquery} = await querySubID({field: 'entrys', query: each, model})
+      fullquerys.push(fullquery)
+      result.push(rawquery)
+    }
+    // detect loop here
+    for (let fullquery of fullquerys) {
+      let index = entry[type].push(fullquery)
+      let thisentry = entry[type][index - 1]
+    }
+    return {thisresult: result}
+  } else if (operation === '*') {
+    throw Error('field should always be blank or undefined, debug it!')
   } else if (operation === '-') {
     if (data) { // delete given flags
       let keys = Object.keys(data)

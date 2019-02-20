@@ -1,0 +1,11 @@
+# query component
+
+
+# dropinput:
+  data
+  options:
+    * type: select, input
+    * pinyin: true
+
+  hooks:
+    do_before, do_after # 排序,过滤之前和之后对数据的处理

@@ -6,6 +6,7 @@ import bodyParser from 'body-parser'
 import serveStatic from 'serve-static'
 import passport from 'passport'
 import mongoose from 'mongoose'
+import mongodb from 'mongodb'
 import database_init from './models'
 import globalConfig from "../configs/config.js"
 import yaml from 'node-yaml'
@@ -23,6 +24,7 @@ const port = globalConfig.port
 d.app = app
 d.consola = consola
 d.m = mongoose
+d.mongodb = mongodb
 
 app.set('port', port)
 app.set('strict routing', true)

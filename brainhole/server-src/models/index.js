@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import mongodb from 'mongodb'
 import fillDemo from './fillDemo'
 import __ from './models'
 const {Models, api, Withs} = __
@@ -7,7 +8,7 @@ const User = Models.User
 
 async function initIDs ({config}) {
   let names = Object.keys(Models)
-  let offset = 1 // if unittest, models should have different offset 
+  let offset = 1 // if unittest, models should have different offset
   for (let name of names) {
     let good = await Models.IDs.findOne({name})
     if (!good) {
@@ -62,6 +63,9 @@ async function init ({config, databaseConfig}) {
   let databaseName = config.database
   try {
     await mongoose.connect(`mongodb://${ip}:${port}/accretion`, { useNewUrlParser: true })
+    global.debug.conn = await mongodb.connect(`mongodb://${ip}:${port}`, { useNewUrlParser: true })
+    global.debug.db = global.debug.conn.db('accretion')
+    global.debug.history = global.debug.db.collection('History')
   } catch (e) {
     console.error(e)
     let msg = 'Database connetion error, do you realy start the mongodb using the configs/mongod.yml config file???'

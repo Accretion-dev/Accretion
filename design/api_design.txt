@@ -1,0 +1,92 @@
+# 前端API调用, 以article为例子
+# /api/database/proto/ 为原始数据库,可获取和修改
+# /api/database/query/ 为处理过的数据库,只能获取
+
+* 添加, 删除, 修改
+  /api/database/proto/:model/             # 用于添加整个entry
+  /api/database/proto/:model/:id/         # 用于修改或删除整个entry
+  /api/database/proto/:model/:id/:field/  # 添加,修啊或删除entry中某个field
+  maps:
+    POST:   operation => '+'
+    DELETE: operation => '-'
+    PUT:    operation => '*'
+  data: { field, data, query,   # 需要传入的data
+    model, operation, id, field # HTTP header中提取
+    }
+
+# 各种query
+* help GET # 列出所有可用的api
+  /api/database/:database/
+* 某些特殊API,对不只一个表进行查询 POST
+  /api/database/:database/
+  data: {
+    function,
+    data
+    }
+* 文章list获取 GET
+  /api/database/:database/:model/
+  query: { project } # 预定义几种投影模式
+  apidata: {
+    model,
+    project,
+  }
+* 文章获取 POST
+  /api/database/:database/:model/
+  apidata: { match, # 需要传入的data
+    model,
+  }
+* 单id文章获取 GET
+  /api/database/:database/:model/:id/
+  apidata: {
+    id,
+    model,
+  }
+* 文章某个field获取 GET
+  /api/database/:database/article/:id/:field/
+  apidata: { field, # 需要传入的data
+    model,
+    id,
+  }
+
+# 文章获取举例
+* 单id完整文章
+  GET /api/database/:database/:model/:id/
+* 回收站中的文章
+  POST /api/database/
+  data: {
+    function: cycle
+    data: {
+      models
+      fields,
+      modelFields,
+          }
+        }
+  * 首先生成modelsList和fieldsList
+    * 对modelsList中的model: {
+        match: {
+          "flags.in_trash": true
+        }
+      }
+    * 对modelsList中的model(eachField遍历fields): {
+        match: {
+          $or: [
+            eachField: {
+              "flags.in_trash": true
+            }
+          ]
+        }
+      }
+      对返回列表中的eachField进行过滤,存入响应子回收站中
+# 复杂查询举例
+* 前端自动包装:
+  * object: $or, $and(默认)
+  * array: $or(默认), $elemMatch(相当于$and)
+* operators:
+  * 通用: $exists, $type
+  * string,number,date: $eq, $gt, $lt, $lte, $gte, $ne
+  * string: regExp
+  * array:
+  * object:
+
+* 简单的单目运算, 自动添加$addfield 字段,包括
+  * 数字: $abs, $ceil, $floor, $ln, $log, $log10, $sqrt

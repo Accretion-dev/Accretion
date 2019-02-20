@@ -37,20 +37,24 @@ Session.abortTransaction()
 { <field1>: { <operator1>: <value1> }, ... }
 { $or: [{...}, {...}] }
 # for nested
-{ <field1>: {<subfield1>: ..., <subfield2>: ...}}
-{ "<field1.subfield1>": ...}
+{ <field1>: {<subfield1>: ..., <subfield2>: ...}} # caution: the nested keys must be a exactly match with the same key order, do not use this format
+{ "<field1.subfield1>": ...} # use this instead
 # for array (field is a array)
 { <field>: ['value1', 'value2'] } # exactly match
 { <field>: { $all:['value1', 'value2']} } # contain all
 { <field>: "value" } # contain value
-{ <field>: {$op1: ..., $op2: ...} } # at least one entry match at least one op (like $or)
-{ <field>: { $elemMatch: {$op1: ..., $op2: ...}} } # at least one entry match all op (like $and)
+{ <field.subfield>: {$op1: ..., $op2: ...} } # at least one subentry in the array match all ops
+{ <field>: { $elemMatch: {query1..., query2}} } # at least one entry match all op (like $and)
 { <field.index>: {...} } # positin index match .... (index start from 0)
 ## array ops
   $size : value
 ```
 ## operators
 ```
+# exists
+  $exists: true
+  item: null
+  $type: 10
 # math (used in project)
   $abs
   $add
@@ -312,6 +316,54 @@ function getNextSequenceValue(sequenceName){
  "category":"mobiles"
    })
 db.prodcuts.find()
+```
+
+# api query
+```
+# for normal field
+{
+  $and: [
+    field: {
+      op: value
+    }
+  ],
+  $or: [ ],
+}
+# for nested objects
+{
+  $and: [
+    "subfield.field": {
+      op: value
+    }
+  ],
+  $or: [ ]
+}
+# for nested normal arrays
+{
+  $and: [
+    "subfield": value, // contains
+    "subfield": [value, value, ...], // exact match
+    "subfield": {$all:[value, value, ...]}, // contain all
+    "subfield": {$in:[value, value, ...]}, // contain any
+    "subfield": {$not:{$in:[value, value, ...]}}, // contain any
+    "subfield": {op1..., op2...} // at least one match all op ($and like, do not provide $or like functions)
+  ],
+  $or: [ ]
+}
+# for nested object arrays
+{
+  $and: {
+    "field": {
+      $elemMatch: {
+        $and: [
+          { subfield: {op: value}}
+        ],
+        $or: [ ],
+      }
+    }
+  },
+  $or: {}
+}
 
 
 ```
