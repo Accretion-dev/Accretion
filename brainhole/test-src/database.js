@@ -188,35 +188,33 @@ async function testLookUp() {
       }
     },
     { $unwind: {path:'$tags.tag', preserveNullAndEmptyArrays: true}, },
-    // still need debug....
-    //{ $group: {
-    //  _id: {_id: "$_id", tag_id: "$tags.tag_id"},
-    //  tag_metadatas: {$push: "$tags.metadatas"},
-    //  _full: {$first: "$$ROOT"}
-    //}},
-    //{ $addFields: {
-    //  '_full.tags.metadatas': {$cond: {
-    //    if: {$eq:["$tag_metadatas.length", 0]},
-    //    then: [],
-    //    //else: "$tag_metadatas",
-    //    else: "$tag_metadatas",
-    //  }},
-    //}},
-    //{$replaceRoot: {newRoot: "$_full"}},
+    { $group: {
+      _id: {_id: "$_id", tag_id: "$tags.tag_id"},
+      tag_metadatas: {$push: "$tags.metadatas"},
+      _full: {$first: "$$ROOT"}
+    }},
+    { $addFields: {
+      '_full.tags.metadatas': {$cond: {
+        if: {$eq:[{$arrayElemAt:["$tag_metadatas", 0]}, {}]},
+        then: [],
+        else: "$tag_metadatas",
+      }},
+    }},
+    {$replaceRoot: {newRoot: "$_full"}},
 
-    //{ $group: {
-    //  _id: "$_id",
-    //  tags: {$push: "$tags"},
-    //  _full: {$first: "$$ROOT"}
-    //}},
-    //{ $addFields: {
-    //  '_full.tags': {$cond: {
-    //    if: { $eq:["$tags.length", 0] },
-    //    then: [],
-    //    else: "$tags"
-    //  }},
-    //}},
-    //{$replaceRoot: {newRoot: "$_full"}},
+    { $group: {
+      _id: "$_id",
+      tags: {$push: "$tags"},
+      _full: {$first: "$$ROOT"}
+    }},
+    { $addFields: {
+      '_full.tags': {$cond: {
+        if: { $eq:["$tags", [{metadatas:[]}]] },
+        then: [],
+        else: "$tags",
+      }},
+    }},
+    {$replaceRoot: {newRoot: "$_full"}},
 
     {
       $project: {
