@@ -4,4 +4,5 @@ database/
 data/
 node_modules
 temp
+*.~*
 

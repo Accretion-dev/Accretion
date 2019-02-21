@@ -1,3 +1,19 @@
+# api hooks
+  * tags family hook:
+    * tags add/delete/modify family:
+      * get all off-spring of this tag
+      * query all models with this tag and its off-spring
+      * recalculate their family tags
+  * relation hook (for topmodels and tags) (e.g. set hook)
+    * relation add/delete/modify type
+      * find all models with this relation (and make distinct)
+      * run hook function
+  * tag relation hook
+    * tags add/delete/modify relation:
+      * if this relation.autoAddTag = true
+        * query all models with this two tag
+        * add/delete based on 'confirm'
+
 # 前端API调用, 以article为例子
 # /api/database/proto/ 为原始数据库,可获取和修改
 # /api/database/query/ 为处理过的数据库,只能获取
