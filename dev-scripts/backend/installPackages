@@ -1,0 +1,40 @@
+#!/bin/bash
+# packages
+npm i body-parser --save
+npm i cookie-parser --save
+npm i express-session --save
+npm i express-ws --save
+npm i iview --save
+npm i lodash --save
+npm i mongoose --save
+npm i nuxt-sass-resources-loader --save
+npm i passport --save
+npm i passport-local --save
+npm i passport-local-mongoose --save
+npm i sass --save
+npm i node-yaml --save
+# dev packages
+npm i babel-cli --save-dev
+npm i babel-core --save-dev
+npm i babel-loader --save-dev
+npm i babel-polyfill --save-dev
+npm i babel-preset-env --save-dev
+npm i babel-preset-es2018 --save-dev
+npm i babel-preset-latest --save-dev
+npm i babel-runtime --save-dev
+npm i node-sass --save-dev
+npm i nodemon --save-dev
+npm i sass-loader --save-dev
+npm i concurrently --save-dev
+npm i acorn --save-dev
+# change scripts to
+##    "clean": "rm -rf server && mkdir -p server",
+##    "watch": "npm run clean && bash -c \"$(./concurrently-command watch)\"",
+##    "watch": "npm run clean && bash -c \"$(../dev-scripts/backend/concurrently-command watch)\"",
+##    "run": "cross-env NODE_ENV=development nodemon server/index.js --watch server",
+##    "dev": "bash debug-break-point",
+##    "build": "nuxt build",
+##    "start": "cross-env NODE_ENV=production node server/index.js",
+##    "generate": "nuxt generate",
+##    "lint": "eslint --ext .js,.vue --ignore-path .gitignore .",
+##    "precommit": "npm run lint"

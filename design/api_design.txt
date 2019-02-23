@@ -1,0 +1,117 @@
+# api hooks
+  * tags family hook:
+    * tags add/delete/modify family:
+      * get all off-spring of this tag
+      * query all models with this tag and its off-spring
+      * recalculate their family tags
+  * relation hook (for topmodels and tags) (e.g. set hook)
+    * relation add/delete/modify type
+      * find all models with this relation (and make distinct)
+      * run hook function
+  * tag relation hook
+    * tags add/delete/modify relation:
+      * if this relation.autoAddTag = true
+        * query all models with this two tag
+        * add/delete based on 'confirm'
+
+# 前端API调用, 以article为例子
+# /api/database/proto/ 为原始数据库,可获取和修改
+# /api/database/query/ 为处理过的数据库,只能获取
+
+* 添加, 删除, 修改
+  /api/database/proto/:model/             # 用于添加整个entry
+  /api/database/proto/:model/:id/         # 用于修改或删除整个entry
+  /api/database/proto/:model/:id/:field/  # 添加,修啊或删除entry中某个field
+  maps:
+    POST:   operation => '+'
+    DELETE: operation => '-'
+    PUT:    operation => '*'
+  data: { field, data, query,   # 需要传入的data
+    model, operation, id, field # HTTP header中提取
+    }
+
+# 各种query
+* help GET # 列出所有可用的api
+  /api/database/:database/
+* 某些特殊API,对不只一个表进行查询 POST
+  /api/database/:database/
+  data: {
+    function,
+    data
+    }
+* 文章list获取 GET
+  /api/database/:database/:model/
+  query: { project } # 预定义几种投影模式
+  apidata: {
+    model,
+    project,
+  }
+* 文章获取 POST
+  /api/database/:database/:model/
+  apidata: { data, # 需要传入的data
+    model,
+  }
+* 单id文章获取 GET
+  /api/database/:database/:model/:id/
+  apidata: {
+    id,
+    model,
+  }
+* 文章某个field获取 GET
+  /api/database/:database/article/:id/:field/
+  apidata: { field, # 需要传入的data
+    model,
+    id,
+  }
+
+# 文章获取举例
+* 单id完整文章
+  GET /api/database/:database/:model/:id/
+* 回收站中的东西
+  POST /api/database/:database
+  data: {
+    function: cycle
+    data: {
+      models
+      fields,
+      modelFields,
+          }
+        }
+  * 首先生成modelsList和fieldsList
+    * 对modelsList中的model: {
+        match: {
+          "flags.in_trash": true
+        }
+      }
+    * 对modelsList中的model(eachField遍历fields): {
+        match: {
+          $or: [
+            eachField: {
+              "flags.in_trash": true
+            }
+          ]
+        }
+      }
+      对返回列表中的eachField进行过滤,存入相应子回收站中
+# 复杂查询举例
+* 前端自动包装:
+  * object: $or, $and(默认)
+  * array: $elemMatch
+* operators:
+  * logical: $and, $or, $nor
+  * general: $exists
+  * general(function 1) general: $type
+  * number:
+    *(compare)  $eq, $gt, $lt, $lte, $gte, $ne
+    *(contains) $in, $nin
+    *(function 1)  $abs,
+    *(function 2)  $abs,
+
+
+  * string,number,date: $eq, $gt, $lt, $lte, $gte, $ne
+  * string: regExp
+  * array:
+  * object:
+
+* 简单的单目运算, 自动添加$addfield 字段,包括
+  * 数字: $abs, $ceil, $floor, $ln, $log, $log10, $sqrt

@@ -1,0 +1,1 @@
+global.d = global.debug = {}

@@ -1,0 +1,7 @@
+#!/bin/bash
+set -e
+
+# change config file to the production version
+cp ./configs/config.pproduct.js ./configs/config.js
+
+echo "remember to change the version"

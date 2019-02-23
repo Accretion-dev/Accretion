@@ -1,0 +1,17 @@
+# hooks
+## relation hooks
+* relation type: set
+  A => B, B => C, then A => C
+  * algorithm:
+    * get all entries that have this relation
+    * generate sets
+    * for each sets, check raw relations
+      * add new relations with
+        { origin:'relation_set', confirmed: false}
+## tag hooks
+* family:
+  calculate family, add new tags with
+    {origin:'family', confirmed: false}
+* tag relations
+  * translate, synonym
+    {origin:'xxxx', confirmed: false}

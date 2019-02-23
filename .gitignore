@@ -1,1 +1,8 @@
 *.swp
+*.swo
+database/
+data/
+node_modules
+temp
+*.~*
+

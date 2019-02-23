@@ -1,0 +1,23 @@
+#!/bin/bash
+concurrently="concurrently --kill-others "
+# "echo 'task: ${PWD##*/}';npx babel -D --source-maps inline --watch ../common --out-dir dist/common"
+watch=$(cat <<-EOF
+"echo 'task: brainhole-server';npx babel -D --source-maps inline --watch server-src --out-dir server"
+"echo 'task: brainhole-common';npx babel -D --source-maps inline --watch common-src --out-dir common"
+"echo 'task: brainhole-utils';npx babel -D --source-maps inline --watch ../utils --out-dir utils"
+"echo 'task: brainhole-configs';npx babel -D --source-maps inline --watch ../configs --out-dir configs"
+"echo 'task: brainhole-test';npx babel -D --source-maps inline --watch test-src --out-dir test"
+EOF
+)
+brk=$(cat <<-EOF
+"echo 'task: ${PWD##*/}';bash ../dev-scripts/backend/debug-break-point"
+EOF
+)
+
+if [[ "$1" == "watch" ]]; then
+  echo "$concurrently $watch" | tr '\n' ' '
+elif [[ "$1" == "brk" ]]; then
+  echo "$concurrently $watch $brk" | tr '\n' ' '
+else
+  echo "\"echo unknown options \\\"$1\\\"\""
+fi
