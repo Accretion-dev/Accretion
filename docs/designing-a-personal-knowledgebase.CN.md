@@ -265,3 +265,6 @@ Accretion 将满足所有上述的特性
     * 标题分词系统可以快速为文章添加大致准确的标签
     * 关系子系统可以让你在只手动添加几个种子标签的情况下,利用标签之间的关系,自动添加其他相关的标签,大大减少了用户的工作量
 * 更多fancy的特性....
+
+### 参考文献
+1. [Designing a Personal Knowledgebase](http://www.acuriousmix.com/2014/09/03/designing-a-personal-knowledgebase/)
