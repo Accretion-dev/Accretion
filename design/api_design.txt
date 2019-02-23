@@ -48,7 +48,7 @@
   }
 * 文章获取 POST
   /api/database/:database/:model/
-  apidata: { match, # 需要传入的data
+  apidata: { data, # 需要传入的data
     model,
   }
 * 单id文章获取 GET
@@ -67,8 +67,8 @@
 # 文章获取举例
 * 单id完整文章
   GET /api/database/:database/:model/:id/
-* 回收站中的文章
-  POST /api/database/
+* 回收站中的东西
+  POST /api/database/:database
   data: {
     function: cycle
     data: {
@@ -92,13 +92,22 @@
           ]
         }
       }
-      对返回列表中的eachField进行过滤,存入响应子回收站中
+      对返回列表中的eachField进行过滤,存入相应子回收站中
 # 复杂查询举例
 * 前端自动包装:
   * object: $or, $and(默认)
-  * array: $or(默认), $elemMatch(相当于$and)
+  * array: $elemMatch
 * operators:
-  * 通用: $exists, $type
+  * logical: $and, $or, $nor
+  * general: $exists
+  * general(function 1) general: $type
+  * number:
+    *(compare)  $eq, $gt, $lt, $lte, $gte, $ne
+    *(contains) $in, $nin
+    *(function 1)  $abs,
+    *(function 2)  $abs,
+
+
   * string,number,date: $eq, $gt, $lt, $lte, $gte, $ne
   * string: regExp
   * array:
