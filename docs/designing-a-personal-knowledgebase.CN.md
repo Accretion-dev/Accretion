@@ -1,4 +1,4 @@
-此文是个人知识管理系统Accretion的设计说明书(非使用说明书),来自项目github仓库的[doc文件](https://github.com/Accretion-dev/Accretion/blob/develop/doc/designing-a-personal-knowledgebase.CN.md), 项目正处于开发的初期阶段,此文内容随时可能改变.
+此文是个人知识管理系统Accretion的设计说明书(非使用说明书),来自项目github仓库的[doc文件](https://github.com/Accretion-dev/Accretion/blob/develop/docs/designing-a-personal-knowledgebase.CN.md), 项目正处于开发的初期阶段,此文内容随时可能改变.
 
 目录:
 1. 核心概念及其衍生讨论
