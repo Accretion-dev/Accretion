@@ -1,4 +1,8 @@
-# query component
+# settings:
+  * auto update editing
+
+# query
+  * after any API calls, record and update the store.models with the latest result s
 
 
 # dropinput:
@@ -11,5 +15,62 @@
     do_before, do_after # 排序,过滤之前和之后对数据的处理
   dynamical calculation
 
+# extra database model need by the frontend
+  * editings:
+    * record the editing version of the models
+    * update between differets or same workspaces(emit the editting data when the editing result is updated)
+      * configs: editingUpdateTime
+  * workspaces:
+    * contains a series of tags
+      * for model with catalogues, record the exact catalogue ancestor path
 
-# search UI
+# left side bar (catalogue)
+  * when a topMadels is selected
+      * show ancestor paths of this topModel
+
+# porject type:
+  * basic: only title, flags, abstract ...
+  * no bulk: no bulk data
+  * single field: only with single field
+  * full: (mostly) all fields
+
+  define them for each model
+  delete 'r' field from full for all tag like model
+
+# update hooks:
+  * if metadata, tag, relation, catalogue is updated, the content of each topModel is auto updated
+
+# UI
+  * topModels:
+    * tags:
+      * hover the mouse on the tag, show links between it with the related tags
+
+# display UI auto fetch
+  * topModelList:
+    * no bulk data
+    * list counts
+  * taglike model list:
+    * full
+    * list counts
+
+  * topModels:
+    * catalogues:
+      fetch all the ancestor catalogues, build the ancestor path
+    * metadatas:
+      fetch all id
+    * tags:
+      fetch all id
+      fetch all tag relation and its related tag recursively
+    * relations:
+      fetch all id
+    * crossRef:
+      fetch all id
+
+  * relations:
+    * subtags: single field
+  * metadatas:
+    * subtags: single field
+  * tags:
+    * subtags: single field
+    * metadatas: fetch all id
+    * relations: fetch id recursively

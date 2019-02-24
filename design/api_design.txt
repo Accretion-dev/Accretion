@@ -63,6 +63,9 @@
     model,
     id,
   }
+* 迭代查询 GET
+  /api/database/:database/article/:id/:field/:field_id1??
+  apidata: {   } // TODO
 
 # 文章获取举例
 * 单id完整文章
