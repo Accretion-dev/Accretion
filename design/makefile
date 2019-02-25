@@ -9,7 +9,7 @@ update: # update the simple devmanager
 demo:
 	ipython -i ./bin/processFeatures.py -- features_demo.txt
 design:
-	python ./bin/designStat.py
-
-
+	python ./bin/featuresStat.py ./design.txt
+dev:
+	python ./bin/featuresStat.py ./dev_design.txt
 

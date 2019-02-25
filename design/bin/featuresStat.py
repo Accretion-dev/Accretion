@@ -1,10 +1,13 @@
+import sys
+filename = sys.argv[1]
+
 lineCount = 0
 featureCount = 0
 developing = 0
 finished = 0
 notStart = 0
 
-with open('./design.txt') as f:
+with open(filename) as f:
   for eachline in f:
     eachline = eachline.strip()
     if eachline.startswith('#'):
