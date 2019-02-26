@@ -46,6 +46,8 @@ let others = [
   'Config',
   'UserConfig',
   'IDs',
+  'Editing',
+  'Workspace',
   'Through',
 ]
 
@@ -193,22 +195,24 @@ async function getNextSequenceValue(name) {
 */
 let SubWiths = {
   'metadatas': ['flags'],
-  'tags': ['metadatas', 'flags'],
-  'catalogues': ['metadatas', 'flags'],
-  'relations': ['metadatas', 'flags'],
+  'tags': ['flags'],
+  'catalogues': ['flags'],
+  'relations': ['flags'],
 }
 async function querySubID ({field, query, test, model}) {
-  let query_id, rawquery, fullquery
+  // query for foreignField if do not know id, else just include id
+  let query_id, rawquery, fullquery, query_entry
   let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
   if (!(query_key in query || query_key+"_id" in query)) {
     if (test) {
       return {fullquery: query}
-    }
-    else {
+    } else {
       throw Error(`should have ${query_key} or ${query_key}_id: ${query}`)
     }
   }
-  // search for xx
+  // query_id is the id we want
+  // raw_query is the input query
+  // fullquery is raw_query + {query_id}
   if (query_key+"_id" in query) {
     query_id = query[query_key+"_id"]
     rawquery = query
@@ -227,15 +231,17 @@ async function querySubID ({field, query, test, model}) {
       }
       let r = await Models[thisModel].find(query)
       if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${query} in ${thisModel}`)
-      query_id = r[0].id
+      query_entry = r[0]
+      query_id = query_entry.id
     }
     fullquery[query_key+"_id"] = query_id
     rawquery = Object.assign({}, fullquery)
     delete fullquery[query_key]
   }
-  return {query_id, rawquery, fullquery}
+  return {query_id, rawquery, fullquery, query_entry}
 }
 async function querySub({entry, data, field}) {
+  // query subdocument in a subdocument array (like tags, metadatas)
   let result, rawquery, fullquery
   let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
   if ('id' in data) {
@@ -263,14 +269,13 @@ async function querySub({entry, data, field}) {
     throw Error(`do not have 'id' or '__query__' in ${field}, don't know how to query, entry:${entry}, data:${data}`)
   }
 }
-function extractField ({model, field, data, sub}) {
+function extractSingleField ({model, field, data, sub}) {
   let fieldPrefix, fieldSuffix, newdata
   let thisWiths = sub ? SubWiths : Withs
   if (field.indexOf('.') >= 0)  {
     [fieldPrefix, ...fieldSuffix] = field.split('.')
     fieldSuffix = fieldSuffix.join('.')
-  }
-  else {
+  } else {
     fieldPrefix = field
     fieldSuffix = ''
   }
@@ -280,52 +285,26 @@ function extractField ({model, field, data, sub}) {
   if (!APIs[`${fieldPrefix}API`]) throw Error(`Do not have api for ${field}`)
   return {newdata, fieldPrefix, fieldSuffix}
 }
-async function apiSingle ({operation, model, field, data, entry, query, meta}) {
+async function apiSingleField ({operation, model, field, data, entry, query, meta}) {
   let withs, simple, result
-  let through = []
-  let other_result = []
 
-  let {fieldPrefix, fieldSuffix, newdata} = extractField({model, field, data})
-  let {thisresult, thisthrough, thisother_result} = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata})
-  if (thisthrough) { through = [...through, ...thisthrough] }
-  if (thisother_result) { other_result = [...other_result, ...thisother_result] }
-  let other_entry = other_result.map(_ => _.save)
-  other_result = other_result.map(_ => !(_.save))
+  let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({model, field, data})
+  let thisresult = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata})
 
   withs = {[fieldPrefix]: thisresult}
   simple = await entry.save()
-  for (let each of other_entry) {
-    await each.save()
-  }
   result = simple
   let modelID = simple.id
   // add transaction here
   let history = new Models.History({
-    operation, modelID, model, field, data, query, result, withs, meta, through, other_result
-  }); await history.save(); await processThrough(through)
-  return {operation, modelID, model, field, data, query, result, withs, meta, through, other_result}
-}
-
-async function processThrough (through) {
-  through = through.map(_ => Object.assign({}, _))
-  for (let t of through) {
-    if (t.operation === '+') {
-      delete t.operation
-      let result = new Models.Through(t)
-      await result.save()
-    } else if (t.operation === '*') {
-      let {model_id_new} = t
-      delete t.operation
-      delete t.model_id_new
-      await Models.Through.findOneAndUpdate(t, {$set: {model_id: model_id_new}})
-    } else if (t.operation === '-') {
-      delete t.operation
-      await Models.Through.findOneAndRemove(t)
-    }
-  }
+    operation, modelID, model, field, data, query, result, withs, meta,
+  }); await history.save();
+  return {operation, modelID, model, field, data, query, result, withs, meta}
 }
 
 function extractWiths ({ data, model, sub }) {
+  // seperate simple field and complicated fileds (with WithXXXApi)
+  // if sub, data is already a subdocument, search recursively (e.g., flags in tags in article)
   let thisWiths
   if (sub) {
     thisWiths = SubWiths
@@ -355,45 +334,46 @@ function extractWiths ({ data, model, sub }) {
   return result
 }
 async function processWiths ({ operation, prefield, field, entry, withs, sub }) {
-  let keys
-  if (operation === '-') {
+  // modify subdocument(or subsubdocument) for each model
+  let thisWiths // what field to process
+  if (operation === '-') { // delete all withs before delete the main entry
     if (sub) {
-      keys = SubWiths[sub]
+      thisWiths = SubWiths[sub]
     } else {
-      keys = Withs[prefield]
+      thisWiths = Withs[prefield]
     }
-  } else {
-    keys = Object.keys(withs)
+  } else { // only add/modify given withs
+    thisWiths = Object.keys(withs)
   }
   let result = {}
-  let through = []
-  let other_result = []
-  for (let key of keys) {
-    if (operation === '-') {
+  for (let key of thisWiths) {
+    if (operation === '-') { // only delete non empty subfields
       if (!entry[key]) continue
       if (Array.isArray(entry[key]) && !(entry[key].length)) continue
-    } else {
+    } else { // only add/modify valiad input subdocument
       if (!withs[key]) continue
     }
     let api = `${key}API`
-    let {thisresult, thisthrough, thisother_result} = await APIs[api]({
+    let thisresult = await APIs[api]({
       operation,
-      prefield: prefield+`-${key}`,
+      prefield: prefield+`-${key}`, // record parent entry
       field,
       entry,
       data: withs[key]
     })
-    if (thisthrough) { through = [...through, ...thisthrough] }
-    if (thisother_result) { other_result = [...other_result, ...thisother_result] }
     result[key] = thisresult
   }
-  return {thisresult: result, thisthrough: through, thisother_result: other_result}
+  return result
 }
 async function api ({ operation, data, query, model, meta, field }) {
+  /*
+    operations: '+', '-', '*' or 'o',
+    data: data to add/modify or delete
+    query, model: model is always needed, query is needed in -*o
+    field is needed when you want to operate the subfield instead of the entry
+  */
   let Model = mongoose.models[model]
   if (!Model) throw Error(`unknown model ${model}`)
-  let through = []
-  let other_result = []
 
   if (operation === 'aggregate' || operation === 'findOne') { // search
     let result = await Model.aggregate(data)
@@ -404,29 +384,21 @@ async function api ({ operation, data, query, model, meta, field }) {
       let {simple, withs} = extractWiths({data, model})
       simple.id = await getNextSequenceValue(model)
       let entry = new Model(simple)
-      let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield: model, field, entry, withs})
-      if (thisthrough) { through = [...through, ...thisthrough] }
-      if (thisother_result) { other_result = [...other_result, ...thisother_result] }
-      let other_entry = other_result.map(_ => _.save)
-      other_result = other_result.map(_ => !(_.save))
-      withs = thisresult
+      withs = await processWiths({operation, prefield: model, field, entry, withs})
 
       let result = await entry.save()
-      for (let each of other_entry) {
-        await each.save()
-      }
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, modelID, model, field, data, query, result, withs, meta, through, other_result
-      }); await history.save(); await processThrough(through)
-      return {operation, modelID, model, field, data, query, result, withs, meta, through, other_result}
+        operation, modelID, model, field, data, query, result, withs, meta,
+      }); await history.save();
+      return {operation, modelID, model, field, data, query, result, withs, meta}
     } else { // e.g. add new tag, add new catalogues
       let entry = await Model.find(query)
       if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
       entry = entry[0]
 
-      let result = await apiSingle({operation, model, field, data, entry, query, meta})
+      let result = await apiSingleField({operation, model, field, data, entry, query, meta})
       return result
     }
   } else if (operation === '*') { // modify top models (simple fields and nested fields)
@@ -437,26 +409,19 @@ async function api ({ operation, data, query, model, meta, field }) {
     if (!field) {
       let {simple, withs} = extractWiths({data, model})
       entry.set(simple)
-      let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield: model, field, entry, withs})
-      if (thisthrough) { through = [...through, ...thisthrough] }
-      if (thisother_result) { other_result = [...other_result, ...thisother_result] }
-      let other_entry = other_result.map(_ => _.save)
-      other_result = other_result.map(_ => !(_.save))
+      let thisresult = await processWiths({operation, prefield: model, field, entry, withs})
       withs = thisresult
 
       simple = await entry.save()
-      for (let each of other_entry) {
-        await each.save()
-      }
       let result = simple
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, modelID, model, field, data, query, result, withs, meta, through, other_result
-      }); await history.save(); await processThrough(through)
-      return {operation, modelID, model, field, data, query, result, withs, meta, through, other_result}
+        operation, modelID, model, field, data, query, result, withs, meta
+      }); await history.save();
+      return {operation, modelID, model, field, data, query, result, withs, meta}
     } else {
-      let result = await apiSingle({operation, model, field, data, entry, query, meta})
+      let result = await apiSingleField({operation, model, field, data, entry, query, meta})
       return result
     }
   } else if (operation === '-') {
@@ -466,11 +431,7 @@ async function api ({ operation, data, query, model, meta, field }) {
 
     if (!field) {
       let withs = {}
-      let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield: model, field, entry, withs})
-      if (thisthrough) { through = [...through, ...thisthrough] }
-      if (thisother_result) { other_result = [...other_result, ...thisother_result] }
-      let other_entry = other_result.map(_ => _.save)
-      other_result = other_result.map(_ => !(_.save))
+      let thisresult = await processWiths({operation, prefield: model, field, entry, withs})
       withs = thisresult
 
       let simple = await entry.remove()
@@ -478,11 +439,22 @@ async function api ({ operation, data, query, model, meta, field }) {
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
-        operation, modelID, model, field, data, query, result, withs, meta, through, other_result
-      }); await history.save(); await processThrough(through)
-      return {operation, modelID, model, field, data, query, result, withs, meta, through, other_result}
+        operation, modelID, model, field, data, query, result, withs, meta
+      }); await history.save();
+      return {operation, modelID, model, field, data, query, result, withs, meta}
     } else {
-      let result = await apiSingle({operation, model, field, data, entry, query, meta})
+      let result = await apiSingleField({operation, model, field, data, entry, query, meta})
+      return result
+    }
+  } else if (operation === 'o') {
+    let entry = await Model.find(query)
+    if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
+    entry = entry[0]
+
+    if (!field) {
+      throw Error(`for ${model}, can only reorder its Tags, Metadatas, Relations or Catalogues`)
+    } else {
+      let result = await apiSingleField({operation, model, field, data, entry, query, meta})
       return result
     }
   } else {
@@ -492,32 +464,28 @@ async function api ({ operation, data, query, model, meta, field }) {
 
 async function toNextField({operation, prefield, field, entry, data, name}) {
   let result = []
-  let through = []
-  let other_result = []
   for (let eachdata of data) {
     let thisentry = await querySub({entry, data: eachdata, field: name})
-    let {fieldPrefix, fieldSuffix, newdata} = extractField({
+    let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({
       model: name,
       field,
       data:eachdata,
       sub: true
     })
-    let {thisresult, thisthrough, thisother_result} = await APIs[`${fieldPrefix}API`]({
+    let thisresult = await APIs[`${fieldPrefix}API`]({
       operation,
       prefield: prefield+`-${fieldPrefix}`,
       field: fieldSuffix,
       entry: thisentry,
       data: newdata
     })
-    if (thisthrough) { through = [...through, ...thisthrough] }
-    if (thisother_result) { other_result = [...other_result, ...thisother_result] }
     result.push({[fieldPrefix]: thisresult})
   }
-  return {thisresult: result, thisthrough: through, thisother_result: other_result}
+  return result
 }
 
 async function flagsAPI ({operation, prefield, field, entry, data}) {
-  // field should always be '' or undefined
+  // field should always be '' or undefined, because flags do not have subfields
   // prefield could be any
   if (field) throw Error('field should always be blank or undefined, debug it!')
   if (operation === '+') {
@@ -542,54 +510,115 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
       entry.flags = undefined
     }
     return {thisresult: entry.flags}
+  } else if (operation === 'o') {
+    throw Error('can not reorder a flag!')
   }
 }
+
+async function DFSSearch({model, id, entry, path, type}) {
+  if (!entry) {
+    let r = await Models[model].find({id})
+    if (r.length !== 1) throw Error(`not single result when query ${model} with ${each}`)
+    entry = r[0]
+  }
+  if (!entry[type]) return null
+  let items = entry[type].map(_ => _.id)
+  for (let item of items) {
+    let next = [...path, item]
+    if (path.includes(item)) return next
+    let result = DFSSearch({model, id: item.id, path:next, type})
+    if (result) return result
+  }
+}
+async function testFamilyLoop({model, entry}) {
+  let cycle
+  cycle = await DFSSearch({model, id, entry, path: [entry.id], type: 'fathers'})
+  if (cycle) return "=>".join(cycle)
+  cycle = await DFSSearch({model, id, entry, path: [entry.id], type: 'children'})
+  if (cycle) return "=>".join(cycle)
+  return false
+}
+
 async function familyAPI ({operation, prefield, field, entry, data, type}) {
   // field should always be '' or undefined
   // prefield could be any
   // type must be fathers or chindren
+  // returns:
+  //  [{id: ...}, ...], add, deleted or reorderd family
   let result = []
-  let other_result = []
   let model = entry.schema.options.collection
   if (field) throw Error('field should always be blank or undefined, debug it!')
+  // direct query models
+  let fullquerys = []
+  for (let each of data) {
+    if (each.id) {
+      let r = await Models[model].find({id: each.id})
+      if (r.length !== 1) throw Error(`not single result when query ${model} with id, need debug! {id: ${each.id}}`)
+      fullquerys.push({id: each.id, entry: r[0]})
+    } else {
+      let r = await Models[model].find(each)
+      if (r.length !== 1) throw Error(`not single result when query ${model} with ${each}`)
+      let anotherEntry = r[0]
+      fullquerys.push({id: thisentry.id, anotherEntry})
+    }
+  }
+  const reverseMap = {fathers: 'children', children: 'fathers'}
+  let revType = reverseMap[type]
   if (operation === '+') {
-    let fullquerys = []
-    for (let each of data) {
-      each = Object.assign({}, each)
-      each.id = await getNextSequenceValue(prefield)
-      let {query_id, rawquery, fullquery} = await querySubID({field: 'entrys', query: each, model})
-      fullquerys.push(fullquery)
-      result.push(rawquery)
-    }
-    // detect loop here
+    let reverseRelations = []
     for (let fullquery of fullquerys) {
+      let anotherEntry = fullquery.anotherEntry
+      delete fullquery.anotherEntry
       let index = entry[type].push(fullquery)
-      let thisentry = entry[type][index - 1]
+      result.push(fullquery)
+      reverseRelations.push({anotherEntry, toPush: {id: entry.id}})
     }
-    return {thisresult: result}
-  } else if (operation === '*') {
-    throw Error('field should always be blank or undefined, debug it!')
+    let loop = testFamilyLoop({model, entry})
+    if (loop) throw Error(`detect family loop for model ${model}, ${loop}`)
+    // after test loop, add reverse family relation
+    for (let eachJob of reverseRelations) {
+      let {anotherEntry, toPush} = eachJob
+      anotherEntry[revType].push(toPush)
+      await anotherEntry.save()
+    }
+    return result
+  } else if (operation === '*' || operation === 'o') {
+    throw Error(`can not modify family`)
   } else if (operation === '-') {
-    if (data) { // delete given flags
-      let keys = Object.keys(data)
-      for (let key of keys) {
-        delete entry.flags[key]
-      }
-      entry.markModified('flags')
-    } else { // delete all flags
-      entry.flags = undefined
+    let reverseRelations = []
+    for (let fullquery of fullquerys) {
+      let anotherEntry = fullquery.anotherEntry
+      delete fullquery.anotherEntry
+      entry[type] = entry[type].filter(_ => _.id != fullquery.id) // need proper API here
+      anotherEntry[revType] = anotherEntry[revType].filter(_ => _.id != entry.id)
+      await anotherEntry.save()
+      result.push(fullquery)
     }
-    return {thisresult: entry.flags}
+    return result
+  } else if (operation === 'o') {
+    let oldIDs = entry[type].map(_ => _.id).sort()
+    let newIDs = fullquerys.map(_ => _.id).sort()
+    oldIDs.forEach((value, index) => {
+      if (newIDs[index] !== values) throw Error(`${model} family reorder error: not the same IDs, ${oldIDs} v.s. ${newIDs}`)
+    })
+    let newResult = fullquerys.map(_ => ({id: _.id})).sort()
+    entry[type] = newResult
+    return newResult
   }
 }
+async function fathersAPI ({operation, prefield, field, entry, data}) {
+  return await familyAPI({operation, prefield, field, entry, data, type:'fathers'})
+}
+async function childrenAPI ({operation, data, entry, field}) {
+  return await familyAPI({operation, prefield, field, entry, data, type:'children'})
+}
+
 async function taglikeAPI ({name, operation, prefield, field, data, entry, createHook, modifyHook, deleteHook}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const query_key = name.slice(0,-1)+'_id'
   let tpath = prefield
   let tmodel = name[0].toUpperCase() + name.slice(1,-1)
   let result = []
-  let through = []
-  let other_result = []
 
   if (field) {
     return await toNextField({operation, prefield, field, data, entry, name})
@@ -600,24 +629,17 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
         simple.id = await getNextSequenceValue(prefield)
         // fullquery delete the query_key, only have query_key_id
         let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
-        through.push({ operation, path: tpath, path_id: simple.id, model: tmodel, model_id: query_id })
         if (createHook) {
-          let {thisfullquery, thisthrough, thisother_result} = await createHook({name, prefield, field, data, entry, fullquery, withs})
-          if (thisthrough) { through = [...through, ...thisthrough] }
-          if (thisother_result) { other_result = [...other_result, ...thisother_result] }
-          fullquery = thisfullquery
+          fullquery = await createHook({name, prefield, field, data, entry, fullquery, withs})
         }
         let index = entry[name].push(fullquery)
         let thisentry = entry[name][index - 1]
-        let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
-        if (thisthrough) { through = [...through, ...thisthrough] }
-        if (thisother_result) { other_result = [...other_result, ...thisother_result] }
 
-        withs = thisresult
-        thisresult = Object.assign({}, rawquery, withs)
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
+        let thisresult = Object.assign({}, rawquery, withs)
         result.push(thisresult)
       }
-      return {thisresult: result, thisthrough: through, thisother_result: other_result}
+      return result
     } else if (operation === '*') {
       for (let eachdata of data) {
         let thisentry = await querySub({entry, data: eachdata, field: name})
@@ -625,34 +647,18 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
         // fullquery delete the query_key, only have query_key_id
         let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple, test: true})
         if (modifyHook) {
-          let {thisfullquery, thisthrough, thisother_result} = await modifyHook({name, prefield, field, data, entry, thisentry, fullquery})
-          if (thisthrough) { through = [...through, ...thisthrough] }
-          if (thisother_result) { other_result = [...other_result, ...thisother_result] }
-          fullquery = thisfullquery
+          fullquery = await modifyHook({name, prefield, field, data, entry, thisentry, fullquery})
         }
         simple = fullquery
-        if (simple[query_key] && simple[query_key] !== thisentry[query_key]) {
-          through.push({
-            operation,
-            path: tpath,
-            path_id: simple.id,
-            model: tmodel,
-            model_id: query_id,
-            model_id_new: simple[query_key],
-          })
-        }
         thisentry.set(simple)
         simple.id = thisentry.id
         simple[query_key] = thisentry[query_key]
-        let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
-        if (thisthrough) { through = [...through, ...thisthrough] }
-        if (thisother_result) { other_result = [...other_result, ...thisother_result] }
 
-        withs = thisresult
-        thisresult = Object.assign({}, simple, withs)
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
+        let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
       }
-      return {thisresult: result, thisthrough: through, thisother_result: other_result}
+      return result
     } else if (operation === '-') {
       let entries = []
       if (data) {
@@ -666,25 +672,15 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
       for (let thisentry of entries) {
         let simple = {}
         let withs = {}
-        let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
-        if (thisthrough) { through = [...through, ...thisthrough] }
-        if (thisother_result) { other_result = [...other_result, ...thisother_result] }
+        withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
 
-        withs = thisresult
         simple.id = thisentry.id
         simple[query_key] = thisentry[query_key]
-        through.push({
-          operation,
-          path: tpath,
-          path_id: thisentry.id,
-          model: tmodel,
-          model_id: thisentry[query_key],
-        })
         thisentry.remove()
-        thisresult = Object.assign({}, simple, withs)
+        let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
       }
-      return {thisresult: result, thisthrough: through, thisother_result: other_result}
+      return result
     }
   }
 }
@@ -694,6 +690,7 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
   return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
 
+// modify this latter
 function extractRelationInfo ({fullquery, entry_model, entry_id, data}) {
   let other_model, other_id
   let aorb, other_aorb
@@ -842,18 +839,6 @@ async function cataloguesAPI ({operation, data, entry, field}) {
   } else if (operation === 'delete') {
   }
 }
-async function fathersAPI ({operation, data, entry, field}) {
-  if (operation === 'create') {
-  } else if (operation === 'modify') {
-  } else if (operation === 'delete') {
-  }
-}
-async function childrenAPI ({operation, data, entry, field}) {
-  if (operation === 'create') {
-  } else if (operation === 'modify') {
-  } else if (operation === 'delete') {
-  }
-}
 let APIs = {
   flagsAPI,
   metadatasAPI,
@@ -903,13 +888,8 @@ let foreignSchemas = {
     username: { type: String }
   }
 }
-// 2. add subdocuments (through table in sql database)
-let subSchema = {} // first layer cition
-let subWiths = { // second layer cition
-  Tag: ['metadatas'],
-  Catalogue: ['metadatas'],
-  Relation: ['metadatas'],
-}
+// 2. add subdocuments (e.g., tags in Article)
+let subSchema = {}
 
 // tags, catalogues
 let todos = ['Tag', 'Catalogue']
@@ -974,11 +954,6 @@ WithMetadata.forEach(key => {
   let schemaDict = Model.schema
   schemaDict.metadatas = [subSchema.metadata]
 })
-Object.keys(subSchema).forEach(key => { // all subSchema have metadata
-  if (['metadata', 'family'].includes(key)) return
-  let Model = subSchema[key]
-  Model.add({ metadatas: [subSchema.metadata] })
-})
 
 // flags (for WithFlags and subSchema)
 WithFlag.forEach(key => {
@@ -1024,7 +999,18 @@ Object.keys(subSchema).forEach(key => {
   let Model = subSchema[key]
   Model.add(extras)
 })
-// 5. generate schemas
+// 5. generate reverse field for Tag, Metadata, Relation and Catalogue
+let todo =['Tag', 'Catalogue', 'Relation', 'Metadata']
+for (let key of todo) {
+  let Model = models[key]
+  let schemaDict = Model.schema
+  schemaDict.r = {}
+  for (let refkey of WithsDict[`With${key}`]) {
+    schemaDict.r[`${refkey}`] = [{type: String}]
+  }
+}
+
+// 6. generate schemas
 let Schemas = { }
 let outputNames = [...All, 'User']
 outputNames.forEach(key => {

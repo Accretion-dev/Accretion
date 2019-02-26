@@ -5,10 +5,7 @@
     first get models into memory (from database in backend and from web API in frontend)
     * [ ] testFamilyLoop:
       * (existTags, newTag)
-    * [ ] getAncestors
-      * (tag)
-      * if depth > 100, return exists and raise error
-    * [ ] getOffsprings
+    * [ ] getFamily
       * (tag)
       * if depth > 100, return exists and raise error
     * [ ] getTagRelationPair({same input as API})
@@ -33,7 +30,7 @@
 * backend:
   * [ ] design backup system
   * [ ] design version control system for bulk content
-  * models:
+  * models
     * general:
       * User
       * Metadata
@@ -127,11 +124,12 @@
       * use mapReduce to get all subdocuments, with extra field "modelID"
     * [ ] checkConsistence:
       * check if there are unknown
+        for each that have xxx, test the reverse
         * tags
         * relations
         * metadatas
         * Catalogues
-        * families
+        * families:
   * hooks:
     * [ ] about 'group' relation:
       * entry is tag or topModles
@@ -156,6 +154,11 @@
     * [ ] /api/database/:model/
       * [ ] GET: Article list
         query: { project }
+        * projects(design them in the models):
+          * full: all data
+          * simple: only simple info
+          * nobulk: no bulk data
+          * other: only fetch that field
       * [ ] POST: complicated query
         data: {
           pipeline: [],
@@ -197,7 +200,6 @@
         Editing: [{
           model, id, displayName,
           path,
-          catalogueTree,
           createdAt,
           updatedAt,
 
@@ -212,6 +214,7 @@
         Workspaces: [{
           id,
           name, color, createdAt,
+          catalogueTree,
           activeTab,
           tabs: [{
             index,

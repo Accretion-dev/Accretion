@@ -27,7 +27,7 @@ test.before('init database', async t => {
   t.pass()
 })
 
-test('basic', async t => {
+test('basic', async t => { // create, modify and delete for All model
   for (let each of All) {
     let Model = Models[each]
     let pks = getRequire(Model)
@@ -215,7 +215,7 @@ test('metadatas+flags', async t => {
     let path = `${each}-metadatas`
     let Model = Models[each]
     let pks = getRequire(Model)
-    let data, refetch, refetch_, result, id, updated, tfetch
+    let data, refetch, refetch_, result, id, updated
     data = {
       comment: `${each} ${t.title} test`,
       flags: {
@@ -282,8 +282,6 @@ test('metadatas+flags', async t => {
       query: {id},
       field: 'metadatas',
     })
-    t.true(result.through.length === metadatas.length)
-    tfetch = await Models.Through.find({path}); t.true(tfetch.length === metadatas.length)
     refetch = await Model.findOne({id})
     refetch = refetch._doc
     refetch_ = Object.assign({}, refetch)
@@ -308,8 +306,6 @@ test('metadatas+flags', async t => {
       data,
       model: each
     })
-    t.true(result.through.length === metadatas.length)
-    tfetch = await Models.Through.find({path}); t.true(tfetch.length === metadatas.length)
     id = result.modelID
     refetch = await Model.findOne({id})
     refetch = refetch._doc
@@ -364,9 +360,6 @@ test('metadatas+flags', async t => {
       model: each,
       query: {id}
     })
-    t.true(result.through.length === 1)
-    tfetch = await Models.Through.find({path})
-    t.true(tfetch.length === metadatas.length)
     refetch = await Model.findOne({id})
     refetch = refetch._doc
     refetch_ = Object.assign({}, refetch)
@@ -388,7 +381,7 @@ test('metadatas+flags', async t => {
           add_new_flag: true, update_with_field: true
         }
       },
-      { // [3] only this one can modify with name, others have dupoicated term
+      { // [3] only this one can modify with name, others have duplicated term
         metadata: {
           name: t.title + '-object'
         },
@@ -418,9 +411,6 @@ test('metadatas+flags', async t => {
       query: {id},
       field: 'metadatas'
     })
-    t.true(result.through.length === 1)
-    tfetch = await Models.Through.find({path})
-    t.true(tfetch.length === metadatas.length)
     refetch = await Model.findOne({id})
     refetch = refetch._doc
     refetch_ = Object.assign({}, refetch)
@@ -437,7 +427,7 @@ test('metadatas+flags', async t => {
       { // [1]
         id: updated[0].id,
       },
-      { // [3] only this one can modify with name, others have dupoicated term
+      { // [3] only this one can modify with name, others have duplicated term
         __query__: {
           metadata: {
             name: t.title + '-object'
@@ -457,19 +447,39 @@ test('metadatas+flags', async t => {
       query: {id},
       field: 'metadatas'
     })
-    t.true(result.through.length === toDelete.length)
-    tfetch = await Models.Through.find({path})
-    t.true(tfetch.length === metadatas.length - toDelete.length)
     refetch = await Model.findOne({id})
     refetch = refetch._doc.metadatas
     let ids = updated.map(_=>_.id)
     refetch_ = refetch.filter(_ => ids.includes(_.id))
     t.is(refetch_.length, 0)
 
+    // modify flags in metadata
+    let toModify = refetch.map(__ => _.pick(__, ["id", "flags"]))
+    toModify = toModify.slice(1,) // only the later two have flags
+    toModify[0].flags.debug = 'hahaha'
+    toModify[1].flags.debug = 'lalala'
+    toModify[1].flags.ddebug = 'huhuhu'
+    result = await api({
+      operation: '*',
+      data: {metadatas: toModify},
+      model: each,
+      query: {id},
+      field: 'metadatas.flags'
+    })
+    refetch = await Model.findOne({id})
+    refetch = refetch._doc.metadatas
+    refetch = refetch.slice(1,)
+    t.is( refetch[0].flags.debug, toModify[0].flags.debug )
+    t.is( refetch[0].flags.debug, toModify[0].flags.debug )
+    t.is( refetch[1].flags.ddebug, toModify[1].flags.ddebug )
+    refetch = await Model.findOne({id})
+    refetch = refetch._doc.metadatas
+
     // delete flags in metadata
     toDelete = refetch.map(__ => _.pick(__, ["id", "flags"]))
     toDelete = toDelete.slice(1,) // only the later two have flags
-    delete toDelete[0].flags.debug
+    let rawData = toDelete[0].flags.debug
+    delete toDelete[0].flags.debug // do not delete first
     result = await api({
       operation: '-',
       data: {metadatas: toDelete},
@@ -487,7 +497,7 @@ test('metadatas+flags', async t => {
       )
       t.is(inter.length, 0)
     }
-    t.is(refetch[0].flags.debug, true)
+    t.is(refetch[0].flags.debug, rawData)
 
     // delete the entry, clean up
     let oldresult = result
@@ -496,10 +506,6 @@ test('metadatas+flags', async t => {
       model: each,
       query: {id}
     })
-
-    t.true(result.through.length === oldresult.result.metadatas.length)
-    tfetch = await Models.Through.find({path})
-    t.true(tfetch.length === 0)
 
     refetch = await Model.findOne({id})
     t.true(refetch === null)
