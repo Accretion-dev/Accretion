@@ -28,6 +28,8 @@
           diffManual, diffAuto,
           newPairs,
           }
+* design:
+  * [ ] simple syntax
 * backend:
   * [ ] design backup system
   * [ ] design version control system for bulk content
@@ -136,6 +138,11 @@
       * [ ] entry +-* relation:
         * check if relation is 'group' relation
   * [ ] url routes:
+    * display:
+      * user-agent is browser:
+        * ac-table
+      * user-agent is json:
+        * json
     * [ ] /api/database/
       * [ ] GET
         * print help
@@ -170,8 +177,8 @@
     * data: { field, data, query,   # 需要传入的data
       model, operation, id, field # HTTP header中提取
       }
-
-* frontend:
+* horizon:
+  * designs
   * store:
     * design: {
         Models: {
@@ -223,33 +230,36 @@
           }
           }]
       }
+  * functions:
+    * [ ] getTagPairs
   * UI routes:
     * [ ] /horizon/
       * list and select workspaces
-    * [ ] all sub routes
-      * [ ] /search/simple/
-        * simple syntax
-      * [ ] /search/advanced/
-      * [ ] /workspace/:workspaceID/model-id
+      * [ ] all sub routes
+        * [ ] /search/simple/
+        * [ ] /search/advanced/
+        * [ ] /workspace/:workspaceID/model-id
+        * [ ] /view/
+          * [] /view/:id/
   * UI:
-    * [ ] ac-table:
-      * [ ] vim key map support
-    * [ ] ac-editor:
-      * [ ] vim key map support
-    * [ ] ac-input:
-      * options:
-        * type: select, input
-          * for type:input
-            * tab to complete the first
-            * entry to input the current
-          * for type:select
-            * tab and entry to complete and finish the first
-        * pinyin: true
-      * do dynamical calculation
-
+    * general components:
+      * [ ] ac-table:
+        * [ ] vim key map support
+      * [ ] ac-editor:
+        * [ ] vim key map support
+      * [ ] ac-input:
+        * options:
+          * type: select, input
+            * for type:input
+              * tab to complete the first
+              * entry to input the current
+            * for type:select
+              * tab and entry to complete and finish the first
+          * pinyin: true
+          * autocompleteType: full, cursor word
+        * do dynamical calculation
     * [ ] search components:
       ...see pptx for detail
-
     * topModles:
       * [ ] Article
       * [ ] Website
@@ -306,7 +316,7 @@
         * special relation:
           * crossref: id is 0
       * reference(special type of relation):
-      * flags:
+      * flags
     * [ ] workspace:
       * tab:
         * onDragHover: change to this tab
@@ -335,7 +345,6 @@
               * relations
               * crossref
               * flags
-
       * [ ] Metadata
         * just like tag
       * [ ] Relation
@@ -352,3 +361,94 @@
       middel panel:
         * taglist
           * ac-table
+
+* lightcone:
+  * design:
+    * type of events:
+      * stamp: finish in very sort time, (e.g., all event from History)
+      * interval: a normal event that spend some time (e.g., class, work, study)
+        * best for 流水账 type of record
+      * plan: a event that have a deadline (and possible start line)
+    * event examples:
+      * stamp events:
+        * type is stamp
+        * spends.0.begin exists
+        * other config is useless
+      * normal events:
+        * type is interval
+        * once or repeat:
+          * exclusive with each other
+          * spends is not null
+            * spends.0.begin and spends.0.end exists
+          * repeat is not null
+            * calculate the repeat
+            * [ ] design parameters to define a repeat
+            * have a time range
+        * may have alerts
+      * plans
+        * everyday jobs:
+          * may have plan
+          * have many spends
+          * may have fathers and children
+            * can sum the time up
+  * store: {
+    * design: {
+        Models: {
+          Configs: { # global configs
+            confirmBeforeDeleteTimeEvent: true
+            font: {
+              fontfamily, fontsize
+              }
+            },
+          UserConfigs: {
+            ...
+            },
+          },
+        }
+      }
+  * UI routes:
+    * [ ] /lightcone/
+    * [ ] /lightcone/control
+  * UI:
+    * components:
+      * [ ] detail
+        * buttons:
+          * edit
+          * prev
+          * next
+        * [ ] keyboard map:
+          * next and previous
+        * [ ] left panel:
+          * [ ] selected and full tree
+          * [ ] a filter with simple query syntax
+          * sort by time
+        * [ ] middle panel:
+          * upper panel:
+            * detail
+        * [ ] left panel:
+          * tags
+          * relations
+          * metadatas
+          * flags
+      * [ ] timeline
+        * filters
+        * range:
+          * year
+          * month
+          * week
+          * day
+        * [ ] quick buttons:
+          * [ ] view all details
+        * mouse reaction:
+          * [ ] left click:
+            * if not stacked: select this one
+            * if stacked: pop a list of items
+            * [ ] with ctrl:
+              * push instead of replace
+          * [ ] right click:
+            * if not on selected:
+              * add...
+            * if on selected:
+              * add...
+              * edit
+              * delete
