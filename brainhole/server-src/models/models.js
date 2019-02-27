@@ -199,17 +199,20 @@ let SubWiths = {
   'catalogues': ['flags'],
   'relations': ['flags'],
 }
-async function querySubID ({field, query, test, model}) {
+async function queryTaglikeID ({field, query, test, getEntry}) {
+  // fullquery delete the query_key, only have query_key_id
   // query for foreignField if do not know id, else just include id
   let query_id, rawquery, fullquery, query_entry
   let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
   if (!(query_key in query || query_key+"_id" in query)) {
+    // do not change taglike, no need to query for the new one
     if (test) {
       return {fullquery: query}
     } else {
       throw Error(`should have ${query_key} or ${query_key}_id: ${query}`)
     }
   }
+  let thisModel = query_key[0].toUpperCase() + query_key.slice(1)
   // query_id is the id we want
   // raw_query is the input query
   // fullquery is raw_query + {query_id}
@@ -217,18 +220,22 @@ async function querySubID ({field, query, test, model}) {
     query_id = query[query_key+"_id"]
     rawquery = query
     fullquery = query
+    if (getEntry) {
+      let r = await Models[thisModel].find({id: query_id})
+      if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${{id: query_id}} in ${thisModel}`)
+      query_entry = r[0]
+    }
   } else if (query_key in query) {
     fullquery = query
     query = query[query_key]
     if ('id' in query) {
       query_id = query['id']
-    } else {
-      let thisModel
-      if (model) {
-        thisModel = model
-      } else {
-        thisModel = query_key[0].toUpperCase() + query_key.slice(1)
+      if (getEntry) {
+        let r = await Models[thisModel].find({id: query_id})
+        if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${{id: query_id}} in ${thisModel}`)
+        query_entry = r[0]
       }
+    } else {
       let r = await Models[thisModel].find(query)
       if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${query} in ${thisModel}`)
       query_entry = r[0]
@@ -254,12 +261,13 @@ async function querySub({entry, data, field}) {
     let query = data.__query__
     delete fullquery.__query__
 
-    let {query_id} = await querySubID({field, query})
+    let {query_id} = await queryTaglikeID({field, query})
     // search for xxxxs
     result = entry[field].filter(_ => _[query_key+'_id'] === query_id )
     if (result.length !== 1) {
       if (!(result.length)) {
-        throw Error(`query:${query} not found in ${field}`)
+        let currentData = entry[field].map(__ => (_.pick(__, ['id', query_key+"_id"])))
+        throw Error(`query:${JSON.stringify(query)} not found in ${field}, current data:${JSON.stringify(currentData, null, 2)}`)
       } else {
         throw Error(`query:${query} more than one in ${field}`)
       }
@@ -550,16 +558,18 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
   if (field) throw Error('field should always be blank or undefined, debug it!')
   // direct query models
   let fullquerys = []
-  for (let each of data) {
-    if (each.id) {
-      let r = await Models[model].find({id: each.id})
-      if (r.length !== 1) throw Error(`not single result when query ${model} with id, need debug! {id: ${each.id}}`)
-      fullquerys.push({id: each.id, entry: r[0]})
-    } else {
-      let r = await Models[model].find(each)
+  if (operation !== 'o') {
+    for (let each of data) {
+      let queryData
+      if (each.id) {
+        queryData = {id: each.id}
+      } else {
+        queryData = each
+      }
+      let r = await Models[model].find(queryData)
       if (r.length !== 1) throw Error(`not single result when query ${model} with ${each}`)
       let anotherEntry = r[0]
-      fullquerys.push({id: thisentry.id, anotherEntry})
+      fullquerys.push({id: anotherEntry.id, anotherEntry})
     }
   }
   const reverseMap = {fathers: 'children', children: 'fathers'}
@@ -582,7 +592,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
       await anotherEntry.save()
     }
     return result
-  } else if (operation === '*' || operation === 'o') {
+  } else if (operation === '*') {
     throw Error(`can not modify family`)
   } else if (operation === '-') {
     let reverseRelations = []
@@ -597,13 +607,18 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
     return result
   } else if (operation === 'o') {
     let oldIDs = entry[type].map(_ => _.id).sort()
-    let newIDs = fullquerys.map(_ => _.id).sort()
+    let newIDs = data.map(_ => _.id).sort()
     oldIDs.forEach((value, index) => {
       if (newIDs[index] !== values) throw Error(`${model} family reorder error: not the same IDs, ${oldIDs} v.s. ${newIDs}`)
     })
-    let newResult = fullquerys.map(_ => ({id: _.id})).sort()
-    entry[type] = newResult
-    return newResult
+    let fullResult = entry[type].map(_ => _)
+    newIDs = data.map(_ => _.id)
+    newIDs.forEach((value, index) => {
+      let thisresult = fullResult.find(_ => _.id === value)
+      entry[type][index] = thisresult
+    })
+    entry.markModified(type)
+    return newIDs
   }
 }
 async function fathersAPI ({operation, prefield, field, entry, data}) {
@@ -614,13 +629,13 @@ async function childrenAPI ({operation, data, entry, field}) {
 }
 
 async function taglikeAPI ({name, operation, prefield, field, data, entry, createHook, modifyHook, deleteHook}) {
-  // field could be flags, that's to `operate` flags instead of metadata
-  const query_key = name.slice(0,-1)+'_id'
+  const query_key = name.slice(0,-1)+'_id' // key to query subdocument array, e.g. tag_id in tags field
   let tpath = prefield
   let tmodel = name[0].toUpperCase() + name.slice(1,-1)
   let result = []
+  let entryModel = entry.schema.options.collection
 
-  if (field) {
+  if (field) { // e.g. metadatas.flags, tags.flags
     return await toNextField({operation, prefield, field, data, entry, name})
   } else {
     if (operation === '+') { // data should be array
@@ -628,7 +643,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
         let {simple, withs} = extractWiths({data: eachdata, model: name, sub: true})
         simple.id = await getNextSequenceValue(prefield)
         // fullquery delete the query_key, only have query_key_id
-        let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple})
+        let {query_id, rawquery, fullquery, query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true})
         if (createHook) {
           fullquery = await createHook({name, prefield, field, data, entry, fullquery, withs})
         }
@@ -638,28 +653,56 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
         withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
         let thisresult = Object.assign({}, rawquery, withs)
         result.push(thisresult)
+        // update reverse
+        query_entry.r[entryModel].push(`${entry.id}-${thisentry.id}`)
+        await query_entry.save()
       }
       return result
     } else if (operation === '*') {
       for (let eachdata of data) {
+        let eachdataraw = Object.assign({}, eachdata)
+        let taglikeChanged = ('__query__' in eachdata)
         let thisentry = await querySub({entry, data: eachdata, field: name})
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         // fullquery delete the query_key, only have query_key_id
-        let {query_id, rawquery, fullquery} = await querySubID({field: name, query: simple, test: true})
+        let {query_id, rawquery, fullquery, query_entry} = await queryTaglikeID({field: name, query: simple, test: true})
         if (modifyHook) {
           fullquery = await modifyHook({name, prefield, field, data, entry, thisentry, fullquery})
         }
         simple = fullquery
+
+        // must put here
+        if (taglikeChanged && (query_entry && (thisentry[query_key] !== query_entry.id))) {
+          // change taglike from one to another, modify r for two Taglike
+          //console.log('eachdata:', eachdataraw, '\ntaglikeChanged:', taglikeChanged, '\nquery_entry:', query_entry ? query_entry.id : null, '\nthisentry:', thisentry, '\n\n')
+          let thisModel = name[0].toUpperCase() + name.slice(1, -1)
+          let r = await Models[thisModel].find({id: thisentry[query_key]})
+          if (r.length !== 1) throw Error(`not single result when query ${{id: thisentry[query_key]}} in ${thisModel}`)
+          let oldTaglike = r[0]
+          let newTaglike = query_entry
+          let code = `${entry.id}-${thisentry.id}`
+          //console.log('old before', JSON.stringify(oldTaglike, null, 2))
+          //console.log('new before', JSON.stringify(newTaglike, null, 2))
+          oldTaglike.r[entryModel] = oldTaglike.r[entryModel].filter(_ => _ !== code)
+          newTaglike.r[entryModel].push(code)
+          let oldTaglikeReturn = await oldTaglike.save()
+          await newTaglike.save()
+          //console.log('old after', JSON.stringify(oldTaglikeReturn, null, 2))
+          r = await Models[thisModel].find({id: oldTaglikeReturn.id})
+          //console.log('old query', JSON.stringify(r, null, 2))
+          //console.log('new', JSON.stringify(newTaglike, null, 2))
+        }
+
         thisentry.set(simple)
         simple.id = thisentry.id
         simple[query_key] = thisentry[query_key]
-
         withs = await processWiths({operation, prefield, field: null, entry: thisentry, withs, sub: name})
         let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
       }
       return result
     } else if (operation === '-') {
+      let thisModel = name[0].toUpperCase() + name.slice(1, -1)
       let entries = []
       if (data) {
         for (let eachdata of data) {
@@ -679,8 +722,32 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, creat
         thisentry.remove()
         let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
+
+        let r = await Models[thisModel].find({id: thisentry[query_key]})
+        if (r.length !== 1) throw Error(`not single result when query ${{id: thisentry[query_key]}} in ${thisModel}`)
+        let taglike = r[0]
+        let code = `${entry.id}-${thisentry.id}`
+        taglike.r[entryModel] = taglike.r[entryModel].filter(_ => _ !== code)
+        await taglike.save()
       }
       return result
+    } else if (operation === 'o') {
+      let newIDs = data.map(_ => _.id).sort()
+      let oldIDs = Array.from(entry[name]).map(_ => _.id).sort()
+      if (JSON.stringify(newIDs) !== JSON.stringify(oldIDs)) {
+        throw Error(`${name} reorder error: not the same IDs, ${oldIDs} v.s. ${newIDs}`)
+      }
+      newIDs = data.map(_ => _.id) // no sort here
+      let fullResult = entry[name].map(_ => _)
+      // console.log('before reorder:', JSON.stringify(fullResult, null, 2))
+      // console.log('data:', data)
+      newIDs.forEach((value, index) => {
+        let thisresult = fullResult.find(_ => _.id === value)
+        entry[name][index] = thisresult
+      })
+      // console.log('after reorder:', JSON.stringify(Array.from(entry[name]).map(_ => _.id), null, 2))
+      entry.markModified(name)
+      return newIDs
     }
   }
 }
@@ -1004,10 +1071,11 @@ let todo =['Tag', 'Catalogue', 'Relation', 'Metadata']
 for (let key of todo) {
   let Model = models[key]
   let schemaDict = Model.schema
-  schemaDict.r = {}
+  schemaData = {}
   for (let refkey of WithsDict[`With${key}`]) {
-    schemaDict.r[`${refkey}`] = [{type: String}]
+    schemaData[refkey] = [{type: String}]
   }
+  schemaDict.r = schemaData
 }
 
 // 6. generate schemas

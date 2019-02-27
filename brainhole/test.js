@@ -203,10 +203,19 @@ test('metadatas+flags', async t => {
   // begin test
   let todos = WithsDict.WithMetadata
   for (let each of todos) {
+    async function testMetadataCount(array) {
+      let counts = []
+      for (let metadata of Metadatas) {
+        let eachMetadata = (await Models.Metadata.findOne({id: metadata.id}))._doc
+        counts.push(eachMetadata.r[each].length)
+      }
+      // console.log(array, counts)
+      t.deepEqual(array, counts)
+    }
     let path = `${each}-metadatas`
     let Model = Models[each]
     let pks = getRequire(Model)
-    let data, refetch, refetch_, result, id, updated, metadatas, copy
+    let data, refetch, refetch_, result, id, updated, metadatas, copy, newmetadatas, rawdata, toDelete
     data = {
       comment: `${each} ${t.title} test`,
       flags: {
@@ -219,6 +228,7 @@ test('metadatas+flags', async t => {
       }
     }
 
+    rawdata = Object.assign({}, data)
     metadatas = [
       {
         metadata_id: Metadatas[0].id,
@@ -242,7 +252,7 @@ test('metadatas+flags', async t => {
       },
       {
         metadata: {
-          name: t.title + '-rate'
+          name: t.title + '-rate' // [0]
         },
         value: 'test rate string 2',
         flags: {debug: true, test:null, ttest: false}
@@ -255,8 +265,93 @@ test('metadatas+flags', async t => {
         flags: {debug: true, test:null, ttest: false}
       },
     ]
+    copy = metadatas.map(_ => Object.assign({}, _))
 
-    if("create top models, add metadatas with 'metadata' field") {
+    if("create and modify with data.metadatas") {
+      // create with data.metadatas
+      data.metadatas = metadatas
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      t.deepEqual(metadatas, copy) // not change metadatas inside the api
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      for (let index in updated) { // repleace all withs data
+        Object.assign(refetch_.metadatas[index], metadatas[index])
+      }
+      Object.assign(refetch_, rawdata) // repleace all simple data
+      t.deepEqual(refetch, refetch_)
+      await testMetadataCount([2,2,1,1,0])
+
+      // modify both simple and withs (flags and metadatas)
+      updated = result.withs.metadatas // have id in each metadata
+      data.comment = `${each} ${t.title} modified`
+      data.flags.in_trush = false
+      data.flags.ddebug = true
+      newmetadatas = [ // old [0] and [1] have two value
+        { // [1]
+          id: updated[1].id, // have two value, must use id to search
+          value: 'test color string updated',
+          comment: 'test comment updated',
+          flags: {
+            add_new_flag: true
+          },
+        },
+        { // [3] => [4] only this one can modify with name, others have dupoicated term
+          metadata: {
+            name: t.title + '-object2'
+          },
+          __query__: {
+            metadata: {
+              name: t.title + '-object'
+            },
+          },
+          value: {msg: 'mixed_value modify', mixed_value_add: true},
+          comment: 'update comment',
+          flags: {debug: 'change to false'}
+        },
+        { // [2]
+          __query__: {
+            metadata_id: updated[2].metadata_id,
+          },
+          value: 'test rate string 2 modified',
+          comment: 'new comment',
+          flags: {debug: 'change to false', add_new_flag: true}
+        },
+      ]
+      data.metadatas = newmetadatas // only modify these metadatas
+      result = await api({
+        operation: '*',
+        data,
+        model: each,
+        query: {id}
+      })
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      Object.assign(refetch_, _.omit(data, ['metadatas'])) // replace simple
+      updated = newmetadatas.map(__ => _.omit(__, ['__query__']) )
+      Object.assign(refetch_.metadatas[1], updated[0])
+      Object.assign(refetch_.metadatas[3], updated[1])
+      Object.assign(refetch_.metadatas[2], updated[2])
+      t.deepEqual(refetch, refetch_)
+      await testMetadataCount([2,2,1,0,1])
+
+      // delete it
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
+      await testMetadataCount([0,0,0,0,0])
+    }
+    if("add, modify, delete and reorder metadatas with field"){
+      // create with no metadatas
+      delete data.metadatas
       result = await api({
         operation: '+',
         data,
@@ -266,8 +361,9 @@ test('metadatas+flags', async t => {
       refetch = (await Model.findOne({id}))._doc
       refetch_ = Object.assign({}, refetch, data)
       t.deepEqual(refetch, refetch_)
+      await testMetadataCount([0,0,0,0,0])
 
-      copy = metadatas.map(_ => Object.assign({}, _))
+      // add metadatas with field
       result = await api({
         operation: '+',
         data: { metadatas: copy },
@@ -275,15 +371,185 @@ test('metadatas+flags', async t => {
         query: {id},
         field: 'metadatas',
       })
-      refetch = await Model.findOne({id})
-      refetch = refetch._doc
+      refetch = (await Model.findOne({id}))._doc
       refetch_ = Object.assign({}, refetch)
-      updated = result.withs.metadatas.map(__ => _.omit(__, ['metadata']) )
+      updated = result.withs.metadatas
       for (let index in updated) {
         Object.assign(refetch_.metadatas[index], updated[index])
       }
       t.deepEqual(refetch, refetch_)
-      // delete it
+      await testMetadataCount([2,2,1,1,0])
+
+      // modify with fields
+      updated = result.withs.metadatas
+      newmetadatas = [ // the same modify as the first test
+        { // [1], have two value
+          id: updated[0].id,
+          value: 'test color string updated with field',
+          comment: 'test comment updated with field',
+          flags: {
+            add_new_flag: true, update_with_field: true
+          }
+        },
+        { // [3] only this one can modify with name, others have duplicated term
+          metadata: {
+            name: t.title + '-object2'
+          },
+          __query__: {
+            metadata: {
+              name: t.title + '-object'
+            },
+          },
+          value: {msg: 'mwf', mixed_value_add: false, modify_with_field: true},
+          comment: 'test comment modified with field',
+          flags: {debug: 'change to false with field'}
+        },
+        { // [2]
+          __query__: {
+            metadata_id: updated[2].metadata_id,
+          },
+          value: 'test rate string 2 modified with field',
+          comment: 'new comment modified with field',
+          flags: {debug: 'modify to blabla', add_new_flag: false, modify_with_field: true}
+        },
+      ]
+      result = await api({
+        operation: '*',
+        data: {metadatas: newmetadatas},
+        model: each,
+        query: {id},
+        field: 'metadatas'
+      })
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      Object.assign(refetch_, _.omit(data, ['metadatas'])) // replace simple field
+      updated = newmetadatas.map(__ => _.omit(__, ['__query__']) )
+      Object.assign(refetch_.metadatas[1], updated[0])
+      Object.assign(refetch_.metadatas[3], updated[1])
+      Object.assign(refetch_.metadatas[2], updated[2])
+      t.deepEqual(refetch, refetch_)
+      await testMetadataCount([2,2,1,0,1])
+
+      // delete metadata only
+      updated = result.withs.metadatas
+      toDelete = [
+        { // [1]
+          id: updated[0].id,
+        },
+        { // [3] only this one can modify with name, others have duplicated term
+          __query__: {
+            metadata: {
+              name: t.title + '-object2'
+            },
+          },
+        },
+        { // [2]
+          __query__: {
+            metadata_id: updated[2].metadata_id,
+          },
+        },
+      ]
+      result = await api({
+        operation: '-',
+        data: {metadatas: toDelete},
+        model: each,
+        query: {id},
+        field: 'metadatas'
+      })
+      refetch = (await Model.findOne({id}))._doc.metadatas
+      let ids = updated.map(_=>_.id)
+      refetch_ = refetch.filter(_ => ids.includes(_.id))
+      t.is(refetch_.length, 0)
+      await testMetadataCount([1,2,0,0,0])
+
+      // test reorder
+      ids = refetch.map(_ => ({id: _.id}))
+      let newIDs = [ids[0], ids[2], ids[1]]
+      result = await api({
+        operation: 'o',
+        data: {metadatas: newIDs},
+        model: each,
+        query: {id},
+        field: 'metadatas'
+      })
+      refetch = (await Model.findOne({id}))._doc.metadatas
+      let refetchIDs = Array.from(refetch).map(_ => ({id: _.id}))
+      t.deepEqual(newIDs, refetchIDs)
+      await testMetadataCount([1,2,0,0,0])
+    }
+    if("add, modify and delete metadatas.flags with field"){
+      /* now we have three metadatas: [
+        {[2]},
+        {[2]},
+        {[1]},
+      ], only the later two have flags*/
+      // add flags in metadata
+      let newData = [
+        {id: refetch[0].id, flags: {add_by_field_flag: true}},
+        {id: refetch[1].id, flags: {add_by_field_flag: true}},
+      ]
+      result = await api({
+        operation: '+',
+        data: {metadatas: newData},
+        model: each,
+        query: {id},
+        field: 'metadatas.flags'
+      })
+      refetch = (await Model.findOne({id}))._doc.metadatas
+      t.is(newData[0].flags.add_by_field_flag, refetch[0].flags.add_by_field_flag)
+      t.is(newData[1].flags.add_by_field_flag, refetch[1].flags.add_by_field_flag)
+      await testMetadataCount([1,2,0,0,0])
+
+      // modify flags in metadata
+      let toModify = refetch.map(__ => _.pick(__, ["id", "flags"])) // old metadatas
+      toModify = toModify.slice(1,) // only the later two have flags
+      toModify[0].flags.debug = 'hahaha'
+      toModify[1].flags.debug = 'lalala'
+      toModify[1].flags.ddebug = 'huhuhu'
+      result = await api({
+        operation: '*',
+        data: {metadatas: toModify},
+        model: each,
+        query: {id},
+        field: 'metadatas.flags'
+      })
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc.metadatas
+      refetch = refetch.slice(1,)
+      t.is( refetch[0].flags.debug, toModify[0].flags.debug )
+      t.is( refetch[0].flags.debug, toModify[0].flags.debug )
+      t.is( refetch[1].flags.ddebug, toModify[1].flags.ddebug )
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc.metadatas
+      await testMetadataCount([1,2,0,0,0])
+
+      // delete flags in metadata
+      toDelete = refetch.map(__ => _.pick(__, ["id", "flags"]))
+      toDelete = toDelete.slice(1,) // only the later two have flags
+      rawdata = toDelete[0].flags.debug
+      delete toDelete[0].flags.debug // do not delete first
+      result = await api({
+        operation: '-',
+        data: {metadatas: toDelete},
+        model: each,
+        query: {id},
+        field: 'metadatas.flags'
+      })
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc.metadatas
+      refetch = refetch.slice(1,)
+      for (let index in refetch) {
+        let inter = _.intersection(
+          Object.keys(refetch[index].flags),
+          Object.keys(toDelete[index].flags)
+        )
+        t.is(inter.length, 0)
+      }
+      t.is(refetch[0].flags.debug, rawdata)
+      await testMetadataCount([1,2,0,0,0])
+
+      // delete the entry, clean up
+      let oldresult = result
       result = await api({
         operation: '-',
         model: each,
@@ -291,219 +557,8 @@ test('metadatas+flags', async t => {
       })
       refetch = await Model.findOne({id})
       t.true(refetch === null)
-
+      await testMetadataCount([0,0,0,0,0])
     }
-
-    // create in one dict
-    data.metadatas = copy
-    result = await api({
-      operation: '+',
-      data,
-      model: each
-    })
-    id = result.modelID
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
-
-    refetch_ = Object.assign({}, refetch)
-    updated = metadatas.map(__ => _.omit(__, ['metadata']) )
-    for (let index in updated) {
-      Object.assign(refetch_.metadatas[index], updated[index])
-    }
-    t.deepEqual(refetch, refetch_)
-
-    // modify both simple and withs
-    updated = result.withs.metadatas
-    data.comment = `${each} ${t.title} modified`
-    data.flags.in_trush = false
-    data.flags.ddebug = true
-    let newmetadatas = [
-      { // [1]
-        id: updated[1].id,
-        value: 'test color string updated',
-        comment: 'test comment updated',
-        flags: {
-          add_new_flag: true
-        }
-      },
-      { // [3] only this one can modify with name, others have dupoicated term
-        metadata: {
-          name: t.title + '-object2'
-        },
-        __query__: {
-          metadata: {
-            name: t.title + '-object'
-          },
-        },
-        value: {msg: 'mixed_value modify', mixed_value_add: true},
-        comment: 'test comment',
-        flags: {debug: 'change to false'}
-      },
-      { // [2]
-        __query__: {
-          metadata_id: updated[2].metadata_id,
-        },
-        value: 'test rate string 2 modified',
-        comment: 'new comment',
-        flags: {debug: false, add_new_flag: true}
-      },
-    ]
-    data.metadatas = newmetadatas
-    result = await api({
-      operation: '*',
-      data,
-      model: each,
-      query: {id}
-    })
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
-    refetch_ = Object.assign({}, refetch)
-    Object.assign(refetch_, _.omit(data, ['metadatas']))
-    updated = newmetadatas.map(__ => _.omit(__, ['__query__']) )
-    Object.assign(refetch_.metadatas[1], updated[0])
-    Object.assign(refetch_.metadatas[3], updated[1])
-    Object.assign(refetch_.metadatas[2], updated[2])
-    t.deepEqual(refetch, refetch_)
-
-    // modify with fields
-    updated = result.withs.metadatas
-    newmetadatas = [
-      { // [1]
-        id: updated[0].id,
-        value: 'test color string updated with field',
-        comment: 'test comment updated with field',
-        flags: {
-          add_new_flag: true, update_with_field: true
-        }
-      },
-      { // [3] only this one can modify with name, others have duplicated term
-        metadata: {
-          name: t.title + '-object'
-        },
-        __query__: {
-          metadata: {
-            name: t.title + '-object2'
-          },
-        },
-        value: {msg: 'mwf', mixed_value_add: false, modify_with_field: true},
-        comment: 'test comment modified with field',
-        flags: {debug: 'change to false with field'}
-      },
-      { // [2]
-        __query__: {
-          metadata_id: updated[2].metadata_id,
-        },
-        value: 'test rate string 2 modified with field',
-        comment: 'new comment modified with field',
-        flags: {debug: 'balbal', add_new_flag: false, modify_with_field: true}
-      },
-    ]
-    data.metadatas = newmetadatas
-    result = await api({
-      operation: '*',
-      data: {metadatas: newmetadatas},
-      model: each,
-      query: {id},
-      field: 'metadatas'
-    })
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
-    refetch_ = Object.assign({}, refetch)
-    Object.assign(refetch_, _.omit(data, ['metadatas']))
-    updated = newmetadatas.map(__ => _.omit(__, ['__query__']) )
-    Object.assign(refetch_.metadatas[1], updated[0])
-    Object.assign(refetch_.metadatas[3], updated[1])
-    Object.assign(refetch_.metadatas[2], updated[2])
-    t.deepEqual(refetch, refetch_)
-
-    // delete metadata only
-    updated = result.withs.metadatas
-    let toDelete = [
-      { // [1]
-        id: updated[0].id,
-      },
-      { // [3] only this one can modify with name, others have duplicated term
-        __query__: {
-          metadata: {
-            name: t.title + '-object'
-          },
-        },
-      },
-      { // [2]
-        __query__: {
-          metadata_id: updated[2].metadata_id,
-        },
-      },
-    ]
-    result = await api({
-      operation: '-',
-      data: {metadatas: toDelete},
-      model: each,
-      query: {id},
-      field: 'metadatas'
-    })
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc.metadatas
-    let ids = updated.map(_=>_.id)
-    refetch_ = refetch.filter(_ => ids.includes(_.id))
-    t.is(refetch_.length, 0)
-
-    // modify flags in metadata
-    let toModify = refetch.map(__ => _.pick(__, ["id", "flags"]))
-    toModify = toModify.slice(1,) // only the later two have flags
-    toModify[0].flags.debug = 'hahaha'
-    toModify[1].flags.debug = 'lalala'
-    toModify[1].flags.ddebug = 'huhuhu'
-    result = await api({
-      operation: '*',
-      data: {metadatas: toModify},
-      model: each,
-      query: {id},
-      field: 'metadatas.flags'
-    })
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc.metadatas
-    refetch = refetch.slice(1,)
-    t.is( refetch[0].flags.debug, toModify[0].flags.debug )
-    t.is( refetch[0].flags.debug, toModify[0].flags.debug )
-    t.is( refetch[1].flags.ddebug, toModify[1].flags.ddebug )
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc.metadatas
-
-    // delete flags in metadata
-    toDelete = refetch.map(__ => _.pick(__, ["id", "flags"]))
-    toDelete = toDelete.slice(1,) // only the later two have flags
-    let rawData = toDelete[0].flags.debug
-    delete toDelete[0].flags.debug // do not delete first
-    result = await api({
-      operation: '-',
-      data: {metadatas: toDelete},
-      model: each,
-      query: {id},
-      field: 'metadatas.flags'
-    })
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc.metadatas
-    refetch = refetch.slice(1,)
-    for (let index in refetch) {
-      let inter = _.intersection(
-        Object.keys(refetch[index].flags),
-        Object.keys(toDelete[index].flags)
-      )
-      t.is(inter.length, 0)
-    }
-    t.is(refetch[0].flags.debug, rawData)
-
-    // delete the entry, clean up
-    let oldresult = result
-    result = await api({
-      operation: '-',
-      model: each,
-      query: {id}
-    })
-
-    refetch = await Model.findOne({id})
-    t.true(refetch === null)
   }
 
   // delete Metadatas

@@ -3,11 +3,8 @@
 * common functions(work in both frontend and backend):
   * model based:
     first get models into memory (from database in backend and from web API in frontend)
-    * [ ] testFamilyLoop:
+    * [d] testFamilyLoop:
       * (existTags, newTag)
-    * [ ] getFamily
-      * (tag)
-      * if depth > 100, return exists and raise error
     * [ ] getTagRelationPair({same input as API})
     * [ ] getTagDiff({same input as API})
         * get old auto
@@ -53,7 +50,7 @@
       * Config
       * UserConfig
   * functions:
-    * [ ] API:
+    * [d] API:
       input: {
         operation, data, query, model, field, meta
       }
@@ -68,7 +65,7 @@
 
       * [ ] other Models:
         * like History, Editing...
-      * [ ] topModels:
+      * [f] topModels:
         * withs
       * [ ] TagAPI:
         * add:
@@ -95,8 +92,8 @@
         * [ ] add/delete reverse
       * [ ] cataloguesAPI:
         * [ ] add/delete reverse
-      * [ ] metadatasAPI:
-        * [ ] add/delete reverse
+      * [f] metadatasAPI:
+        * [f] add/delete reverse
       * [ ] relationsAPI:
         * [ ] add/delete reverse
         * if parent is tag:
@@ -106,7 +103,7 @@
                 * getTagDiff, apply tag diff change
                   * make the 'level' meta > 1
                   * no history, return it to parent
-      * [ ] familyAPI:
+      * [f] familyAPI:
         * testLoop
         * if parent is tag:
           * if delete children:
@@ -115,8 +112,8 @@
           * if add parent:
             * for all models that have this tag
               * recalculate family tree
-
-      * [ ] flagsAPI
+      * [f] flagsAPI
+    * [d] API unittest
     * [ ] getRecycle
     * [ ] getGroupRelationSet:
       * give the relation and the entry,
@@ -181,7 +178,9 @@
       model, operation, id, field # HTTP header中提取
       }
 * horizon:
-  * designs
+  * designs:
+    * [ ] share system
+      * [ ] one click markdown blog
   * store:
     * design: {
         Models: {
