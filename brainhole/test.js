@@ -90,38 +90,9 @@ test('flags', async t => {
         data[pk] = `${each} ${t.title} test pks`
       }
     }
-    if("create without flags, then add it with flags field"){
-      result = await api({
-        operation: '+',
-        data,
-        model: each
-      })
-      id = result.modelID
-      refetch = (await Model.findOne({id}))._doc
-      refetch_ = Object.assign({}, refetch, data)
-      t.deepEqual(refetch, refetch_) // test correct add
-      // add flag with 'flags' field
-      flags = { debug: true, in_trush: true, }
-      result = await api({
-        operation: '+',
-        data: {flags},
-        model: each,
-        query: {id},
-        field: 'flags',
-      })
-      refetch = (await Model.findOne({id}))._doc
-      refetch_ = Object.assign({}, refetch, {flags})
-      t.deepEqual(refetch, refetch_) // test add flag with 'flags' field
-      // clear up, delete it
-      result = await api({
-        operation: '-',
-        model: each,
-        query: {id}
-      })
-      refetch = await Model.findOne({id})
-      t.true(refetch === null) // test it is deleted
-    }
-    if("create and modify with data.flags, do not use field"){
+    flags = { debug: true, in_trush: true, }
+
+    if("create, modify with data.flags"){
       // create with flag
       data.flags = flags
       result = await api({
@@ -147,9 +118,30 @@ test('flags', async t => {
       refetch_ = Object.assign({}, refetch, data)
       t.deepEqual(refetch, refetch_) // test add with flgas and simple
     }
-    if("modfiy and delete using 'flags' field") {
-      // modify with 'flags' field
-      flags = data.flags
+    if("create without flags, then add/modify/delete using the 'flags' field"){
+      // create without flags
+      delete data.flags
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, data)
+      t.deepEqual(refetch, refetch_)
+
+      // add flags with 'flags' field
+      result = await api({
+        operation: '+',
+        data: {flags},
+        model: each,
+        query: {id},
+        field: 'flags',
+      })
+      refetch = (await Model.findOne({id}))._doc
+      t.deepEqual(refetch.flags, flags) // test add flag with 'flags' field
+      // modify flags with 'flags' field
       flags.in_trush = 3
       flags.debug = 4
       flags.debugg = 5
@@ -175,8 +167,7 @@ test('flags', async t => {
         field: 'flags'
       })
       refetch = (await Model.findOne({id}))._doc
-      refetch_ = Object.assign({}, refetch, data)
-      t.deepEqual(refetch, refetch_) // test flags delete
+      t.deepEqual(refetch.flags, flags) // test flags delete
       // clean up, delete this entry
       result = await api({
         operation: '-',
@@ -208,13 +199,14 @@ test('metadatas+flags', async t => {
     let id = result.modelID
     each.id = id
   }
+
   // begin test
   let todos = WithsDict.WithMetadata
   for (let each of todos) {
     let path = `${each}-metadatas`
     let Model = Models[each]
     let pks = getRequire(Model)
-    let data, refetch, refetch_, result, id, updated
+    let data, refetch, refetch_, result, id, updated, metadatas, copy
     data = {
       comment: `${each} ${t.title} test`,
       flags: {
@@ -226,18 +218,8 @@ test('metadatas+flags', async t => {
         data[pk] = `${each} ${t.title} test`
       }
     }
-    // create top models and then add metadata using fields
-    result = await api({
-      operation: '+',
-      data,
-      model: each
-    })
-    id = result.modelID
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
-    refetch_ = Object.assign({}, refetch, data)
-    t.deepEqual(refetch, refetch_)
-    let metadatas = [
+
+    metadatas = [
       {
         metadata_id: Metadatas[0].id,
         value: 'test rate string'
@@ -273,30 +255,44 @@ test('metadatas+flags', async t => {
         flags: {debug: true, test:null, ttest: false}
       },
     ]
-    let copy = metadatas.map(_ => Object.assign({}, _))
-    result = await api({
-      operation: '+',
-      data: { metadatas: copy },
-      model: each,
-      query: {id},
-      field: 'metadatas',
-    })
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
-    refetch_ = Object.assign({}, refetch)
-    updated = result.withs.metadatas.map(__ => _.omit(__, ['metadata']) )
-    for (let index in updated) {
-      Object.assign(refetch_.metadatas[index], updated[index])
+
+    if("create top models, add metadatas with 'metadata' field") {
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, data)
+      t.deepEqual(refetch, refetch_)
+
+      copy = metadatas.map(_ => Object.assign({}, _))
+      result = await api({
+        operation: '+',
+        data: { metadatas: copy },
+        model: each,
+        query: {id},
+        field: 'metadatas',
+      })
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc
+      refetch_ = Object.assign({}, refetch)
+      updated = result.withs.metadatas.map(__ => _.omit(__, ['metadata']) )
+      for (let index in updated) {
+        Object.assign(refetch_.metadatas[index], updated[index])
+      }
+      t.deepEqual(refetch, refetch_)
+      // delete it
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
+
     }
-    t.deepEqual(refetch, refetch_)
-    // delete it
-    result = await api({
-      operation: '-',
-      model: each,
-      query: {id}
-    })
-    refetch = await Model.findOne({id})
-    t.true(refetch === null)
 
     // create in one dict
     data.metadatas = copy
