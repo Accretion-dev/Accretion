@@ -47,8 +47,7 @@ test('basic', async t => { // create, modify and delete for All model
       model: each
     })
     let id = result.modelID
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
+    refetch = (await Model.findOne({id}))._doc
     refetch_ = Object.assign({}, refetch, data)
     t.deepEqual(refetch, refetch_)
     // modify
@@ -61,8 +60,7 @@ test('basic', async t => { // create, modify and delete for All model
       model: each,
       query: {id}
     })
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
+    refetch = (await Model.findOne({id}))._doc
     refetch_ = Object.assign({}, refetch, data)
     t.deepEqual(refetch, refetch_)
     // delete
@@ -82,111 +80,112 @@ test('flags', async t => {
   for (let each of todos) {
     let Model = Models[each]
     let pks = getRequire(Model)
-    let data, refetch, refetch_, result, id
+    let data, refetch, refetch_, result, id, flags
+    // generate data with all requirements
     data = {
       comment: `${each} ${t.title} test`,
     }
     if (pks.length) {
       for (let pk of pks) {
-        data[pk] = `${each} ${t.title} test`
+        data[pk] = `${each} ${t.title} test pks`
       }
     }
-    // create without flag, add it use api with 'field' parameter
-    result = await api({
-      operation: '+',
-      data,
-      model: each
-    })
-    id = result.modelID
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
-    refetch_ = Object.assign({}, refetch, data)
-    t.deepEqual(refetch, refetch_)
-    let flags = {
-      debug: true,
-      in_trush: true,
+    if("create without flags, then add it with flags field"){
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, data)
+      t.deepEqual(refetch, refetch_) // test correct add
+      // add flag with 'flags' field
+      flags = { debug: true, in_trush: true, }
+      result = await api({
+        operation: '+',
+        data: {flags},
+        model: each,
+        query: {id},
+        field: 'flags',
+      })
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, {flags})
+      t.deepEqual(refetch, refetch_) // test add flag with 'flags' field
+      // clear up, delete it
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null) // test it is deleted
     }
-    result = await api({
-      operation: '+',
-      data: {flags},
-      model: each,
-      query: {id},
-      field: 'flags',
-    })
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
-    refetch_ = Object.assign({}, refetch, {flags})
-    t.deepEqual(refetch, refetch_)
-    // delete it
-    result = await api({
-      operation: '-',
-      model: each,
-      query: {id}
-    })
-    refetch = await Model.findOne({id})
-    t.true(refetch === null)
-    // create with flag
-    data.flags = flags
-    result = await api({
-      operation: '+',
-      data,
-      model: each
-    })
-    id = result.modelID
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
-    refetch_ = Object.assign({}, refetch, data)
-    t.deepEqual(refetch, refetch_)
-    // modify both simple and withs
-    data.comment = `${each} ${t.title} modified`
-    data.flags.in_trush = false
-    data.flags.ddebug = true
-    result = await api({
-      operation: '*',
-      data,
-      model: each,
-      query: {id}
-    })
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
-    refetch_ = Object.assign({}, refetch, data)
-    t.deepEqual(refetch, refetch_)
-    // only modify withs
-    flags = data.flags
-    flags.in_trush = 3
-    flags.debug = 4
-    flags.debugg = 5
-    result = await api({
-      operation: '*',
-      data:{flags},
-      model: each,
-      query: {id},
-      field: 'flags'
-    })
-    // delete flags only
-    let toDelete = {in_trush: true, debug: true}
-    for (let name of Object.keys(toDelete)) {
-      delete flags[name]
+    if("create and modify with data.flags, do not use field"){
+      // create with flag
+      data.flags = flags
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, data)
+      t.deepEqual(refetch, refetch_) // test add with flags
+      // modify both simple and withs
+      data.comment = `${each} ${t.title} modified`
+      data.flags.in_trush = false
+      data.flags.ddebug = true
+      result = await api({
+        operation: '*',
+        data,
+        model: each,
+        query: {id}
+      })
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, data)
+      t.deepEqual(refetch, refetch_) // test add with flgas and simple
     }
-    result = await api({
-      operation: '-',
-      data: {flags: toDelete},
-      model: each,
-      query: {id},
-      field: 'flags'
-    })
-    refetch = await Model.findOne({id})
-    refetch = refetch._doc
-    refetch_ = Object.assign({}, refetch, data)
-    t.deepEqual(refetch, refetch_)
-    // delete the entry, clean up
-    result = await api({
-      operation: '-',
-      model: each,
-      query: {id}
-    })
-    refetch = await Model.findOne({id})
-    t.true(refetch === null)
+    if("modfiy and delete using 'flags' field") {
+      // modify with 'flags' field
+      flags = data.flags
+      flags.in_trush = 3
+      flags.debug = 4
+      flags.debugg = 5
+      result = await api({
+        operation: '*',
+        data:{flags},
+        model: each,
+        query: {id},
+        field: 'flags'
+      })
+      refetch = (await Model.findOne({id}))._doc
+      t.deepEqual(refetch.flags, flags) // test flags modify
+      // delete with 'flags' field
+      let toDelete = {in_trush: true, debug: true}
+      for (let name of Object.keys(toDelete)) {
+        delete flags[name]
+      }
+      result = await api({
+        operation: '-',
+        data: {flags: toDelete},
+        model: each,
+        query: {id},
+        field: 'flags'
+      })
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, data)
+      t.deepEqual(refetch, refetch_) // test flags delete
+      // clean up, delete this entry
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
+    }
   }
   t.pass()
 })
