@@ -470,26 +470,23 @@ async function api ({ operation, data, query, model, meta, field }) {
   }
 }
 
-async function toNextField({operation, prefield, field, entry, data, name}) {
-  let result = []
-  for (let eachdata of data) {
-    let this_sub_entry = await querySub({entry, data: eachdata, field: name})
-    let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({
-      model: name,
-      field,
-      data:eachdata,
-      sub: true
-    })
-    let thisresult = await APIs[`${fieldPrefix}API`]({
-      operation,
-      prefield: prefield+`-${fieldPrefix}`,
-      field: fieldSuffix,
-      entry: this_sub_entry,
-      data: newdata
-    })
-    result.push({[fieldPrefix]: thisresult})
-  }
-  return result
+async function toNextField({operation, prefield, field, entry, eachdata, name}) {
+  // process flags
+  let this_sub_entry = await querySub({entry, data: eachdata, field: name})
+  let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({
+    model: name,
+    field,
+    data:eachdata,
+    sub: true
+  })
+  let thisresult = await APIs[`${fieldPrefix}API`]({
+    operation,
+    prefield: prefield+`-${fieldPrefix}`,
+    field: fieldSuffix,
+    entry: this_sub_entry,
+    data: newdata
+  })
+  return {[fieldPrefix]: thisresult}
 }
 
 async function flagsAPI ({operation, prefield, field, entry, data}) {
@@ -628,6 +625,11 @@ async function childrenAPI ({operation, data, entry, field}) {
   return await familyAPI({operation, prefield, field, entry, data, type:'children'})
 }
 
+/* comment:
+  * do not reject duplicate metadatas
+  * for catalogues, tags and relations, check duplicate in front end
+  * for auto added tags, ignore duplicated tags when added
+*/
 async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
   // tags, catalogues, metadatas, relations
   const query_key = name.slice(0,-1)+'_id' // key to query subdocument array, e.g. tag_id in tags field
@@ -638,7 +640,38 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
   let entry_id = entry.id
 
   if (field) { // e.g. metadatas.flags, tags.flags
-    return await toNextField({operation, prefield, field, data, entry, name})
+    let result = []
+    for (let eachdata of data) {
+      let this_sub_entry = await querySub({entry, data: eachdata, field: name})
+      let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({
+        model: name,
+        field,
+        data:eachdata,
+        sub: true
+      })
+      let thisresult = await APIs[`${fieldPrefix}API`]({
+        operation,
+        prefield: prefield+`-${fieldPrefix}`,
+        field: fieldSuffix,
+        entry: this_sub_entry,
+        data: newdata
+      })
+      let this_result = {[fieldPrefix]: thisresult, id: this_sub_entry.id}
+      result.push(this_result)
+      if (name === 'relations') { // relationsFieldHook
+        let {other_model, other_id} = this_sub_entry
+        let other_entry = await Models[other_model].find({id: other_id}) // process this later, so use the global name
+        if (other_entry.length !== 1) {
+          throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
+        }
+        other_entry = other_entry[0]
+        let that_sub_entry = other_entry[name].find(_ => _.id === this_sub_entry.id)
+        Object.assign(that_sub_entry, this_result)
+        other_entry.markModified(name)
+        await other_entry.save()
+      }
+    }
+    return result
   } else {
     if (operation === '+') { // data should be array
       for (let eachdata of data) {
@@ -649,7 +682,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         // let {query_id, rawquery, fullquery, query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true})
         let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true})
         let other_entry
-        if (name === 'relations') {
+        if (name === 'relations') { // relationsCreateHookBeforeWiths
           let {
             other_model, other_id,
             aorb, other_aorb,
@@ -661,6 +694,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
           if (other_entry.length !== 1) {
             throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
           }
+          other_entry = other_entry[0]
           full_tag_query = Object.assign(full_tag_query, {
             from_id, from_model, to_id, to_model,
             other_id,
@@ -678,7 +712,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         tag_query_entry.r[entry_model].push(`${entry.id}-${this_sub_entry.id}`)
         await tag_query_entry.save()
         // special taglikes
-        if (name === 'relations') {
+        if (name === 'relations') { // relationsCreateHookAfterWiths
           let that_sub_entry = Object.assign({}, this_sub_entry)
           if (this_sub_entry.aorb==='a') {
             that_sub_entry.other_id = from_id
@@ -698,41 +732,91 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
     } else if (operation === '*') {
       for (let eachdata of data) {
         let eachdataraw = Object.assign({}, eachdata)
-        let taglikeChanged = ('__query__' in eachdata)
         let this_sub_entry = await querySub({entry, data: eachdata, field: name})
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         // fullquery delete the query_key, only have query_key_id
         let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, test:true})
-        simple = full_tag_query
 
-        // must put here
-        if (taglikeChanged && (tag_query_entry && (this_sub_entry[query_key] !== tag_query_entry.id))) {
-          // change taglike from one to another, modify r for two Taglike
-          //console.log('eachdata:', eachdataraw, '\ntaglikeChanged:', taglikeChanged, '\nquery_entry:', query_entry ? query_entry.id : null, '\nthisentry:', thisentry, '\n\n')
+        let relationChangeOtherFlag = false
+        if (name === 'relations') { // relationsModifyHookBeforeWiths
+          let old_sub_relation = extractRelationInfo({full_tag_query: this_sub_entry, entry_model, entry_id, data:eachdata})
+          let new_sub_relation = extractRelationInfo({full_tag_query, entry_model, entry_id, data:eachdata})
+          let old_other_entry
+          // delete old sub_relations in old other_entry
+          if (old_sub_relation.other_id !== new_sub_relation.other_id || old_sub_relation.other_model !== new_sub_relation.other_model) {
+            old_other_entry = await Models[old_sub_relation.other_model].find({id: old_sub_relation.other_id}) // delete this
+            if (old_other_entry.length !== 1) {
+              throw Error(`can not get unique entry for ${old_sub_relation.other_model} by id:${old_sub_relation.other_id}`)
+            }
+            old_other_entry = old_other_entry[0]
+            old_other_entry[name] = old_other_entry[name].filter(_ => _.id !== this_sub_entry.id)
+            old_other_entry.markModified(name)
+            await old_other_entry.save()
+            relationChangeOtherFlag = true
+          }
+          other_entry = await Models[other_model].find({id: other_id}) // process this later, so use the global name
+          if (other_entry.length !== 1) {
+            throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
+          }
+          other_entry = other_entry[0]
+          full_tag_query = Object.assign(full_tag_query, {
+            from_id, from_model, to_id, to_model,
+            other_id,
+            other_model,
+            aorb,
+          })
+        }
+
+        // change tag from one to another, modify r for two Tag
+        // update reverse, must put here
+        if ((tag_query_entry && (this_sub_entry[query_key] !== tag_query_entry.id))) {
           let thisModel = name[0].toUpperCase() + name.slice(1, -1)
           let r = await Models[thisModel].find({id: this_sub_entry[query_key]})
           if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${thisModel}`)
-          let oldTaglike = r[0]
-          let newTaglike = tag_query_entry
+          let oldTag = r[0]
+          let newTag = tag_query_entry
           let code = `${entry.id}-${this_sub_entry.id}`
-          //console.log('old before', JSON.stringify(oldTaglike, null, 2))
-          //console.log('new before', JSON.stringify(newTaglike, null, 2))
-          oldTaglike.r[entry_model] = oldTaglike.r[entry_model].filter(_ => _ !== code)
-          newTaglike.r[entry_model].push(code)
-          let oldTaglikeReturn = await oldTaglike.save()
-          await newTaglike.save()
-          //console.log('old after', JSON.stringify(oldTaglikeReturn, null, 2))
-          r = await Models[thisModel].find({id: oldTaglikeReturn.id})
-          //console.log('old query', JSON.stringify(r, null, 2))
-          //console.log('new', JSON.stringify(newTaglike, null, 2))
+          oldTag.r[entry_model] = oldTag.r[entry_model].filter(_ => _ !== code)
+          newTag.r[entry_model].push(code)
+          await oldTag.save()
+          await newTag.save()
+          if (name === 'relations') {
+            let other_code = `${other_entry.id}-${this_sub_entry.id}`
+            oldTag.r[entry_model] = oldTag.r[entry_model].filter(_ => _ !== other_code)
+            newTag.r[entry_model].push(other_code)
+            await oldTag.save()
+            await newTag.save()
+          }
         }
 
+        simple = full_tag_query
         this_sub_entry.set(simple)
         simple.id = this_sub_entry.id
         simple[query_key] = this_sub_entry[query_key]
         withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name})
         let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
+
+        if (name === 'relations') { // relationsModifyHookAfterWiths
+          let that_sub_entry = Object.assign({}, this_sub_entry)
+          if (this_sub_entry.aorb==='a') {
+            that_sub_entry.other_id = from_id
+            that_sub_entry.other_model = from_model
+            that_sub_entry.aorb = 'b'
+          } else {
+            that_sub_entry.other_id = to_id
+            that_sub_entry.other_model = to_model
+            that_sub_entry.aorb = 'a'
+          }
+          if (relationChangeOtherFlag) { // just push it
+            other_entry[name].push(that_sub_entry)
+          } else { // search and replace it
+            let findit = other_entry[name].find(_ => _.id === that_sub_entry.id)
+            Object.assign(findit, that_sub_entry)
+          }
+          other_entry.markModified(name)
+          await other_entry.save()
+        }
       }
       return result
     } else if (operation === '-') {
@@ -741,6 +825,17 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
       if (data) {
         for (let eachdata of data) {
           let this_sub_entry = await querySub({entry, data: eachdata, field: name})
+          if (name === 'relations') { // relationsDeleteHook
+            let {other_model, other_id} = this_sub_entry
+            let other_entry = await Models[other_model].find({id: other_id}) // process this later, so use the global name
+            if (other_entry.length !== 1) {
+              throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
+            }
+            other_entry = other_entry[0]
+            other_entry[name] = other_entry[name].filter(_ => _.id !== this_sub_entry.id)
+            other_entry.markModified(name)
+            await other_entry.save()
+          }
           entries.push(this_sub_entry)
         }
       } else {
