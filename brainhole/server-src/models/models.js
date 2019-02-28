@@ -886,7 +886,6 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
   return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
 
-// modify this latter
 function extractRelationInfo ({fullquery, entry_model, entry_id, data}) {
   let other_model, other_id
   let aorb, other_aorb
@@ -927,84 +926,6 @@ function extractRelationInfo ({fullquery, entry_model, entry_id, data}) {
   }
   return {other_model, other_id, aorb, other_aorb, from_id, from_model, to_id, to_model}
 }
-async function relationsCreateProcess({name, prefield, field, data, entry, fullquery, withs}) {
-  let entry_model = entry.schema.options.collection
-  let entry_id = entry.id
-
-  let {
-    other_model,
-    other_id,
-    aorb,
-    other_aorb,
-    from_id,
-    from_model,
-    to_id,
-    to_model,
-    other_fullquery
-  } = extractRelationInfo({fullquery, entry_model, entry_id, data})
-
-  let other_entry = await Models[other_model].find({id: other_id})
-  if (other_entry.length !== 1) {
-    throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
-  }
-  other_result.push(other_entry) // marked for save
-  let index = other_entry[name].push(other_fullquery)
-  let thisentry = entry[name][index - 1]
-
-  fullquery = Object.assign(fullquery, {
-    from_id, from_model, to_id, to_model,
-    other_id,
-    other_model,
-    aorb,
-  })
-  return fullquery
-}
-async function relationsModifyHook({name, prefield, field, data, entry, thisentry, fullquery}) {
-  let entry_model = entry.schema.options.collection
-  let entry_id = entry.id
-  let through = []
-  let other_result = []
-
-  let {other_model, other_id, aorb, other_aorb, from_id, from_model, to_id, to_model, other_fullquery} = extractRelationInfo({fullquery, entry_model, entry_id, data})
-
-  let old_other_entry, old_other_thisentry // old ones
-  let other_entry, other_thisentry // new ones
-  old_other_entry = await Models[thisentry.other_model].find({id: thisentry.other_id})
-  if (old_other_entry.length !== 1) {
-    throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
-  }
-  other_result.push(old_other_entry) // marked for save
-  old_other_thisentry = old_other_entry[name].filter(_ => _.id === thisentry.id)
-  if (old_other_thisentry.length !== 1) {
-    throw Error(`can not get unique entry for ${other_model}.${name} by id:${thisentry.id} using ${thisentry}`)
-  }
-  if (other_id === thisentry.other_id && other_model === thisentry.other_model) {
-    old_other_thisentry.set(other_fullquery)
-    other_thisentry = old_other_thisentry
-  } else { // other entry is changed!
-    let newdata = Object.assign({}, old_other_thisentry, other_fullquery)
-    let index = old_other_entry[name].push(newdata)
-    other_thisentry = old_other_entry[name][index - 1]
-
-    old_other_thisentry.remove()
-    other_result.push(other_entry) // marked for save
-  }
-
-  let {thisresult, thisthrough, thisother_result} = await processWiths({operation, prefield, field: null, entry: other_entry, withs, sub: name})
-  // if (thisthrough) { through = [...through, ...thisthrough] } // always be nothing
-  if (thisother_result) { other_result = [...other_result, ...thisother_result] }
-
-  other_result.push(Object.assign({}, other_fullquery, withs))
-  other_result.push(other_entry)
-
-  fullquery = Object.assign(fullquery, {
-    from_id, from_model, to_id, to_model,
-    other_id,
-    other_model,
-    aorb,
-  })
-  return {thisfullquery: fullquery, thisthrough: through, thisother_result: other_result}
-}
 async function relationsAPI ({operation, prefield, field, data, entry}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "relations"
@@ -1021,16 +942,12 @@ async function relationsAPI ({operation, prefield, field, data, entry}) {
 }
 
 async function tagsAPI ({operation, data, entry, field}) {
-  if (operation === 'create') {
-  } else if (operation === 'modify') {
-  } else if (operation === 'delete') {
-  }
+  const name = "tagsAPI"
+  return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
-async function cataloguesAPI ({operation, data, entry, field}) {
-  if (operation === 'create') {
-  } else if (operation === 'modify') {
-  } else if (operation === 'delete') {
-  }
+async function cataloguesAPI ({operation, prefield, field, data, entry}) {
+  const name = "cataloguesAPI"
+  return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
 let APIs = {
   flagsAPI,
