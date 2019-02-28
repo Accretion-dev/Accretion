@@ -181,6 +181,7 @@
   * designs:
     * [ ] share system
       * [ ] one click markdown blog
+    * [ ] when search for tags, auto filter onlyFor
   * store:
     * design: {
         Models: {

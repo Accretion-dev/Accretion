@@ -209,10 +209,10 @@ async function queryTaglikeID ({field, query, test, getEntry}) {
     if (test) {
       return {full_tag_query: query}
     } else {
-      throw Error(`should have ${query_key} or ${query_key}_id: ${query}`)
+      throw Error(`should have ${query_key} or ${query_key}, data:${JSON.stringify(query,null,2)}`)
     }
   }
-  let thisModel = query_key[0].toUpperCase() + query_key.slice(1)
+  let this_tag_model = query_key[0].toUpperCase() + query_key.slice(1)
   // query_id is the id we want
   // raw_query is the input query
   // fullquery is raw_query + {query_id}
@@ -221,8 +221,8 @@ async function queryTaglikeID ({field, query, test, getEntry}) {
     rawquery = query
     fullquery = query
     if (getEntry) {
-      let r = await Models[thisModel].find({id: query_id})
-      if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${{id: query_id}} in ${thisModel}`)
+      let r = await Models[this_tag_model].find({id: query_id})
+      if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${{id: query_id}} in ${this_tag_model}`)
       query_entry = r[0]
     }
   } else if (query_key in query) {
@@ -231,13 +231,13 @@ async function queryTaglikeID ({field, query, test, getEntry}) {
     if ('id' in query) {
       query_id = query['id']
       if (getEntry) {
-        let r = await Models[thisModel].find({id: query_id})
-        if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${{id: query_id}} in ${thisModel}`)
+        let r = await Models[this_tag_model].find({id: query_id})
+        if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${{id: query_id}} in ${this_tag_model}`)
         query_entry = r[0]
       }
     } else {
-      let r = await Models[thisModel].find(query)
-      if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${query} in ${thisModel}`)
+      let r = await Models[this_tag_model].find(query)
+      if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${JSON.stringify(query)} in ${this_tag_model}\n${JSON.stringify(r)}`)
       query_entry = r[0]
       query_id = query_entry.id
     }
@@ -274,7 +274,7 @@ async function querySub({entry, data, field}) {
     }
     return result[0]
   } else {
-    throw Error(`do not have 'id' or '__query__' in ${field}, don't know how to query, entry:${entry}, data:${data}`)
+    throw Error(`do not have 'id' or '__query__' in ${field}, don't know how to query, entry:${entry}, data:${JSON.stringify(data)}`)
   }
 }
 function extractSingleField ({model, field, data, sub}) {
@@ -638,6 +638,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
   let result = []
   let entry_model = entry.schema.options.collection
   let entry_id = entry.id
+  let other_entry
 
   if (field) { // e.g. metadatas.flags, tags.flags
     let result = []
@@ -681,18 +682,17 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         // query_entry is the entry for the 'Tag'
         // let {query_id, rawquery, fullquery, query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true})
         let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true})
-        let other_entry
         if (name === 'relations') { // relationsCreateHookBeforeWiths
+          let relationInfo = extractRelationInfo({full_tag_query, entry_model, entry_id})
           let {
             other_model, other_id,
             aorb, other_aorb,
             from_id, from_model,
             to_id, to_model,
-            other_fullquery
-          } = extractRelationInfo({full_tag_query, entry_model, entry_id, data:eachdata})
+          } = relationInfo
           other_entry = await Models[other_model].find({id: other_id})
           if (other_entry.length !== 1) {
-            throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
+            throw Error(`can not get unique entry for ${other_model} by id:${other_id}, ${JSON.stringify(full_tag_query,null,2)}, ${JSON.stringify(relationInfo,null,2)}`)
           }
           other_entry = other_entry[0]
           full_tag_query = Object.assign(full_tag_query, {
@@ -713,35 +713,47 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         await tag_query_entry.save()
         // special taglikes
         if (name === 'relations') { // relationsCreateHookAfterWiths
-          let that_sub_entry = Object.assign({}, this_sub_entry)
+          let that_sub_entry = Object.assign({}, this_sub_entry._doc)
           if (this_sub_entry.aorb==='a') {
-            that_sub_entry.other_id = from_id
-            that_sub_entry.other_model = from_model
+            that_sub_entry.other_id = this_sub_entry.from_id
+            that_sub_entry.other_model = this_sub_entry.from_model
             that_sub_entry.aorb = 'b'
-          } else {
-            that_sub_entry.other_id = to_id
-            that_sub_entry.other_model = to_model
+          } else if (this_sub_entry.aorb==='b') {
+            that_sub_entry.other_id = this_sub_entry.to_id
+            that_sub_entry.other_model = this_sub_entry.to_model
             that_sub_entry.aorb = 'a'
+          } else {
+            throw Error(`aorb is not a or b, ${JSON.stringify(this_sub_entry)}`)
           }
           other_entry[name].push(that_sub_entry)
+          await other_entry.save()
           tag_query_entry.r[entry_model].push(`${other_entry.id}-${this_sub_entry.id}`)
           await tag_query_entry.save()
         }
       }
       return result
     } else if (operation === '*') {
+      let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
       for (let eachdata of data) {
         let eachdataraw = Object.assign({}, eachdata)
+        // eachdata delete __query__
         let this_sub_entry = await querySub({entry, data: eachdata, field: name})
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         // fullquery delete the query_key, only have query_key_id
-        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, test:true})
+        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, test:true, getEntry: true})
 
         let relationChangeOtherFlag = false
+        let oldTag, newTag
         if (name === 'relations') { // relationsModifyHookBeforeWiths
-          let old_sub_relation = extractRelationInfo({full_tag_query: this_sub_entry, entry_model, entry_id, data:eachdata})
-          let new_sub_relation = extractRelationInfo({full_tag_query, entry_model, entry_id, data:eachdata})
+          let old_sub_relation = extractRelationInfo({full_tag_query: this_sub_entry, entry_model, entry_id})
+          let new_sub_relation = extractRelationInfo({full_tag_query, entry_model, entry_id, old:this_sub_entry})
           let old_other_entry
+
+          other_entry = await Models[new_sub_relation.other_model].find({id: new_sub_relation.other_id}) // process this later, so use the global name
+          if (other_entry.length !== 1) {
+            throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
+          }
+          other_entry = other_entry[0]
           // delete old sub_relations in old other_entry
           if (old_sub_relation.other_id !== new_sub_relation.other_id || old_sub_relation.other_model !== new_sub_relation.other_model) {
             old_other_entry = await Models[old_sub_relation.other_model].find({id: old_sub_relation.other_id}) // delete this
@@ -752,29 +764,31 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
             old_other_entry[name] = old_other_entry[name].filter(_ => _.id !== this_sub_entry.id)
             old_other_entry.markModified(name)
             await old_other_entry.save()
+
+            let old_code = `${old_other_entry.id}-${this_sub_entry.id}`
+            let new_code = `${other_entry.id}-${this_sub_entry.id}`
+            let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]})
+            if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${this_tag_model}`)
+            oldTag = r[0]
+            oldTag.r[entry_model] = oldTag.r[entry_model].filter(_ => _ !== old_code)
+            oldTag.r[entry_model].push(new_code)
+            await oldTag.save()
+
             relationChangeOtherFlag = true
           }
-          other_entry = await Models[other_model].find({id: other_id}) // process this later, so use the global name
-          if (other_entry.length !== 1) {
-            throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
-          }
-          other_entry = other_entry[0]
-          full_tag_query = Object.assign(full_tag_query, {
-            from_id, from_model, to_id, to_model,
-            other_id,
-            other_model,
-            aorb,
-          })
+          full_tag_query = Object.assign(full_tag_query, new_sub_relation)
         }
 
         // change tag from one to another, modify r for two Tag
         // update reverse, must put here
         if ((tag_query_entry && (this_sub_entry[query_key] !== tag_query_entry.id))) {
-          let thisModel = name[0].toUpperCase() + name.slice(1, -1)
-          let r = await Models[thisModel].find({id: this_sub_entry[query_key]})
-          if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${thisModel}`)
-          let oldTag = r[0]
-          let newTag = tag_query_entry
+          // console.log('eachdata:', eachdata, 'tag_query_entry:', tag_query_entry, 'this_sub_entry:', this_sub_entry, 'simple:', simple)
+          if (!oldTag) {
+            let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]})
+            if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${this_tag_model}`)
+            oldTag = r[0]
+          }
+          newTag = tag_query_entry
           let code = `${entry.id}-${this_sub_entry.id}`
           oldTag.r[entry_model] = oldTag.r[entry_model].filter(_ => _ !== code)
           newTag.r[entry_model].push(code)
@@ -798,15 +812,17 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         result.push(thisresult)
 
         if (name === 'relations') { // relationsModifyHookAfterWiths
-          let that_sub_entry = Object.assign({}, this_sub_entry)
+          let that_sub_entry = Object.assign({}, this_sub_entry._doc)
           if (this_sub_entry.aorb==='a') {
-            that_sub_entry.other_id = from_id
-            that_sub_entry.other_model = from_model
+            that_sub_entry.other_id = this_sub_entry.from_id
+            that_sub_entry.other_model = this_sub_entry.from_model
             that_sub_entry.aorb = 'b'
-          } else {
-            that_sub_entry.other_id = to_id
-            that_sub_entry.other_model = to_model
+          } else if (this_sub_entry.aorb==='b') {
+            that_sub_entry.other_id = this_sub_entry.to_id
+            that_sub_entry.other_model = this_sub_entry.to_model
             that_sub_entry.aorb = 'a'
+          } else {
+            throw Error(`aorb is not a or b, ${JSON.stringify(this_sub_entry)}`)
           }
           if (relationChangeOtherFlag) { // just push it
             other_entry[name].push(that_sub_entry)
@@ -820,22 +836,11 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
       }
       return result
     } else if (operation === '-') {
-      let thisModel = name[0].toUpperCase() + name.slice(1, -1)
+      let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
       let entries = []
       if (data) {
         for (let eachdata of data) {
           let this_sub_entry = await querySub({entry, data: eachdata, field: name})
-          if (name === 'relations') { // relationsDeleteHook
-            let {other_model, other_id} = this_sub_entry
-            let other_entry = await Models[other_model].find({id: other_id}) // process this later, so use the global name
-            if (other_entry.length !== 1) {
-              throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
-            }
-            other_entry = other_entry[0]
-            other_entry[name] = other_entry[name].filter(_ => _.id !== this_sub_entry.id)
-            other_entry.markModified(name)
-            await other_entry.save()
-          }
           entries.push(this_sub_entry)
         }
       } else {
@@ -852,12 +857,27 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
 
-        let r = await Models[thisModel].find({id: this_sub_entry[query_key]})
-        if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${thisModel}`)
+        let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]})
+        if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${this_tag_model}`)
         let taglike = r[0]
         let code = `${entry.id}-${this_sub_entry.id}`
         taglike.r[entry_model] = taglike.r[entry_model].filter(_ => _ !== code)
         await taglike.save()
+
+        if (name === 'relations') { // relationsDeleteHook
+          let {other_model, other_id} = this_sub_entry
+          let other_entry = await Models[other_model].find({id: other_id}) // process this later, so use the global name
+          if (other_entry.length !== 1) {
+            throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
+          }
+          other_entry = other_entry[0]
+          other_entry[name] = other_entry[name].filter(_ => _.id !== this_sub_entry.id)
+          other_entry.markModified(name)
+          await other_entry.save()
+          let code = `${other_entry.id}-${this_sub_entry.id}`
+          taglike.r[entry_model] = taglike.r[entry_model].filter(_ => _ !== code)
+          await taglike.save()
+        }
       }
       return result
     } else if (operation === 'o') {
@@ -886,10 +906,21 @@ async function metadatasAPI ({operation, prefield, field, data, entry}) {
   return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
 
-function extractRelationInfo ({fullquery, entry_model, entry_id, data}) {
+function extractRelationInfo ({full_tag_query, entry_model, entry_id, old}) {
   let other_model, other_id
   let aorb, other_aorb
-  let {from_id, from_model, to_id, to_model} = fullquery
+  let {from_id, from_model, to_id, to_model} = full_tag_query
+  if (!from_id && !to_id) {
+    if (old) {
+      return _.pick(old, ['other_model', 'other_id', 'aorb', 'other_aorb', 'from_id', 'from_model', 'to_id', 'to_model'])
+    } else {
+      throw Error('no from-to info')
+    }
+  }
+  if (!from_model) from_model = entry_model
+  if (!to_model) to_model = entry_model
+  if (!from_id) from_id = entry_id
+  if (!to_id) to_id = entry_id
   if (from_id && from_model && to_id && to_model) {
     if (from_id === to_id && from_model === to_model) {
       throw Error('Can not have a self-relation')
@@ -905,7 +936,7 @@ function extractRelationInfo ({fullquery, entry_model, entry_id, data}) {
       aorb = 'b'
       other_aorb = 'a'
     } else {
-      throw Error(`if given {from_id, from_model, to_id, to_model}, at least one pair should be the same as {entry_id, entry_model}, current is ${ {from_id, from_model, to_id, to_model} } v.s. ${ {entry_id, entry_model} }, origin data: ${data}`)
+      throw Error(`if given {from_id, from_model, to_id, to_model}, at least one pair should be the same as {entry_id, entry_model}, current is ${ {from_id, from_model, to_id, to_model} } v.s. ${ {entry_id, entry_model} }, origin data: ${full_tag_query}`)
     }
   } else if (from_id && from_model) {
       other_id = from_id
@@ -915,10 +946,10 @@ function extractRelationInfo ({fullquery, entry_model, entry_id, data}) {
       aorb = 'b'
       other_aorb = 'a'
   } else if (to_id && to_model) {
-      other_id = from_id
-      other_model = from_model
-      to_id = entry_id
-      to_model = entry_model
+      other_id = to_id
+      other_model = to_model
+      from_id = entry_id
+      from_model = entry_model
       aorb = 'a'
       other_aorb = 'b'
   } else {

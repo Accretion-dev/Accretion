@@ -74,7 +74,6 @@ test('basic', async t => { // create, modify and delete for All model
   }
   t.pass()
 })
-
 test('flags', async t => {
   let todos = WithsDict.WithFlag
   for (let each of todos) {
@@ -180,7 +179,6 @@ test('flags', async t => {
   }
   t.pass()
 })
-
 test('metadatas+flags', async t => {
   // init Metadatas
   let Metadatas = [
@@ -212,7 +210,6 @@ test('metadatas+flags', async t => {
       // console.log(array, counts)
       t.deepEqual(array, counts)
     }
-    let path = `${each}-metadatas`
     let Model = Models[each]
     let pks = getRequire(Model)
     let data, refetch, refetch_, result, id, updated, metadatas, copy, newmetadatas, rawdata, toDelete
@@ -267,7 +264,7 @@ test('metadatas+flags', async t => {
     ]
     copy = metadatas.map(_ => Object.assign({}, _))
 
-    if("create and modify with data.metadatas") {
+    if("create, modify with data.metadatas") {
       // create with data.metadatas
       data.metadatas = metadatas
       result = await api({
@@ -571,6 +568,528 @@ test('metadatas+flags', async t => {
     })
     let refetch = await Models.Metadata.findOne({id})
     t.true(refetch === null)
+  }
+  t.pass()
+})
+test('relations+flags', async t => {
+  // init relations
+  let testWiths = "relations"
+  let Relations = [
+    {name: t.title + '-larger',  symmetric: false},
+    {name: t.title + '-smaller', symmetric: false},
+    {name: t.title + '-simular', symmetric: true},
+    {name: t.title + '-different', symmetric: true},
+    {name: t.title + '-classmate', symmetric: true, type: 'group', hook: 'group'},
+    {name: t.title + '-same_author', symmetric: true, type: 'group', hook: 'group'},
+    {name: t.title + '-same', symmetric: true, hook: 'same', onlyFor: ['Tag']},
+    {name: t.title + '-same2', symmetric: true, hook: 'same', onlyFor: ['Tag']},
+    {name: t.title + '-CN2EN', symmetric: false, type: 'translation'},
+    {name: t.title + '-CN2JP', symmetric: false, type: 'translation'},
+  ]
+  let R = {}
+  for (let each of Relations) {
+    let result = await api({
+      operation: '+',
+      data: each,
+      model: "Relation"
+    })
+    let id = result.modelID
+    each.id = id
+    let namesplits = each.name.split('-')
+    let name = namesplits[namesplits.length - 1]
+    R[name] = each
+  }
+  // begin test
+  let todos = WithsDict.WithRelation
+  for (let each of todos) {
+    async function testRelationCount(array) {
+      let counts = []
+      for (let relation of Relations) {
+        let eachRelation = (await Models.Relation.findOne({id: relation.id}))._doc
+        counts.push(eachRelation.r[each].length)
+      }
+      // console.log(array, counts)
+      t.deepEqual(array, counts, JSON.stringify({array, counts}))
+    }
+    async function testRelationConsistent(result) {
+      for (let relation of result.relations) {
+        let this_sub_entry = relation
+        let that_sub_entry = Object.assign({}, relation._doc)
+        if (this_sub_entry.aorb==='a') {
+          that_sub_entry.other_id = this_sub_entry.from_id
+          that_sub_entry.other_model = this_sub_entry.from_model
+          that_sub_entry.aorb = 'b'
+        } else if (this_sub_entry.aorb==='b') {
+          that_sub_entry.other_id = this_sub_entry.to_id
+          that_sub_entry.other_model = this_sub_entry.to_model
+          that_sub_entry.aorb = 'a'
+        } else {
+            throw Error(`aorb is not a or b, ${JSON.stringify(this_sub_entry)}`)
+        }
+        let other_entry = await Models[relation.other_model].find({id: relation.other_id})
+        t.is(other_entry.length, 1)
+        other_entry = other_entry[0]
+        let other_that_sub_entry = other_entry.relations.find(_ => _.id===that_sub_entry.id)
+        t.true(!!other_that_sub_entry, JSON.stringify({this_sub_entry, that_sub_entry, other_that_sub_entry},null,2))
+        other_that_sub_entry = other_that_sub_entry._doc
+        t.deepEqual(other_that_sub_entry, that_sub_entry, JSON.stringify({this_sub_entry, that_sub_entry, other_that_sub_entry},null,2))
+      }
+    }
+    let Model = Models[each]
+    let pks = getRequire(Model)
+    let data, refetch, refetch_, result, id, updated, relations, copy, newrelations, toDelete, rawdata
+    let D = []
+    for (let i=0; i<=10; i++) {
+      data = {
+        comment: `${i} ${each} ${t.title} test`,
+        flags: {
+          init_flags: true
+        }
+      }
+      if (pks.length) {
+        for (let pk of pks) {
+          data[pk] = `${i} ${each} ${t.title} test`
+        }
+      }
+      rawdata = Object.assign({}, data)
+      D.push(rawdata)
+    }
+    for (let i=1; i<=10; i++) {
+      result = await api({
+        operation: '+',
+        data: D[i],
+        model: each
+      })
+      id = result.modelID
+      D[i].id = id
+    }
+    data = D[0]
+    rawdata = Object.assign({}, data)
+
+    //console.log(JSON.stringify(rawdatas, null, 2))
+    relations = [
+      {
+        relation_id: R['larger'].id,
+        from_id: D[1].id,
+        flags: { debug: true },
+      },
+      {
+        relation: { id: R['smaller'].id },
+        to_id: D[2].id,
+        flags: { debug: true },
+      },
+      {
+        relation_id: R['simular'].id,
+        // to_id: D[0], // add this later
+        from_id: D[3].id,
+        flags: { debug: true },
+      },
+      {
+        relation_id: R['different'].id,
+        // from_id: D[0], // add this later
+        to_id: D[3].id,
+        flags: { debug: true },
+      },
+      {
+        relation_id: R['classmate'].id,
+        to_id: D[4].id,
+        flags: { debug: true },
+      },
+      {
+        relation_id: R['same_author'].id,
+        to_id: D[5].id,
+        flags: { debug: true },
+      },
+      {
+        relation_id: R['same'].id,
+        to_id: D[6].id,
+        flags: { debug: true },
+      },
+      {
+        relation_id: R['same2'].id,
+        to_id: D[7].id,
+        flags: { debug: true },
+      },
+      {
+        relation: { name: R['CN2EN'].name },
+        to_id: D[8].id,
+        flags: { debug: true },
+      },
+      {
+        relation: { name: R['CN2JP'].name },
+        to_id: D[9].id,
+        flags: { debug: true },
+      },
+    ]
+    copy = relations.map(_ => Object.assign({}, _))
+
+    if("create and modify with data.relations") {
+      // add other
+      // create with data.metadatas
+      data.relations = relations
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      t.deepEqual(relations, copy) // not change metadatas inside the api
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      for (let index in updated) { // repleace all withs data
+        Object.assign(refetch_.relations[index], relations[index])
+      }
+      Object.assign(refetch_, _.omit(data, ['relations'])) // repleace all simple data
+      t.deepEqual(refetch, refetch_)
+      await testRelationCount([2,2,2,2,2,2,2,2,2,2])
+      await testRelationConsistent(refetch)
+
+      // modify both simple and withs (flags and metadatas)
+      updated = result.withs.relations // have id in each metadata
+      data.comment = `${each} ${t.title} modified`
+      data.flags.in_trush = false
+      data.flags.ddebug = true
+      newrelations = [ // old [0] and [1] have two value
+        {
+          id: updated[0].id, // have two value, must use id to search
+          comment: 'test comment updated 0',
+          flags: {
+            add_new_flag: true
+          },
+        },
+        {
+          id: updated[1].id, // have two value, must use id to search
+          comment: 'test comment updated 1',
+          to_id: D[9].id,
+          flags: {
+            add_new_flag: true
+          },
+        },
+        {
+          __query__: {
+            relation_id: updated[2].relation_id,
+          },
+          comment: 'new comment 2',
+          flags: {debug: 'change to false', add_new_flag: true}
+        },
+        {
+          relation: {
+            name: R['simular'].name
+          },
+          __query__: {
+            relation: {
+              name: R['different'].name
+            },
+          },
+          to_id: D[10].id,
+          comment: 'update comment 3',
+          flags: {debug: 'change to false'}
+        },
+        {
+          relation_id: R['larger'].id,
+          __query__: {
+            relation: {
+              name: R['classmate'].name,
+            }
+          },
+          comment: 'new new comment 4',
+          flags: {debug: 'change to false', add_new_flag: true}
+        },
+        {
+          __query__: {
+            relation: {
+              name: R['same_author'].name,
+            },
+          },
+          from_id: D[9].id,
+          comment: 'new comment 5',
+          flags: {debug: 'change to false', add_new_flag: true}
+        },
+        {
+          __query__:{
+            relation: {
+              id: R['same'].id,
+            }
+          },
+          from_id: D[10].id,
+          comment: 'comment update 6',
+          flags: { debug: 'true to false', add_new_flag: true}
+        }
+      ]
+      data.relations = newrelations // only modify these metadatas
+      result = await api({
+        operation: '*',
+        data,
+        model: each,
+        query: {id}
+      })
+      refetch = (await Model.findOne({id}))._doc
+      await testRelationConsistent(refetch)
+      refetch_ = Object.assign({}, refetch)
+      Object.assign(refetch_, _.omit(data, ['relations'])) // replace simple
+      updated = newrelations.map(__ => _.omit(__, ['__query__']) )
+      for (let i=0; i<=6; i++) {
+        Object.assign(refetch_.relations[i], updated[i])
+      }
+      t.deepEqual(refetch, refetch_)
+      await testRelationCount([4,2,4,0,0,2,2,2,2,2])
+      // delete it
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
+      await testRelationCount([0,0,0,0,0,0,0,0,0,0])
+    }
+    if("add, modify, delete and reorder relations with field"){
+      // create with no metadatas
+      delete data.relations
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, data)
+      t.deepEqual(refetch, refetch_)
+      await testRelationCount([0,0,0,0,0,0,0,0,0,0])
+
+      // add metadatas with field
+      result = await api({
+        operation: '+',
+        data: { relations: copy },
+        model: each,
+        query: {id},
+        field: 'relations',
+      })
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      for (let index in updated) { // repleace all withs data
+        Object.assign(refetch_.relations[index], relations[index])
+      }
+      Object.assign(refetch_, _.omit(data, ['relations'])) // repleace all simple data
+      t.deepEqual(refetch, refetch_)
+      await testRelationCount([2,2,2,2,2,2,2,2,2,2])
+      await testRelationConsistent(refetch)
+
+      // modify with fields
+      updated = result.withs.relations
+      newrelations = [ // old [0] and [1] have two value
+        {
+          id: updated[0].id, // have two value, must use id to search
+          comment: 'test comment updated 0',
+          flags: {
+            add_new_flag: true
+          },
+        },
+        {
+          id: updated[1].id, // have two value, must use id to search
+          comment: 'test comment updated 1',
+          to_id: D[9].id,
+          flags: {
+            add_new_flag: true
+          },
+        },
+        {
+          __query__: {
+            relation_id: updated[2].relation_id,
+          },
+          comment: 'new comment 2',
+          flags: {debug: 'change to false', add_new_flag: true}
+        },
+        {
+          relation: {
+            name: R['simular'].name
+          },
+          __query__: {
+            relation: {
+              name: R['different'].name
+            },
+          },
+          to_id: D[10].id,
+          comment: 'update comment 3',
+          flags: {debug: 'change to false'}
+        },
+        {
+          relation_id: R['larger'].id,
+          __query__: {
+            relation: {
+              name: R['classmate'].name,
+            }
+          },
+          comment: 'new new comment 4',
+          flags: {debug: 'change to false', add_new_flag: true}
+        },
+        {
+          __query__: {
+            relation: {
+              name: R['same_author'].name,
+            },
+          },
+          from_id: D[9].id,
+          comment: 'new comment 5',
+          flags: {debug: 'change to false', add_new_flag: true}
+        },
+        {
+          __query__:{
+            relation: {
+              id: R['same'].id,
+            }
+          },
+          from_id: D[10].id,
+          comment: 'comment update 6',
+          flags: { debug: 'true to false', add_new_flag: true}
+        }
+      ]
+      result = await api({
+        operation: '*',
+        data: {relations: newrelations},
+        model: each,
+        query: {id},
+        field: 'relations'
+      })
+      refetch = (await Model.findOne({id}))._doc
+      await testRelationConsistent(refetch)
+      refetch_ = Object.assign({}, refetch)
+      Object.assign(refetch_, _.omit(data, ['relations'])) // replace simple
+      updated = newrelations.map(__ => _.omit(__, ['__query__']) )
+      for (let i=0; i<=6; i++) {
+        Object.assign(refetch_.relations[i], updated[i])
+      }
+      t.deepEqual(refetch, refetch_)
+      await testRelationCount([4,2,4,0,0,2,2,2,2,2])
+
+      // delete relations only
+      updated = result.withs.relations
+      toDelete = [
+        { id: updated[0].id },
+        {
+          __query__: {
+            relation: {
+              id: R['CN2EN'].id
+            }
+          }
+        },
+        {
+          __query__: {
+            relation: {
+              name: R['CN2JP'].name
+            }
+          }
+        },
+      ]
+      result = await api({
+        operation: '-',
+        data: {relations: toDelete},
+        model: each,
+        query: {id},
+        field: 'relations'
+      })
+      refetch = (await Model.findOne({id}))
+      await testRelationConsistent(refetch)
+      refetch = refetch._doc.relations
+      updated = result.withs.relations
+      let ids = updated.map(_=>_.id)
+      refetch_ = refetch.filter(_ => ids.includes(_.id))
+      t.is(refetch_.length, 0)
+      let other_ids = refetch.map(_ => _.other_id)
+      for (let eachid of other_ids) {
+        refetch = (await Model.findOne({id: eachid}))._doc.relations
+        refetch_ = refetch.filter(_ => ids.includes(_.id))
+        t.is(refetch_.length, 0)
+      }
+      await testRelationCount([2,2,4,0,0,2,2,2,0,0])
+
+      // test reorder
+      refetch = (await Model.findOne({id}))._doc.relations
+      ids = refetch.map(_ => ({id: _.id}))
+      let newIDs = _.shuffle(ids)
+      result = await api({
+        operation: 'o',
+        data: {relations: newIDs},
+        model: each,
+        query: {id},
+        field: 'relations'
+      })
+      refetch = (await Model.findOne({id}))
+      await testRelationConsistent(refetch)
+      refetch = refetch._doc.relations
+      let refetchIDs = Array.from(refetch).map(_ => ({id: _.id}))
+      t.deepEqual(newIDs, refetchIDs)
+      await testRelationCount([2,2,4,0,0,2,2,2,0,0])
+    }
+    if("add, modify and delete metadatas.flags with field"){
+      let newData = [
+        {id: refetch[0].id, flags: {add_by_field_flag: true}},
+        {id: refetch[1].id, flags: {add_by_field_flag: true}},
+      ]
+      result = await api({
+        operation: '+',
+        data: {[testWiths]: newData},
+        model: each,
+        query: {id},
+        field: `${testWiths}.flags`
+      })
+      refetch = (await Model.findOne({id}))._doc[testWiths]
+      t.is(newData[0].flags.add_by_field_flag, refetch[0].flags.add_by_field_flag)
+      t.is(newData[1].flags.add_by_field_flag, refetch[1].flags.add_by_field_flag)
+
+      // modify flags in metadata
+      let toModify = refetch.map(__ => _.pick(__, ["id", "flags"])) // old metadatas
+      toModify[0].flags.debug = 'hahaha'
+      toModify[1].flags.debug = 'lalala'
+      toModify[1].flags.ddebug = 'huhuhu'
+      result = await api({
+        operation: '*',
+        data: {[testWiths]: toModify},
+        model: each,
+        query: {id},
+        field: `${testWiths}.flags`
+      })
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc[testWiths]
+      t.is( refetch[0].flags.debug, toModify[0].flags.debug )
+      t.is( refetch[1].flags.debug, toModify[1].flags.debug )
+      t.is( refetch[1].flags.ddebug, toModify[1].flags.ddebug )
+      // delete flags in metadata
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc[testWiths]
+      let toDeleteRaw = refetch.map(__ => _.pick(__, ["id", "flags"]))
+      toDelete = toDeleteRaw.slice(0,4) // only the later two have flags
+      let toDeleteIDs = toDelete.map(_ => _.id)
+      result = await api({
+        operation: '-',
+        data: {[testWiths]: toDelete},
+        model: each,
+        query: {id},
+        field: `${testWiths}.flags`
+      })
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc[testWiths]
+      for (let index=0;index<refetch.lenth;index++) {
+        let subentry = refetch[index]
+        console.log(index, 'subentry:', subentry, 'toDelete:', toDeleteRaw[index])
+        if (toDeleteIDs.includes(subentry.id)) {
+          t.is(subentry.flags.debug, undefined)
+        } else {
+          t.is(subentry.flags.debug, toDeleteRaw[index].flags.debug)
+        }
+      }
+      // delete the entry, clean up
+      let oldresult = result
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
+      await testRelationCount([0,0,0,0,0,0,0,0,0,0])
+    }
   }
   t.pass()
 })

@@ -35,7 +35,9 @@ const Relation = {
     name: { type: String, index: true, required: true },
     reverse_name: { type: String, index: true },
     type: { type: String, index: true },
+    onlyFor: [{ type: String }],
     symmetric: { type: Boolean, index: true },
+    hook: { type: String },
   }
 }
 const Tag = {
