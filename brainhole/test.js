@@ -1094,6 +1094,259 @@ test('relations+flags', async t => {
   t.pass()
 })
 
+test.only('family', async t => {
+  // init relations
+  let testWiths = "fathers"
+  // begin test
+  let todos = WithsDict.WithFather
+  for (let each of todos) {
+    async function testFamilyConsistent(result) {
+      for (let type of ['fathers', 'children']) {
+        for (let item of result[type]) {
+          let other_entry = (await Models[each].findOne({id: item.id}))._doc
+          let other_type = type === 'fathers' ? 'children' : 'fathers'
+          let find = other_entry[other_type].find(_ => _.id === result.id)
+          t.true(!!find, `result:${JSON.stringify(result)}\nother_entry:${JSON.stringify(other_entry,null,2)}\nfind:${JSON.stringify(find)}`)
+        }
+      }
+    }
+    async function testFamilyDeleteConsistent({id, withs}) {
+      for (let type of ['fathers', 'children']) {
+        if (!withs[type]) continue
+        for (let item of withs[type]) {
+          let other_entry = (await Models[each].findOne({id: item.id}))._doc
+          let other_type = type === 'fathers' ? 'children' : 'fathers'
+          let find = other_entry[other_type].find(_ => _.id === result.id)
+          t.true(!find, `withs:${JSON.stringify(withs)}\nother_entry:${JSON.stringify(other_entry,null,2)}\nfind:${JSON.stringify(find)}`)
+        }
+      }
+    }
+    let Model = Models[each]
+    let pks = getRequire(Model)
+    let data, refetch, refetch_, result, id, updated, copy, toDelete, rawdata
+    let fathers, children, newfather, newchildren
+    let D = []
+    for (let i=0; i<=5; i++) {
+      data = {
+        comment: `${i} ${each} ${t.title} test`,
+        flags: {
+          init_flags: true
+        }
+      }
+      if (pks.length) {
+        for (let pk of pks) {
+          data[pk] = `${i} ${each} ${t.title} test`
+        }
+      }
+      rawdata = Object.assign({}, data)
+      D.push(rawdata)
+    }
+    for (let i=1; i<=5; i++) {
+      result = await api({
+        operation: '+',
+        data: D[i],
+        model: each
+      })
+      id = result.modelID
+      D[i].id = id
+    }
+    data = D[0]
+    rawdata = Object.assign({}, data)
+    async function countFamily(array) {
+      let result = []
+      for (let data of D) {
+        let entry = await Models[each].findOne({id:data.id})
+        if (entry) {
+          result.push([entry.fathers.length, entry.children.length])
+        } else {
+          result.push([-1,-1])
+        }
+      }
+      t.deepEqual(array, result)
+    }
+
+    //console.log(JSON.stringify(rawdatas, null, 2))
+    fathers = [
+      {id: D[1].id},
+      {id: D[2].id},
+      {id: D[5].id},
+    ]
+    children = [
+      {id: D[3].id},
+      {id: D[4].id},
+    ]
+
+    if("create and modify with data.family") {
+      // add other
+      // create with data.metadatas
+      data.fathers = fathers
+      data.children = children
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      id = result.modelID
+      D[0].id = id
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      for (let index in fathers) { // repleace all withs data
+        Object.assign(refetch_.fathers[index], fathers[index])
+      }
+      for (let index in children) { // repleace all withs data
+        Object.assign(refetch_.children[index], children[index])
+      }
+      Object.assign(refetch_, _.omit(data, ['fathers', 'children'])) // repleace all simple data
+      t.deepEqual(refetch, refetch_)
+      await testFamilyConsistent(refetch)
+      await countFamily([[3,2],[0,1],[0,1],[1,0],[1,0],[0,1]])
+      // delete it
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
+      await testFamilyDeleteConsistent({id, withs:result.withs})
+      await countFamily([[-1,-1],[0,0],[0,0],[0,0],[0,0],[0,0]])
+    }
+    if("add, modify, delete and reorder family with field"){
+      // create with no metadatas
+      delete data.fathers
+      delete data.children
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      id = result.modelID
+      D[0].id = id
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, data)
+      t.deepEqual(refetch, refetch_)
+
+      // add family with field
+      result = await api({
+        operation: '+',
+        data: { fathers },
+        model: each,
+        query: {id},
+        field: 'fathers',
+      })
+      result = await api({
+        operation: '+',
+        data: { children },
+        model: each,
+        query: {id},
+        field: 'children',
+      })
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      for (let index in fathers) { // repleace all withs data
+        Object.assign(refetch_.fathers[index], fathers[index])
+      }
+      for (let index in children) { // repleace all withs data
+        Object.assign(refetch_.children[index], children[index])
+      }
+      Object.assign(refetch_, _.omit(data, ['fathers', 'children'])) // repleace all simple data
+      t.deepEqual(refetch, refetch_)
+      await testFamilyConsistent(refetch)
+      await countFamily([[3,2],[0,1],[0,1],[1,0],[1,0],[0,1]])
+
+      // delete relations only
+      toDelete = [
+        {id}
+      ]
+      result = await api({
+        operation: '-',
+        data: {fathers: toDelete},
+        model: each,
+        query: {id: D[4].id},
+        field: 'fathers'
+      })
+      await testFamilyDeleteConsistent({id:D[4].id, withs:result.withs})
+      await countFamily([[3,1],[0,1],[0,1],[1,0],[0,0],[0,1]])
+
+      toDelete = [
+        {id}
+      ]
+      result = await api({
+        operation: '-',
+        data: {children: toDelete},
+        model: each,
+        query: {id: D[5].id},
+        field: 'children'
+      })
+      await testFamilyDeleteConsistent({id:D[5].id, withs:result.withs})
+      await countFamily([[2,1],[0,1],[0,1],[1,0],[0,0],[0,0]])
+
+      toDelete = [
+        {id:D[2].id}
+      ]
+      result = await api({
+        operation: '-',
+        data: {fathers: toDelete},
+        model: each,
+        query: {id},
+        field: 'fathers'
+      })
+      await testFamilyDeleteConsistent({id:id, withs:result.withs})
+      await countFamily([[1,1],[0,1],[0,0],[1,0],[0,0],[0,0]])
+
+      // test family loop
+      let toAdd = [
+        {id:D[3].id}
+      ]
+      let fn = async () => {
+        result = await api({
+          operation: '+',
+          data: {fathers: toAdd},
+          model: each,
+          query: {id: D[1].id},
+          field: 'fathers'
+        })
+      }
+      let error = await t.throwsAsync(fn, Error)
+      t.true(error.message.startsWith('detect family loop'))
+      await testFamilyDeleteConsistent({id:D[1].id, withs:result.withs})
+      await countFamily([[1,1],[0,1],[0,0],[1,0],[0,0],[0,0]])
+
+      // test reorder
+      toAdd = [
+        {id:D[2].id}
+      ]
+      result = await api({
+        operation: '+',
+        data: {fathers: toAdd},
+        model: each,
+        query: {id},
+        field: 'fathers'
+      })
+      await testFamilyDeleteConsistent({id, withs:result.withs})
+      await countFamily([[2,1],[0,1],[0,1],[1,0],[0,0],[0,0]])
+
+      let newfathers = [{id:D[2].id},{id:D[1].id}]
+      result = await api({
+        operation: 'o',
+        data: {fathers: newfathers},
+        model: each,
+        query: {id},
+        field: 'fathers'
+      })
+      refetch = (await Model.findOne({id}))._doc.fathers
+      refetch = Array.from(refetch)
+      let fetchids = refetch.map(_ => ({id:_.id}))
+      t.deepEqual(fetchids, newfathers)
+      await testFamilyDeleteConsistent({id, withs:result.withs})
+      await countFamily([[2,1],[0,1],[0,1],[1,0],[0,0],[0,0]])
+    }
+  }
+  t.pass()
+})
+
+
 test.skip('test', async t => {
   let Article = Models.Article
   let n = new Article({

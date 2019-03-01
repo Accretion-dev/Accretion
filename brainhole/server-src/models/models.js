@@ -434,7 +434,7 @@ async function api ({ operation, data, query, model, meta, field }) {
     }
   } else if (operation === '-') {
     let entry = await Model.find(query)
-    if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
+    if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${JSON.stringify(query,null,2)} not unique: ${entry}`)
     entry = entry[0]
 
     if (!field) {
@@ -523,24 +523,24 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
 async function DFSSearch({model, id, entry, path, type}) {
   if (!entry) {
     let r = await Models[model].find({id})
-    if (r.length !== 1) throw Error(`not single result when query ${model} with ${each}`)
+    if (r.length !== 1) throw Error(`not single result when query ${model} with ${id}\nmodel:${model} id:${id} entry:${entry}, path:${path}, type:${type}`)
     entry = r[0]
   }
-  if (!entry[type]) return null
+  if (!entry[type] || entry[type].lenth === 0) return null // successfully terminate here
   let items = entry[type].map(_ => _.id)
-  for (let item of items) {
-    let next = [...path, item]
-    if (path.includes(item)) return next
-    let result = DFSSearch({model, id: item.id, path:next, type})
+  for (let id of items) {
+    let next = [...path, id]
+    if (path.includes(id)) return next
+    let result = await DFSSearch({model, id, path:next, type})
     if (result) return result
   }
 }
 async function testFamilyLoop({model, entry}) {
   let cycle
-  cycle = await DFSSearch({model, id, entry, path: [entry.id], type: 'fathers'})
-  if (cycle) return "=>".join(cycle)
-  cycle = await DFSSearch({model, id, entry, path: [entry.id], type: 'children'})
-  if (cycle) return "=>".join(cycle)
+  cycle = await DFSSearch({model, entry, path: [entry.id], type: 'fathers'})
+  if (cycle) return cycle.join("=>")
+  cycle = await DFSSearch({model, entry, path: [entry.id], type: 'children'})
+  if (cycle) return cycle.join("<=")
   return false
 }
 
@@ -556,6 +556,9 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
   // direct query models
   let fullquerys = []
   if (operation !== 'o') {
+    if (operation === '-' && !data) {
+      data = entry[type]
+    }
     for (let each of data) {
       let queryData
       if (each.id) {
@@ -580,8 +583,8 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
       result.push(fullquery)
       reverseRelations.push({anotherEntry, toPush: {id: entry.id}})
     }
-    let loop = testFamilyLoop({model, entry})
-    if (loop) throw Error(`detect family loop for model ${model}, ${loop}`)
+    let loop = await testFamilyLoop({model, entry})
+    if (loop) throw Error(`detect family loop for model ${model}, ${JSON.stringify(entry,null,2)}\nloop:${loop}`)
     // after test loop, add reverse family relation
     for (let eachJob of reverseRelations) {
       let {anotherEntry, toPush} = eachJob
@@ -596,8 +599,9 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
     for (let fullquery of fullquerys) {
       let anotherEntry = fullquery.anotherEntry
       delete fullquery.anotherEntry
+      if (!entry[type].find(_ => _.id === fullquery.id)) throw Error(`id: ${entry.id} ${type}:${fullquery.id} not found, can not delete!`)
       entry[type] = entry[type].filter(_ => _.id != fullquery.id) // need proper API here
-      anotherEntry[revType] = anotherEntry[revType].filter(_ => _.id != entry.id)
+      anotherEntry[revType] = anotherEntry[revType].filter(_ => _.id !== entry.id)
       await anotherEntry.save()
       result.push(fullquery)
     }
@@ -606,7 +610,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
     let oldIDs = entry[type].map(_ => _.id).sort()
     let newIDs = data.map(_ => _.id).sort()
     oldIDs.forEach((value, index) => {
-      if (newIDs[index] !== values) throw Error(`${model} family reorder error: not the same IDs, ${oldIDs} v.s. ${newIDs}`)
+      if (newIDs[index] !== value) throw Error(`${model} family reorder error: not the same IDs, ${oldIDs} v.s. ${newIDs}`)
     })
     let fullResult = entry[type].map(_ => _)
     newIDs = data.map(_ => _.id)
@@ -615,13 +619,13 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
       entry[type][index] = thisresult
     })
     entry.markModified(type)
-    return newIDs
+    return newIDs.map(_ => ({id: _}))
   }
 }
 async function fathersAPI ({operation, prefield, field, entry, data}) {
   return await familyAPI({operation, prefield, field, entry, data, type:'fathers'})
 }
-async function childrenAPI ({operation, data, entry, field}) {
+async function childrenAPI ({operation, prefield, field, entry, data}) {
   return await familyAPI({operation, prefield, field, entry, data, type:'children'})
 }
 
