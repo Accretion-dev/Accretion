@@ -254,7 +254,7 @@ async function querySub({entry, data, field}) {
   if ('id' in data) {
     result = entry[field].find(_ => _.id === data.id )
     if (!result)
-      throw Error(`id ${data.id} not exists in ${field}`)
+      throw Error(`id ${data.id} not exists in ${field}\nentry:${JSON.stringify(entry,null,2)}\ndata:${JSON.stringify(entry,null,2)}\nfield:${field}`)
     return result
   } else if ('__query__' in data) {
     fullquery = data
@@ -739,6 +739,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
     } else if (operation === '*') {
       let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
       for (let eachdata of data) {
+        eachdata = Object.assign({}, eachdata)
         let eachdataraw = Object.assign({}, eachdata)
         // eachdata delete __query__
         let this_sub_entry = await querySub({entry, data: eachdata, field: name})
@@ -976,12 +977,12 @@ async function relationsAPI ({operation, prefield, field, data, entry}) {
   })
 }
 
-async function tagsAPI ({operation, data, entry, field}) {
-  const name = "tagsAPI"
+async function cataloguesAPI ({operation, prefield, field, data, entry}) {
+  const name = "catalogues"
   return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
-async function cataloguesAPI ({operation, prefield, field, data, entry}) {
-  const name = "cataloguesAPI"
+async function tagsAPI ({operation, data, entry, field}) {
+  const name = "tagsAPI"
   return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
 let APIs = {
