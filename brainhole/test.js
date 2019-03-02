@@ -6,24 +6,56 @@ let config = require('./nuxt.config.js')
 let databaseConfig = yaml.readSync('../configs/mongod.yml')
 import database_init from './server/models'
 import __ from './server/models/models'
-const {Models, api, WithsDict, All} = __
+const {Models, api, WithsDict, All, getRequire} = __
+import mongoose from 'mongoose'
 import test from 'ava'
 
 if (globalConfig.database !== 'test') {
   throw Error(`you can only run unittest on test database!`)
 }
 
-function getRequire (Model) {
-  let tree = Model.schema.tree
-  let fields = Object.keys(tree)
-  let good = fields.filter(_ => tree[_].required)
-  return good
-}
 
 test.before('init database', async t => {
   globalConfig.demoData = false
   globalConfig.unittest = true
   await database_init({config: globalConfig, databaseConfig})
+  console.log('finish database init')
+  t.pass()
+})
+test('after init database', async t => {
+  t.pass()
+})
+
+test('transaction-base', async t => {
+  // test simple add for Article
+  console.log('transaction-base test')
+  let session, start, end
+  session = await mongoose.startSession()
+  session.startTransaction()
+  let newA = new Models.Article({title: 'a0'})
+  newA.$session(session)
+  t.true((await Models.Article.find({title: 'a0'})).length === 0)
+  t.true((await Models.Article.find({title: 'a0'}).session(session)).length === 0)
+  await newA.save()
+  t.true((await Models.Article.find({title: 'a0'})).length === 0)
+  t.true((await Models.Article.find({title: 'a0'}).session(session)).length === 1)
+  await session.commitTransaction()
+  t.true((await Models.Article.find({title: 'a0'})).length === 1)
+
+  session.startTransaction()
+  await Models.Article.deleteOne({title: 'a0'}).session(session)
+  t.true((await Models.Article.find({title: 'a0'})).length === 1)
+  t.true((await Models.Article.find({title: 'a0'}).session(session)).length === 0)
+  await session.abortTransaction()
+  t.true((await Models.Article.find({title: 'a0'})).length === 1)
+
+  session.startTransaction()
+  await Models.Article.deleteOne({title: 'a0'}).session(session)
+  t.true((await Models.Article.find({title: 'a0'})).length === 1)
+  t.true((await Models.Article.find({title: 'a0'}).session(session)).length === 0)
+  await session.commitTransaction()
+  t.true((await Models.Article.find({title: 'a0'})).length === 0)
+
   t.pass()
 })
 

@@ -48,7 +48,6 @@ let others = [
   'IDs',
   'Editing',
   'Workspace',
-  'Through',
 ]
 
 let WithTag = [...top]
@@ -995,6 +994,13 @@ let APIs = {
   childrenAPI,
 }
 
+// manage functions
+function getRequire (Model) {
+  let tree = Model.schema.tree
+  let fields = Object.keys(tree)
+  let good = fields.filter(_ => tree[_].required)
+  return good
+}
 async function bulkAdd({model, data}) {
   let result = []
   let workingData = []
@@ -1233,4 +1239,4 @@ if (d.main) {
   console.log('model info:', {Withs, subSchema, structTree, Schemas, foreignSchemas, Models, outputNames, WithsDict})
 }
 
-export default {Models, api, WithsDict, All, Withs}
+export default {Models, api, WithsDict, All, Withs, getRequire}

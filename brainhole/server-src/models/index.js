@@ -2,24 +2,36 @@ import mongoose from 'mongoose'
 import mongodb from 'mongodb'
 import fillDemo from './fillDemo'
 import __ from './models'
-const {Models, api, Withs} = __
+const {Models, api, Withs, All, getRequire} = __
 const consola = require('consola')
 const User = Models.User
 
 async function initIDs ({config}) {
+  // set the init id for all models
   let names = Object.keys(Models)
   let offset = 1 // if unittest, models should have different offset
+  // for 'Article'
   for (let name of names) {
     let good = await Models.IDs.findOne({name})
     if (!good) {
       await Models.IDs.insertMany([{name, count: offset}])
+      let data = { id: 0 }
+      let pks = getRequire(Models[name])
+      if (pks.length) {
+        for (let pk of pks) {
+          data[pk] = `create and then delete`
+        }
+      }
+      await Models[name].create([data])
+      await Models[name].deleteOne(data)
       if (config.unittest) offset += 1000
     }
   }
+  // for 'Article-tags'
   let models = Object.keys(Withs)
   for (let name of models) {
     for (let withname of Withs[name]) {
-      if (['flags'].includes(withname)) continue
+      if (['flags', 'fathers', 'children'].includes(withname)) continue
       let good = await Models.IDs.findOne({name: `${name}-${withname}`})
       if (!good) {
         await Models.IDs.insertMany([{name: `${name}-${withname}`, count: offset}])

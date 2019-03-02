@@ -157,7 +157,6 @@ const History = {
     simple:  { type: Schema.Types.Mixed },
     withs:  { type: Schema.Types.Mixed },
     meta: { type: Schema.Types.Mixed },
-    through: { type: Schema.Types.Mixed },
     other_result: { type: Schema.Types.Mixed },
   }
 }
@@ -206,22 +205,10 @@ const Workspace = {
   }
 }
 
-// delete later
-const Through = {
-  schema: {
-    path: { type: String, index: true },
-    path_id: { type: Number, index: true },
-    model: { type: String, index: true },
-    model_id: { type: Number, index: true },
-  }
-}
-
-
 export default {
   IDs, User,
   Metadata, Catalogue, Tag, Relation,
   Article, Website, File, Book, Snippet, Info,
   History, Config, UserConfig,
   Editing, Workspace,
-  Through,
 }

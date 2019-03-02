@@ -4,3 +4,5 @@ storage:
 net:
    bindIp: 127.0.0.1
    port: 23666
+replication:
+  replSetName: 'Accretion-cluster'
