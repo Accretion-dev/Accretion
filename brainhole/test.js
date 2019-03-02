@@ -852,6 +852,7 @@ test('relations+flags', async t => {
         model: each
       })
       id = result.modelID
+      data.id = id
       refetch = (await Model.findOne({id}))._doc
       refetch_ = Object.assign({}, refetch, data)
       t.deepEqual(refetch, refetch_)
@@ -1090,6 +1091,27 @@ test('relations+flags', async t => {
       t.true(refetch === null)
       await testRelationCount([0,0,0,0,0,0,0,0,0,0])
     }
+    // clean up other data
+    for (let i=1; i<=10; i++) {
+      let result = await api({
+        operation: '-',
+        query: {id: D[i].id},
+        model: each
+      })
+      let refetch = await Models[each].findOne({id})
+      t.true(refetch === null)
+    }
+  }
+  // delete test datas
+  for (let each of Relations) {
+    let id = each.id
+    let result = await api({
+      operation: '-',
+      query: {id},
+      model: 'Relation'
+    })
+    let refetch = await Models.Relation.findOne({id})
+    t.true(refetch === null)
   }
   t.pass()
 })
@@ -1168,7 +1190,7 @@ test('family', async t => {
     fathers = [
       {id: D[1].id},
       {id: D[2].id},
-      {id: D[5].id},
+      {comment: D[5].comment},
     ]
     children = [
       {id: D[3].id},
@@ -1340,6 +1362,16 @@ test('family', async t => {
       t.deepEqual(fetchids, newfathers)
       await testFamilyDeleteConsistent({id, withs:result.withs})
       await countFamily([[2,1],[0,1],[0,1],[1,0],[0,0],[0,0]])
+    }
+    // clean up
+    for (let i=0; i<=5; i++) {
+      let result = await api({
+        operation: '-',
+        query: {id: D[i].id},
+        model: each
+      })
+      let refetch = await Models[each].findOne({id})
+      t.true(refetch === null)
     }
   }
   t.pass()
@@ -1733,8 +1765,419 @@ test('catalogues+flags', async t => {
       t.true(refetch === null)
     }
   }
+  // delete test datas
+  for (let each of Catalogues) {
+    let id = each.id
+    let result = await api({
+      operation: '-',
+      query: {id},
+      model: 'Catalogue'
+    })
+    let refetch = await Models.Catalogue.findOne({id})
+    t.true(refetch === null)
+  }
   t.pass()
 })
+
+test.skip('tags+flags', async t => {
+  // init relations
+  let testWiths = "tags"
+  let Tags = [
+    {name: t.title + '-0'},
+  ]
+  let T = Tags
+  for (let each of Tags) {
+    let result = await api({
+      operation: '+',
+      data: each,
+      model: "Tag"
+    })
+    let id = result.modelID
+    each.id = id
+  }
+  // begin test
+  let todos = WithsDict.WithCatalogue
+  for (let each of todos) {
+    async function testCatalogueCount(array) {
+      let counts = []
+      for (let catalogue of Catalogues) {
+        let eachCatalogue = (await Models.Catalogue.findOne({id: catalogue.id}))._doc
+        counts.push(eachCatalogue.r[each].length)
+      }
+      // console.log(array, counts)
+      t.deepEqual(array, counts, JSON.stringify({array, counts}))
+    }
+    let Model = Models[each]
+    let pks = getRequire(Model)
+    let data, refetch, refetch_, result, id, updated, catalogues, copy, newcatalogues, toDelete, rawdata
+    data = {
+      comment: `${each} ${t.title} test`,
+      flags: {
+        init_flags: true
+      }
+    }
+    if (pks.length) {
+      for (let pk of pks) {
+        data[pk] = `${each} ${t.title} test`
+      }
+    }
+    rawdata = Object.assign({}, data)
+
+    //console.log(JSON.stringify(rawdatas, null, 2))
+    catalogues = [
+      {
+        catalogue_id: C[0].id,
+        flags: { debug: true },
+      },
+      {
+        catalogue: {
+          id: C[1].id
+        },
+        flags: { debug: true },
+      },
+      {
+        catalogue: {
+          name: C[2].name
+        },
+        flags: { debug: true },
+      },
+      {
+        catalogue: {
+          name: C[3].name
+        },
+        flags: { debug: true },
+      },
+      {
+        catalogue: {
+          name: C[5].name
+        },
+        flags: { debug: true },
+      },
+    ]
+    copy = catalogues.map(_ => Object.assign({}, _))
+
+    if("create and modify with data.catalogues") {
+      // add other
+      data.catalogues = catalogues
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      t.deepEqual(catalogues, copy) // not change metadatas inside the api
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      for (let index in updated) { // repleace all withs data
+        Object.assign(refetch_[testWiths][index], catalogues[index])
+      }
+      Object.assign(refetch_, _.omit(data, [testWiths])) // repleace all simple data
+      t.deepEqual(refetch, refetch_)
+      await testCatalogueCount([1,1,1,1,0,1])
+
+      // modify both simple and withs (flags and metadatas)
+      updated = result.withs[testWiths] // have id in each metadata
+      newcatalogues = [
+        {
+          id: updated[0].id,
+          comment: 'test comment updated 0',
+          flags: {
+            add_new_flag: true
+          },
+        },
+        {
+          __query__: {
+            catalogue_id: C[1].id,
+          },
+          comment: 'test comment updated 1',
+          flags: {
+            add_new_flag: true
+          },
+        },
+        {
+          __query__: {
+            catalogue: {
+              id: C[2].id,
+            }
+          },
+          comment: 'new comment 2',
+          flags: {debug: 'change to false', add_new_flag: true}
+        },
+        {
+          catalogue: {
+            id: C[4].id
+          },
+          __query__: {
+            catalogue: {
+              name: C[3].name
+            },
+          },
+          comment: 'update comment 3',
+          flags: {debug: 'change to false'}
+        },
+      ]
+      data[testWiths] = newcatalogues
+      result = await api({
+        operation: '*',
+        data,
+        model: each,
+        query: {id}
+      })
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      Object.assign(refetch_, _.omit(data, [testWiths])) // replace simple
+      updated = newcatalogues.map(__ => _.omit(__, ['__query__']) )
+      for (let each of updated) {
+        if ('catalogue' in each){
+          let id = each.catalogue.id
+          delete each.catalogue
+          each.catalogue_id = id
+        }
+      }
+      for (let i=0; i<5; i++) {
+        Object.assign(refetch_.catalogues[i], updated[i])
+      }
+      t.deepEqual(refetch, refetch_)
+      await testCatalogueCount([1,1,1,0,1,1])
+
+      // delete it
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
+      await testCatalogueCount([0,0,0,0,0,0])
+    }
+    if("add, modify, delete and reorder relations with field"){
+      // create with no metadatas
+      delete data.catalogues
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, data)
+      t.deepEqual(refetch, refetch_)
+      await testCatalogueCount([0,0,0,0,0,0])
+
+      // add metadatas with field
+      result = await api({
+        operation: '+',
+        data: { [testWiths]: catalogues },
+        model: each,
+        query: {id},
+        field: testWiths,
+      })
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      for (let index in updated) { // repleace all withs data
+        Object.assign(refetch_[testWiths][index], catalogues[index])
+      }
+      Object.assign(refetch_, _.omit(data, [testWiths])) // repleace all simple data
+      t.deepEqual(refetch, refetch_)
+      await testCatalogueCount([1,1,1,1,0,1])
+
+      // modify with fields
+      updated = result.withs[testWiths]
+      newcatalogues = [
+        {
+          id: updated[0].id,
+          comment: 'test comment updated 0',
+          flags: {
+            add_new_flag: true
+          },
+        },
+        {
+          __query__: {
+            catalogue_id: C[1].id,
+          },
+          comment: 'test comment updated 1',
+          flags: {
+            add_new_flag: true
+          },
+        },
+        {
+          __query__: {
+            catalogue: {
+              id: C[2].id,
+            }
+          },
+          comment: 'new comment 2',
+          flags: {debug: 'change to false', add_new_flag: true}
+        },
+        {
+          catalogue: {
+            id: C[4].id
+          },
+          __query__: {
+            catalogue: {
+              name: C[3].name
+            },
+          },
+          comment: 'update comment 3',
+          flags: {debug: 'change to false'}
+        },
+      ]
+      result = await api({
+        operation: '*',
+        data: {[testWiths]: newcatalogues},
+        model: each,
+        query: {id},
+        field: testWiths
+      })
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      Object.assign(refetch_, _.omit(data, [testWiths])) // replace simple
+      updated = newcatalogues.map(__ => _.omit(__, ['__query__']) )
+      for (let each of updated) {
+        if ('catalogue' in each){
+          let id = each.catalogue.id
+          delete each.catalogue
+          each.catalogue_id = id
+        }
+      }
+      for (let i=0; i<5; i++) {
+        Object.assign(refetch_.catalogues[i], updated[i])
+      }
+      t.deepEqual(refetch, refetch_)
+      await testCatalogueCount([1,1,1,0,1,1])
+      // delete relations only
+      updated = result.withs[testWiths]
+      toDelete = [
+        { id: updated[0].id },
+        {
+          __query__: {
+            catalogue: {
+              id: C[1].id
+            }
+          }
+        },
+        {
+          __query__: {
+            catalogue: {
+              name: C[2].name
+            }
+          }
+        },
+      ]
+      result = await api({
+        operation: '-',
+        data: {[testWiths]: toDelete},
+        model: each,
+        query: {id},
+        field: testWiths
+      })
+      refetch = (await Model.findOne({id}))
+      refetch = refetch._doc[testWiths]
+      updated = result.withs[testWiths]
+      let ids = updated.map(_=>_.id)
+      refetch_ = refetch.filter(_ => ids.includes(_.id))
+      t.is(refetch_.length, 0)
+      await testCatalogueCount([0,0,0,0,1,1])
+      // test reorder
+      refetch = (await Model.findOne({id}))._doc[testWiths]
+      let newIDs = [{id: refetch[1].id},{id: refetch[0].id}]
+      result = await api({
+        operation: 'o',
+        data: {[testWiths]: newIDs},
+        model: each,
+        query: {id},
+        field: testWiths
+      })
+      refetch = (await Model.findOne({id}))
+      refetch = refetch._doc[testWiths]
+      let refetchIDs = Array.from(refetch).map(_ => ({id: _.id}))
+      t.deepEqual(newIDs, refetchIDs)
+      await testCatalogueCount([0,0,0,0,1,1])
+    }
+    if("add, modify and delete catalogues.flags with field"){
+      let newData = [
+        {id: refetch[0].id, flags: {add_by_field_flag: true}},
+        {id: refetch[1].id, flags: {add_by_field_flag: true}},
+      ]
+      result = await api({
+        operation: '+',
+        data: {[testWiths]: newData},
+        model: each,
+        query: {id},
+        field: `${testWiths}.flags`
+      })
+      refetch = (await Model.findOne({id}))._doc[testWiths]
+      t.is(newData[0].flags.add_by_field_flag, refetch[0].flags.add_by_field_flag)
+      t.is(newData[1].flags.add_by_field_flag, refetch[1].flags.add_by_field_flag)
+
+      // modify flags in metadata
+      let toModify = refetch.map(__ => _.pick(__, ["id", "flags"])) // old metadatas
+      toModify[0].flags.debug = 'hahaha'
+      toModify[1].flags.debug = 'lalala'
+      toModify[1].flags.ddebug = 'huhuhu'
+      result = await api({
+        operation: '*',
+        data: {[testWiths]: toModify},
+        model: each,
+        query: {id},
+        field: `${testWiths}.flags`
+      })
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc[testWiths]
+      t.is( refetch[0].flags.debug, toModify[0].flags.debug )
+      t.is( refetch[1].flags.debug, toModify[1].flags.debug )
+      t.is( refetch[1].flags.ddebug, toModify[1].flags.ddebug )
+      // delete flags in metadata
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc[testWiths]
+      let toDeleteRaw = refetch.map(__ => _.pick(__, ["id", "flags"]))
+      toDelete = toDeleteRaw.slice(0,1)
+      let toDeleteIDs = toDelete.map(_ => _.id)
+      result = await api({
+        operation: '-',
+        data: {[testWiths]: toDelete},
+        model: each,
+        query: {id},
+        field: `${testWiths}.flags`
+      })
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc[testWiths]
+      for (let index=0;index<refetch.lenth;index++) {
+        let subentry = refetch[index]
+        console.log(index, 'subentry:', subentry, 'toDelete:', toDeleteRaw[index])
+        if (toDeleteIDs.includes(subentry.id)) {
+          t.is(subentry.flags.debug, undefined)
+        } else {
+          t.is(subentry.flags.debug, toDeleteRaw[index].flags.debug)
+        }
+      }
+      // delete the entry, clean up
+      let oldresult = result
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
+    }
+  }
+  // delete test datas
+  for (let each of Catalogues) {
+    let id = each.id
+    let result = await api({
+      operation: '-',
+      query: {id},
+      model: 'Catalogue'
+    })
+    let refetch = await Models.Catalogue.findOne({id})
+    t.true(refetch === null)
+  }
+  t.pass()
+})
+
+
 
 test.skip('test', async t => {
   let Article = Models.Article

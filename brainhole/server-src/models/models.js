@@ -567,7 +567,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
         queryData = each
       }
       let r = await Models[model].find(queryData)
-      if (r.length !== 1) throw Error(`not single result when query ${model} with ${each}`)
+      if (r.length !== 1) throw Error(`not single result when query ${model} with ${JSON.stringify(each,null,2)}\n${JSON.stringify(r),null,2}`)
       let anotherEntry = r[0]
       fullquerys.push({id: anotherEntry.id, anotherEntry})
     }
@@ -981,8 +981,8 @@ async function cataloguesAPI ({operation, prefield, field, data, entry}) {
   const name = "catalogues"
   return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
-async function tagsAPI ({operation, data, entry, field}) {
-  const name = "tagsAPI"
+async function tagsAPI ({operation, prefield, field, data, entry}) {
+  const name = "tags"
   return await taglikeAPI({name, operation, prefield, field, data, entry})
 }
 let APIs = {
@@ -994,12 +994,34 @@ let APIs = {
   fathersAPI,
   childrenAPI,
 }
-/* onModify and onDelete method
-  for top models:
-    tell the Tag, Catalogue, Relation, Metadata to update reverse cite
-  for Tag, Catalogue, Relation, Metadata:
-    tell models with them to update
-*/
+
+async function bulkAdd({model, data}) {
+  let result = []
+  let workingData = []
+  for (let eachdata of data) {
+    let {simple, withs} = extractWiths({ data: eachdata, model})
+    workingData = {simple, withs}
+    let r = await api({
+      operation: '+',
+      data: simple,
+      model,
+    })
+    let id = r.modelID
+    eachdata.id = id
+    workingData.id = id
+  }
+  for (let eachdata of workingData) {
+    let {withs,id} = eachdata
+    let r = await api({
+      operation: '*',
+      data: withs,
+      model,
+      query:{id},
+    })
+    result.push(r.result)
+  }
+  return result
+}
 
 
 /* compile all schemas
