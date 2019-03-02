@@ -47,12 +47,15 @@ cd brainhole; npm i
 
 # 项目开发进展:
   项目还在开发初期. 后端还没写完,前端一点没动...
-  * 程序最终会是跨平台的, windos, linux 和mac都支持
-  * 目前我的开发环境为linux, 所以所有的开发配置脚本都是基于linux平台的
-  * 对于windows用户,肯定会做最大程度的封装,到时候鼠标双击一下就可以运行
+
+* 程序最终会是跨平台的, windos, linux 和mac都支持
+* 目前我的开发环境为linux, 所以所有的开发配置脚本都是基于linux平台的
+* 对于windows用户,肯定会做最大程度的封装,到时候鼠标双击一下就可以运行
 
 预计开发时长: 半年以上(因为是个人的业余项目)
-项目设计思路: [个人知识管理系统的设计](#https://zhuanlan.zhihu.com/p/57614943)
+
+项目设计思路: https://zhuanlan.zhihu.com/p/57614943
+
 项目Teleram讨论群: https://t.me/accretionDevOffTopic
 
 # 更新注意事项
