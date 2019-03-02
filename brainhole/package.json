@@ -32,7 +32,7 @@
     "install": "^0.12.2",
     "iview": "^3.2.1",
     "lodash": "^4.17.11",
-    "mongoose": "^5.4.2",
+    "mongoose": "^5.4.16",
     "node-yaml": "^3.1.1",
     "nuxt": "^2.0.0",
     "nuxt-sass-resources-loader": "^2.0.5",

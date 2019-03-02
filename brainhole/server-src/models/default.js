@@ -5,6 +5,13 @@ const {Schema} = mongoose
 // but there are possible duplicated entry with same searchKey
 // throw error in this case
 
+// internal use
+const IDs = {
+  schema: {
+    name: { type: String, index: true },
+    count: { type: Number }
+  }
+}
 const User = {
   schema: {
     username: { type: String },
@@ -14,6 +21,8 @@ const User = {
     createTime: { type: Date, default: Date.now }
   }
 }
+
+// four import meta info for all other model
 const Metadata = {
   schema: {
     name: { type: String, index: true, required: true },
@@ -26,10 +35,11 @@ const Relation = {
     name: { type: String, index: true, required: true },
     reverse_name: { type: String, index: true },
     type: { type: String, index: true },
+    onlyFor: [{ type: String }],
     symmetric: { type: Boolean, index: true },
+    hook: { type: String },
   }
 }
-
 const Tag = {
   schema: {
     name: { type: String, index: true, required: true },
@@ -39,6 +49,9 @@ const Tag = {
   }
 }
 const Catalogue = {
+  projects: {
+    simple: {name: 1, type: 1, comment: 1}
+  },
   schema: {
     name: { type: String, index: true, required: true },
     type: { type: String, index: true },
@@ -46,55 +59,35 @@ const Catalogue = {
   }
 }
 
-const Through = {
-  schema: {
-    path: { type: String, index: true },
-    path_id: { type: Number, index: true },
-    model: { type: String, index: true },
-    model_id: { type: Number, index: true },
-  }
-}
-
-const History = {
-  schema: {
-    time: { type: Date, default: Date.now },
-    operation: { type: String, index: true },
-    modelID: { type: Number, index: true},
-    model: { type: String, index: true},
-    field: { type: String, index: true },
-    query: { type: Schema.Types.Mixed },
-    data: { type: Schema.Types.Mixed },
-    result: { type: Schema.Types.Mixed },
-    simple:  { type: Schema.Types.Mixed },
-    withs:  { type: Schema.Types.Mixed },
-    meta: { type: Schema.Types.Mixed },
-    through: { type: Schema.Types.Mixed },
-    other_result: { type: Schema.Types.Mixed },
-  }
-}
-
+// top models
+//   have metadatas, relations, tags, catalogues, flags, fathers, children
 const Article = {
+  projects: {
+    simple: {name: 1, type: 1, comment: 1},
+    nobulk: {content: 0},
+  },
   schema: {
     title: { type: String, index: true, required: true },
     author: { type: String, index: true },
     editor: { type: String, index: true },
     abstract: { type: String, index: true },
     type: { type: String, index: true },
-    bulk: {
-      content: { type: String },
-    }
+    content: { type: String },
   }
 }
 const Website = {
+  projects: {
+    simple: {title: 1, url: 1, comment: 1},
+  },
   schema: {
     title: { type: String, index: true },
     url: { type: String, index: true, required: true },
-    bulk: {
-      content: { type: String },
-    }
   }
 }
 const File = {
+  projects: {
+    simple: {name: 1, path: 1, comment: 1},
+  },
   schema: {
     name: { type: String, index: true, required: true },
     path: { type: String, index: true, required: true },
@@ -105,6 +98,9 @@ const File = {
   }
 }
 const Book = {
+  projects: {
+    simple: {title: 1, author: 1, type: 1, comment: 1},
+  },
   schema: {
     title: { type: String, index: true, required: true },
     author: { type: String, index: true },
@@ -119,23 +115,51 @@ const Book = {
   }
 }
 const Snippet = {
+  projects: {
+    simple: {name: 1, type: 1, comment: 1},
+    nobulk: {content: 0},
+  },
   schema: {
     name: { type: String, index: true, required: true },
     language: { type: String, index: true },
-    bulk: {
-      content: { type: String },
-    }
+    content: { type: String },
   }
 }
 const Info = {
+  projects: {
+    simple: {name: 1, type: 1, comment: 1},
+    nobulk: {content: 0},
+  },
   schema: {
     name: { type: String, index: true, required: true },
-    bulk: {
-      content: { type: String },
-    }
+    type: { type: String, index: true },
+    content: { type: String },
   }
 }
 
+// for light cone
+//   need more details
+//const Event = { }
+//const EventSpends = { }
+//const EventPlans = { }
+
+// other models
+const History = {
+  schema: {
+    time: { type: Date, default: Date.now },
+    operation: { type: String, index: true },
+    modelID: { type: Number, index: true},
+    model: { type: String, index: true},
+    field: { type: String, index: true },
+    query: { type: Schema.Types.Mixed },
+    data: { type: Schema.Types.Mixed },
+    result: { type: Schema.Types.Mixed },
+    simple:  { type: Schema.Types.Mixed },
+    withs:  { type: Schema.Types.Mixed },
+    meta: { type: Schema.Types.Mixed },
+    other_result: { type: Schema.Types.Mixed },
+  }
+}
 const Config = {
   schema: {
     name: { type: String, index: true, required: true },
@@ -149,25 +173,42 @@ const UserConfig = {
   }
 }
 
-const IDs = {
+// for frontend
+const Editing = {
   schema: {
-    name: { type: String, index: true },
-    count: { type: Number }
+    id: { type: Number },
+    model: { type: String },
+    name: { type: String },
+    path: { type: String },
+
+    createdAt: { type: Date },
+    updatedAt: { type: Date },
+    editedAt: { type: Date },
+    editedIn: { type: String },
+
+    configs: {type: Schema.Types.Mixed }
+  }
+}
+const Workspace = {
+  schema: {
+    id: { type: Number },
+    name: { type: String },
+    createdAt: { type: Date },
+    updatedAt: { type: Date },
+    catalogueTree: { type: Schema.Types.Mixed },
+    activeTab: { type: Schema.Types.Mixed },
+    tabs: [{ type: Schema.Types.Mixed }],
+    activeNavTab: { type: Schema.Types.Mixed },
+    navTabs: [{ type: Schema.Types.Mixed }],
+
+    configs: {type: Schema.Types.Mixed },
   }
 }
 
 export default {
-  User,
+  IDs, User,
   Metadata, Catalogue, Tag, Relation,
-  Article,
-  Website,
-  File,
-  Book,
-  Snippet,
-  Info,
-  Config,
-  UserConfig,
-  History,
-  IDs,
-  Through,
+  Article, Website, File, Book, Snippet, Info,
+  History, Config, UserConfig,
+  Editing, Workspace,
 }

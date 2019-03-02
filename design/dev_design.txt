@@ -1,0 +1,457 @@
+# 此文件是Accretion的所有开发特性,其内内容由其他的.md文章中整理而来
+
+* common functions(work in both frontend and backend):
+  * model based:
+    first get models into memory (from database in backend and from web API in frontend)
+    * [d] testFamilyLoop:
+      * (existTags, newTag)
+    * [ ] getTagRelationPair({same input as API})
+    * [ ] getTagDiff({same input as API})
+        * get old auto
+        * get old manual
+        * get new manual
+        * calculate new auto
+          * for each Tag, get its relations
+            * for each relations, call the hook function of that type, if exists
+            * calculate auto tags
+          * remove duplicated items in itself and in manual tags
+        * calculate diff of auto, full
+        * return {
+          oldManual, oldAuto,
+          newManual, newAuto,
+          diffManual, diffAuto,
+          newPairs,
+          }
+* design:
+  * [ ] simple syntax
+* backend:
+  * [ ] design backup system
+  * [ ] design version control system for bulk content
+  * models
+    * general:
+      * User
+      * Metadata
+      * Relation
+      * Tag
+      * Catalogue
+    * topModels:
+      * Article
+      * Website
+      * File
+      * Boot
+      * Snippet
+      * Info
+    * forFrontend:
+      * Editing
+      * Workspaces
+    * others:
+      * History
+    * configs:
+      * Config
+      * UserConfig
+  * functions:
+    * [d] API:
+      input: {
+        operation, data, query, model, field, meta
+      }
+      * [ ] support transaction
+      * actions:
+        + add
+        - delete
+        * modify
+        o reorder
+          only work with field
+      * reverse format: 'modelID-subarrayID'
+
+      * [ ] other Models:
+        * like History, Editing...
+      * [f] topModels:
+        * withs
+      * [ ] TagAPI:
+        * add:
+        * modify:
+        * delete:
+          * for each topModels that have this tag:
+            * delete tag from that topModel
+        * withs
+      * [ ] CatalogueAPI:
+        * add:
+        * modify:
+        * delete:
+          * for each topModels that have this catalogue:
+            * delete catalogue from that topModel
+        * withs
+      * [ ] RelationAPI:
+        * add A=>B, auto add B=>A
+      * [ ] MetadataAPI:
+      * [ ] tagsAPI:
+        * [ ] calculate tag diff
+          * apply diff
+            * make the 'level' meta > 1
+            * no history, return it to parent
+        * [ ] add/delete reverse
+      * [ ] cataloguesAPI:
+        * [ ] add/delete reverse
+      * [f] metadatasAPI:
+        * [f] add/delete reverse
+      * [ ] relationsAPI:
+        * [ ] add/delete reverse
+        * if parent is tag:
+          * if either old relations and new relations have hooks
+            * for all topModels with this tag:
+              * for each model
+                * getTagDiff, apply tag diff change
+                  * make the 'level' meta > 1
+                  * no history, return it to parent
+      * [f] familyAPI:
+        * testLoop
+        * if parent is tag:
+          * if delete children:
+            * for all models that have that children tag
+              * recalculate family tree
+          * if add parent:
+            * for all models that have this tag
+              * recalculate family tree
+      * [f] flagsAPI
+    * [d] API unittest
+    * [ ] getRecycle
+    * [ ] getGroupRelationSet:
+      * give the relation and the entry,
+    * [ ] getReverse:
+      * use mapReduce to get all subdocuments, with extra field "modelID"
+    * [ ] checkConsistence:
+      * check if there are unknown
+        for each that have xxx, test the reverse
+        * tags
+        * relations
+        * metadatas
+        * Catalogues
+        * families:
+  * hooks:
+    * [ ] about 'group' relation:
+      * entry is tag or topModles
+      * [ ] entry +-* relation:
+        * check if relation is 'group' relation
+  * [ ] url routes:
+    * display:
+      * user-agent is browser:
+        * ac-table
+      * user-agent is json:
+        * json
+    * [ ] /api/database/
+      * [ ] GET
+        * print help
+      * [ ] POST
+        * some general functions
+          * getRecycle
+        data: {
+          function,
+          data
+          }
+    * [ ] /api/database/:model/
+      * [ ] GET: Article list
+        query: { project }
+        * projects(design them in the models):
+          * full: all data
+          * simple: only simple info
+          * nobulk: no bulk data
+          * other: only fetch that field
+      * [ ] POST: complicated query
+        data: {
+          pipeline: [],
+          options
+          }
+    * [ ] /api/database/:model/:id/
+      * [ ] GET:
+        query: { project }
+      * [ ] POST:
+        operation => "+"
+      * [ ] DELETE:
+        operation => "-"
+      * [ ] PATCH:
+        operation => "*"
+      * [ ] PUT:
+        operation => "o"
+    * [ ] /api/database/:model/:id/:field/
+      * the same map as above
+    * data: { field, data, query,   # 需要传入的data
+      model, operation, id, field # HTTP header中提取
+      }
+* horizon:
+  * designs:
+    * [ ] share system
+      * [ ] one click markdown blog
+    * [ ] when search for tags, auto filter onlyFor
+  * store:
+    * design: {
+        Models: {
+          allModels: ...,
+          Configs: { # global configs
+            autoUpdateEditing: true,
+            autoSaveTime: 10,
+            font: {
+              fontfamily, fontsize
+              }
+            },
+          UserConfigs: {
+            ...
+            },
+          },
+        Editing: [{
+          model, id, displayName,
+          path,
+          createdAt,
+          updatedAt,
+
+          editedAt,
+          editedIn: `Workspaces-tabs-index`,
+
+          configs: {
+            autoUpdateEditing: true,
+            autoSaveTime: 10,
+            }
+          }],
+        Workspaces: [{
+          id,
+          name, color, createdAt,
+          catalogueTree,
+          activeTab,
+          tabs: [{
+            index,
+            tab: `Editing`
+            }],
+          activeNavTab,
+          navTabs: [{
+            name,
+            roots: [{
+              model, path
+              }]
+            }],
+          configs: {
+            autoUpdateEditing: true,
+            autoSaveTime: 10,
+          }
+          }]
+      }
+  * functions:
+    * [ ] getTagPairs
+  * UI routes:
+    * [ ] /horizon/
+      * list and select workspaces
+      * [ ] all sub routes
+        * [ ] /search/simple/
+        * [ ] /search/advanced/
+        * [ ] /workspace/:workspaceID/model-id
+        * [ ] /view/
+          * [] /view/:id/
+  * UI:
+    * general components:
+      * [ ] ac-table:
+        * [ ] vim key map support
+      * [ ] ac-editor:
+        * [ ] vim key map support
+      * [ ] ac-input:
+        * options:
+          * type: select, input
+            * for type:input
+              * tab to complete the first
+              * entry to input the current
+            * for type:select
+              * tab and entry to complete and finish the first
+          * pinyin: true
+          * autocompleteType: full, cursor word
+        * do dynamical calculation
+    * [ ] search components:
+      ...see pptx for detail
+    * topModles:
+      * [ ] Article
+      * [ ] Website
+      * [ ] File
+      * [ ] Boot
+      * [ ] Snippet
+      * [ ] Info
+    * left panel:
+      * [ ] three mode:
+        * [ ] tree mode
+        * [ ] dir mode
+        * [ ] mac mode
+      * [ ] auto fetch family tree
+        * [ ] family tree only view
+        * [ ] drag to add/move catalogues
+          * transfer {model, id} if is not catalogue
+          * test family tree, reject loop
+            * make bad loop items gray
+    * right panel:
+      * [ ] tags:
+        * [ ] show tag relations pairs
+        * [ ] getTagPair
+          * show them
+        * add button:
+          * [ ] auto complete exists
+        * mouth interaction
+          * [ ] hover to become a little bigger, with extra info
+          * [ ] drag to reorder
+          * [ ] click to select
+            * [ ] hover to have more options
+              * delete: delete this tag
+              * edit: open in-place editor
+              * (if is auto) confirm
+              * (if is auto) delete and add to blacklist
+          * [ ] double click to open in-place editor
+          * [ ] in-place editor:
+            * tag: ac-input:select
+              * if tag is change, call frontend version of getTagDiff
+            * have a save button
+            * data {
+              auto: true,
+              source: ['frontend-']
+              }
+      * [ ] metadatas:
+        * just like tag, but simple
+      * [ ] relations:
+        * just like tag
+        * in-place editor:
+          * from, to
+            * data: {model, id}
+            * onDragOn: transfer {model, id}
+          * fromModel, toModel
+        * (non-)symmetrical, different display
+        * special relation:
+          * crossref: id is 0
+      * reference(special type of relation):
+      * flags
+    * [ ] workspace:
+      * tab:
+        * onDragHover: change to this tab
+        * [ ] drag to reorder:
+          * update to Workspace
+    * [ ] nav path bar:
+      * win10 like
+      * switch between family trees
+    * [ ] status bar:
+    * general:
+      * [ ] Tag:
+        * hooks:
+          * [ ] fetch all ancestor and offsprings, generate family trees
+        * layout:
+          * [ ] left panel:
+            * [ ] family trees
+          * middle panel:
+            * [ ] upper panel:
+              * details
+            * [ ] lower panel:
+              * topModels that have this tag
+                * tab list
+          * [ ] right panel:
+            * [ ] lower panel:
+              * metadatas
+              * relations
+              * crossref
+              * flags
+      * [ ] Metadata
+        * just like tag
+      * [ ] Relation
+        * just like tag
+      * [ ] Catalogue
+        * just like tag
+    * other:
+      * [ ] History
+      * [ ] BlackList
+    * [ ] search:
+      * [ ] simple
+      * [ ] advanced
+    * [ ] recycle:
+      middel panel:
+        * taglist
+          * ac-table
+
+* lightcone:
+  * design:
+    * type of events:
+      * stamp: finish in very sort time, (e.g., all event from History)
+      * interval: a normal event that spend some time (e.g., class, work, study)
+        * best for 流水账 type of record
+      * plan: a event that have a deadline (and possible start line)
+    * event examples:
+      * stamp events:
+        * type is stamp
+        * spends.0.begin exists
+        * other config is useless
+      * normal events:
+        * type is interval
+        * once or repeat:
+          * exclusive with each other
+          * spends is not null
+            * spends.0.begin and spends.0.end exists
+          * repeat is not null
+            * calculate the repeat
+            * [ ] design parameters to define a repeat
+            * have a time range
+        * may have alerts
+      * plans
+        * everyday jobs:
+          * may have plan
+          * have many spends
+          * may have fathers and children
+            * can sum the time up
+  * store: {
+    * design: {
+        Models: {
+          Configs: { # global configs
+            confirmBeforeDeleteTimeEvent: true
+            font: {
+              fontfamily, fontsize
+              }
+            },
+          UserConfigs: {
+            ...
+            },
+          },
+        }
+      }
+  * UI routes:
+    * [ ] /lightcone/
+    * [ ] /lightcone/control
+  * UI:
+    * components:
+      * [ ] detail
+        * buttons:
+          * edit
+          * prev
+          * next
+        * [ ] keyboard map:
+          * next and previous
+        * [ ] left panel:
+          * [ ] selected and full tree
+          * [ ] a filter with simple query syntax
+          * sort by time
+        * [ ] middle panel:
+          * upper panel:
+            * detail
+        * [ ] left panel:
+          * tags
+          * relations
+          * metadatas
+          * flags
+      * [ ] timeline
+        * filters
+        * range:
+          * year
+          * month
+          * week
+          * day
+        * [ ] quick buttons:
+          * [ ] view all details
+        * mouse reaction:
+          * [ ] left click:
+            * if not stacked: select this one
+            * if stacked: pop a list of items
+            * [ ] with ctrl:
+              * push instead of replace
+          * [ ] right click:
+            * if not on selected:
+              * add...
+            * if on selected:
+              * add...
+              * edit
+              * delete

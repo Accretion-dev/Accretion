@@ -63,6 +63,9 @@
     model,
     id,
   }
+* 迭代查询 GET
+  /api/database/:database/article/:id/:field/:field_id1??
+  apidata: {   } // TODO
 
 # 文章获取举例
 * 单id完整文章
@@ -96,22 +99,27 @@
 # 复杂查询举例
 * 前端自动包装:
   * object: $or, $and(默认)
-  * array: $elemMatch
+  * array: $elemMatch($or, $and)
 * operators:
   * logical: $and, $or, $nor
-  * general: $exists
-  * general(function 1) general: $type
+  * general:
+    * (function 1) $type, $exists, $toBool, $toDate, $toDecimal, $toDouble,
+                   $toInt, $toLong, $toString,
   * number:
     *(compare)  $eq, $gt, $lt, $lte, $gte, $ne
     *(contains) $in, $nin
-    *(function 1)  $abs,
-    *(function 2)  $abs,
-
-
+    *(function 1)  $abs, $ceil, $floor, $ln, $log, $log10, $sqrt, $exp, $trunc
+    *(function 2)  $add, $subtract, $multiply, $divide, $mod, $pow
   * string,number,date: $eq, $gt, $lt, $lte, $gte, $ne
-  * string: regExp
+  * date:
+    * (function 1) $dayOfMonth, $dayOfYear, $hour, $isoDayOfWeek, $isoWeek
+                   $isoWeekYear, $millisecond, $minute, $month, $second
+                   $week, $year
+    * (function 2) $add, $subtract
+  * string:
+    * (finction 1) $ltrim, $rtrim, $toLower, $toUpper, $trim
+    * (finction 2) $concat, $split
+    { <field>: {$regex: /pattern/<options>}}
   * array:
-  * object:
-
-* 简单的单目运算, 自动添加$addfield 字段,包括
-  * 数字: $abs, $ceil, $floor, $ln, $log, $log10, $sqrt
+    *(function 1) $size
+    *(function 2) $arrayElemAt
