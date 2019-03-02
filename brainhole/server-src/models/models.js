@@ -867,8 +867,9 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         entries = entry[name].map(_ => _)
       }
       for (let this_sub_entry of entries) {
-        let simple = {}
-        let withs = {}
+        let {simple, withs} = extractWiths({data: this_sub_entry._doc, model: name, sub: true})
+        //simple = {}
+        withs = {}
         withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
 
         simple.id = this_sub_entry.id
