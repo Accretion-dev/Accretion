@@ -6,7 +6,7 @@ let config = require('./nuxt.config.js')
 let databaseConfig = yaml.readSync('../configs/mongod.yml')
 import database_init from './server/models'
 import __ from './server/models/models'
-const {Models, api, WithsDict, All, getRequire} = __
+const {Models, api, WithsDict, All, getRequire, bulkAdd} = __
 import mongoose from 'mongoose'
 import test from 'ava'
 
@@ -148,6 +148,14 @@ test('flags', async t => {
       refetch = (await Model.findOne({id}))._doc
       refetch_ = Object.assign({}, refetch, data)
       t.deepEqual(refetch, refetch_) // test add with flgas and simple
+      // clean up, delete this entry
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
     }
     if("create without flags, then add/modify/delete using the 'flags' field"){
       // create without flags
@@ -707,13 +715,15 @@ test('relations+flags', async t => {
       },
       {
         relation: { id: R['smaller'].id },
-        to_id: D[2].id,
+        //to_id: D[2].id,
+        to: {id: D[2].id},
         flags: { debug: true },
       },
       {
         relation_id: R['simular'].id,
         // to_id: D[0], // add this later
-        from_id: D[3].id,
+        // from_id: D[3].id,
+        from: { comment: D[3].comment },
         flags: { debug: true },
       },
       {
@@ -729,7 +739,8 @@ test('relations+flags', async t => {
       },
       {
         relation_id: R['same_author'].id,
-        to_id: D[5].id,
+        // to_id: D[5].id,
+        to: {id: D[5].id},
         flags: { debug: true },
       },
       {
@@ -739,7 +750,7 @@ test('relations+flags', async t => {
       },
       {
         relation_id: R['same2'].id,
-        to_id: D[7].id,
+        to: {id: D[7].id},
         flags: { debug: true },
       },
       {
@@ -813,7 +824,8 @@ test('relations+flags', async t => {
               name: R['different'].name
             },
           },
-          to_id: D[10].id,
+          //to_id: D[10].id,
+          to: {id:D[10].id},
           comment: 'update comment 3',
           flags: {debug: 'change to false'}
         },
@@ -833,7 +845,8 @@ test('relations+flags', async t => {
               name: R['same_author'].name,
             },
           },
-          from_id: D[9].id,
+          //from_id: D[9].id,
+          from: {id:D[9].id},
           comment: 'new comment 5',
           flags: {debug: 'change to false', add_new_flag: true}
         },
@@ -943,7 +956,8 @@ test('relations+flags', async t => {
               name: R['different'].name
             },
           },
-          to_id: D[10].id,
+          //to_id: D[10].id,
+          to: {id:D[10].id},
           comment: 'update comment 3',
           flags: {debug: 'change to false'}
         },
@@ -963,7 +977,8 @@ test('relations+flags', async t => {
               name: R['same_author'].name,
             },
           },
-          from_id: D[9].id,
+          //from_id: D[9].id,
+          from: {id:D[9].id},
           comment: 'new comment 5',
           flags: {debug: 'change to false', add_new_flag: true}
         },
@@ -1811,22 +1826,65 @@ test('catalogues+flags', async t => {
   t.pass()
 })
 
-test.skip('tags+flags', async t => {
-  // init relations
+test.skip('bulk+tags+flags', async t => {
   let testWiths = "tags"
-  let Tags = [
-    {name: t.title + '-0'},
-  ]
-  let T = Tags
-  for (let each of Tags) {
-    let result = await api({
-      operation: '+',
-      data: each,
-      model: "Tag"
-    })
-    let id = result.modelID
-    each.id = id
+  if ("bulk init") {
+    let Relations = [
+      {name: t.title + '-larger',  symmetric: false},
+      {name: t.title + '-smaller', symmetric: false},
+      {name: t.title + '-simular', symmetric: true},
+      {name: t.title + '-different', symmetric: true},
+      {name: t.title + '-classmate', symmetric: true, type: 'group', hook: 'group'},
+      {name: t.title + '-same_author', symmetric: true, type: 'group', hook: 'group'},
+      {name: t.title + '-same', symmetric: true, hook: 'same', onlyFor: ['Tag']},
+      {name: t.title + '-same2', symmetric: true, hook: 'same', onlyFor: ['Tag']},
+      {name: t.title + '-CN2EN', symmetric: false, type: 'translation'},
+      {name: t.title + '-CN2JP', symmetric: false, type: 'translation'},
+    ]
+    let R = {}
+    let r = await bulkAdd({model: 'Relation', data: Relations})
+    for (let index in r) {
+      let id = r[index].id
+      let each = Relations[index]
+      each.id = id
+      let namesplits = each.name.split('-')
+      let name = namesplits[namesplits.length - 1]
+      R[name] = each
+    }
+    let Tags = [
+      {
+        name: t.title + '-galaxy',
+        relations: [
+          {
+            relation: {
+              name: R[CN2EN].name
+            },
+          }
+        ]
+      },
+      {
+        name: t.title + '-xingxi'
+      },
+    ]
+
+
+    //let Tags = [
+    //  {name: t.title + '-0'},
+    //]
+    //let T = Tags
+    //for (let each of Tags) {
+    //  let result = await api({
+    //    operation: '+',
+    //    data: each,
+    //    model: "Tag"
+    //  })
+    //  let id = result.modelID
+    //  each.id = id
+    //}
   }
+  t.pass()
+  return
+  // init relations
   // begin test
   let todos = WithsDict.WithCatalogue
   for (let each of todos) {
@@ -2208,8 +2266,6 @@ test.skip('tags+flags', async t => {
   }
   t.pass()
 })
-
-
 
 test.skip('test', async t => {
   let Article = Models.Article

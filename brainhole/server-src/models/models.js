@@ -198,7 +198,7 @@ let SubWiths = {
   'catalogues': ['flags'],
   'relations': ['flags'],
 }
-async function queryTaglikeID ({field, query, test, getEntry, session}) {
+async function queryTaglikeID ({field, query, test, getEntry, session, entry_model}) {
   // fullquery delete the query_key, only have query_key_id
   // query for foreignField if do not know id, else just include id
   let query_id, rawquery, fullquery, query_entry
@@ -243,6 +243,28 @@ async function queryTaglikeID ({field, query, test, getEntry, session}) {
     fullquery[query_key+"_id"] = query_id
     rawquery = Object.assign({}, fullquery)
     delete fullquery[query_key]
+  }
+  if (field === 'relations') {
+    if (!fullquery.to_id && fullquery.to) {
+      let to_model = fullquery.to_model
+      if (!to_model) to_model = entry_model
+      let to = fullquery.to
+      let r = await Models[to_model].find(to).session(session)
+      if (r.length !== 1) throw Error(`not single result when query ${to_model} with ${to}, r:${r}`)
+      to = r[0]
+      fullquery.to_id = to.id
+      delete fullquery.to
+    }
+    if (!fullquery.from_id && fullquery.from) {
+      let from_model = fullquery.from_model
+      if (!from_model) from_model = entry_model
+      let from = fullquery.from
+      let r = await Models[from_model].find(from).session(session)
+      if (r.length !== 1) throw Error(`not single result when query ${from_model} with ${JSON.stringify(from,null,2)}, fullquery:${JSON.stringify(fullquery,null,2)}, r:${r}`)
+      from = r[0]
+      fullquery.from_id = from.id
+      delete fullquery.from
+    }
   }
   return {tag_query_id: query_id, raw_tag_query: rawquery, full_tag_query: fullquery, tag_query_entry: query_entry}
 }
@@ -621,7 +643,6 @@ async function fathersAPI ({operation, prefield, field, entry, data, session}) {
 async function childrenAPI ({operation, prefield, field, entry, data, session}) {
   return await familyAPI({operation, prefield, field, entry, data, type:'children', session})
 }
-
 /* comment:
   * do not reject duplicate metadatas
   * for catalogues, tags and relations, check duplicate in front end
@@ -679,7 +700,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         // fullquery delete the query_key, only have query_key_id
         // query_entry is the entry for the 'Tag'
         // let {query_id, rawquery, fullquery, query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true})
-        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true, session})
+        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true, session, entry_model})
         if (name === 'relations') { // relationsCreateHookBeforeWiths
           let relationInfo = extractRelationInfo({full_tag_query, entry_model, entry_id})
           let {
@@ -739,7 +760,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         let this_sub_entry = await querySub({entry, data: eachdata, field: name, session})
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         // fullquery delete the query_key, only have query_key_id
-        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, test:true, getEntry: true, session})
+        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, test:true, getEntry: true, session, entry_model})
 
         let relationChangeOtherFlag = false
         let oldTag, newTag
@@ -987,32 +1008,52 @@ function getRequire (Model) {
   let good = fields.filter(_ => tree[_].required)
   return good
 }
-async function bulkAdd({model, data}) {
-  let result = []
-  let workingData = []
-  for (let eachdata of data) {
-    let {simple, withs} = extractWiths({ data: eachdata, model})
-    workingData = {simple, withs}
-    let r = await api({
-      operation: '+',
-      data: simple,
-      model,
-    })
-    let id = r.modelID
-    eachdata.id = id
-    workingData.id = id
+async function bulkAdd({model, data, session, meta}) {
+  if (!session) session = await mongoose.startSession()
+  if (!meta) meta = {bulk: true}
+  try {
+    session.startTransaction()
+    console.log("start to add")
+    let result = []
+    let workingDatas = []
+    for (let eachdata of data) {
+      let {simple, withs} = extractWiths({ data: eachdata, model})
+      let workingData = {simple, withs}
+      let r = await apiSessionWrapper({
+        operation: '+',
+        data: simple,
+        model,
+        session,
+        meta,
+      })
+      let id = r.modelID
+      eachdata.id = id
+      workingData.id = id
+      workingDatas.push(workingData)
+    }
+    for (let eachdata of workingDatas) {
+      let {withs,id} = eachdata
+      let r = await apiSessionWrapper({
+        operation: '*',
+        data: withs,
+        model,
+        query:{id},
+        session,
+        meta,
+      })
+      result.push(r.result)
+    }
+    let history = new Models.History({
+      operation:'++', data, meta,
+    }); history.$session(session); await history.save();
+
+    console.log("before commit")
+    await session.commitTransaction()
+    return result
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
   }
-  for (let eachdata of workingData) {
-    let {withs,id} = eachdata
-    let r = await api({
-      operation: '*',
-      data: withs,
-      model,
-      query:{id},
-    })
-    result.push(r.result)
-  }
-  return result
 }
 
 
@@ -1225,4 +1266,4 @@ if (d.main) {
   console.log('model info:', {Withs, subSchema, structTree, Schemas, foreignSchemas, Models, outputNames, WithsDict})
 }
 
-export default {Models, api, WithsDict, All, Withs, getRequire}
+export default {Models, api, WithsDict, All, Withs, getRequire, bulkAdd}
