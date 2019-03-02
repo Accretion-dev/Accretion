@@ -198,7 +198,7 @@ let SubWiths = {
   'catalogues': ['flags'],
   'relations': ['flags'],
 }
-async function queryTaglikeID ({field, query, test, getEntry}) {
+async function queryTaglikeID ({field, query, test, getEntry, session}) {
   // fullquery delete the query_key, only have query_key_id
   // query for foreignField if do not know id, else just include id
   let query_id, rawquery, fullquery, query_entry
@@ -220,7 +220,7 @@ async function queryTaglikeID ({field, query, test, getEntry}) {
     rawquery = query
     fullquery = query
     if (getEntry) {
-      let r = await Models[this_tag_model].find({id: query_id})
+      let r = await Models[this_tag_model].find({id: query_id}).session(session)
       if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${{id: query_id}} in ${this_tag_model}`)
       query_entry = r[0]
     }
@@ -230,12 +230,12 @@ async function queryTaglikeID ({field, query, test, getEntry}) {
     if ('id' in query) {
       query_id = query['id']
       if (getEntry) {
-        let r = await Models[this_tag_model].find({id: query_id})
+        let r = await Models[this_tag_model].find({id: query_id}).session(session)
         if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${{id: query_id}} in ${this_tag_model}`)
         query_entry = r[0]
       }
     } else {
-      let r = await Models[this_tag_model].find(query)
+      let r = await Models[this_tag_model].find(query).session(session)
       if (r.length !== 1) throw Error(`not single result when query ${query_key} with ${JSON.stringify(query)} in ${this_tag_model}\n${JSON.stringify(r)}`)
       query_entry = r[0]
       query_id = query_entry.id
@@ -246,7 +246,7 @@ async function queryTaglikeID ({field, query, test, getEntry}) {
   }
   return {tag_query_id: query_id, raw_tag_query: rawquery, full_tag_query: fullquery, tag_query_entry: query_entry}
 }
-async function querySub({entry, data, field}) {
+async function querySub({entry, data, field, session}) {
   // query subdocument in a subdocument array (like tags, metadatas)
   let result, rawquery, fullquery
   let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
@@ -260,7 +260,7 @@ async function querySub({entry, data, field}) {
     let query = data.__query__
     delete fullquery.__query__
 
-    let {tag_query_id} = await queryTaglikeID({field, query})
+    let {tag_query_id} = await queryTaglikeID({field, query, session})
     // search for xxxxs
     result = entry[field].filter(_ => _[query_key+'_id'] === tag_query_id )
     if (result.length !== 1) {
@@ -292,11 +292,11 @@ function extractSingleField ({model, field, data, sub}) {
   if (!APIs[`${fieldPrefix}API`]) throw Error(`Do not have api for ${field}`)
   return {newdata, fieldPrefix, fieldSuffix}
 }
-async function apiSingleField ({operation, model, field, data, entry, query, meta}) {
+async function apiSingleField ({operation, model, field, data, entry, query, meta, session}) {
   let withs, simple, result
 
   let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({model, field, data})
-  let thisresult = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata})
+  let thisresult = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata, session})
 
   withs = {[fieldPrefix]: thisresult}
   simple = await entry.save()
@@ -305,7 +305,7 @@ async function apiSingleField ({operation, model, field, data, entry, query, met
   // add transaction here
   let history = new Models.History({
     operation, modelID, model, field, data, query, result, withs, meta,
-  }); await history.save();
+  }); history.$session(session); await history.save();
   return {operation, modelID, model, field, data, query, result, withs, meta}
 }
 
@@ -340,7 +340,7 @@ function extractWiths ({ data, model, sub }) {
   })
   return result
 }
-async function processWiths ({ operation, prefield, field, entry, withs, sub }) {
+async function processWiths ({ operation, prefield, field, entry, withs, sub, session}) {
   // modify subdocument(or subsubdocument) for each model
   let thisWiths // what field to process
   if (operation === '-') { // delete all withs before delete the main entry
@@ -366,13 +366,26 @@ async function processWiths ({ operation, prefield, field, entry, withs, sub }) 
       prefield: prefield+`-${key}`, // record parent entry
       field,
       entry,
-      data: withs[key]
+      data: withs[key],
+      session
     })
     result[key] = thisresult
   }
   return result
 }
-async function api ({ operation, data, query, model, meta, field }) {
+async function api({ operation, data, query, model, meta, field, session }) {
+  if (!session) session = await mongoose.startSession()
+  try {
+    session.startTransaction()
+    let result = await apiSessionWrapper({ operation, data, query, model, meta, field, session })
+    await session.commitTransaction()
+    return result
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  }
+}
+async function apiSessionWrapper ({ operation, data, query, model, meta, field, session }) {
   /*
     operations: '+', '-', '*' or 'o',
     data: data to add/modify or delete
@@ -383,40 +396,40 @@ async function api ({ operation, data, query, model, meta, field }) {
   if (!Model) throw Error(`unknown model ${model}`)
 
   if (operation === 'aggregate' || operation === 'findOne') { // search
-    let result = await Model.aggregate(data)
+    let result = await Model.aggregate(data).session(session)
     // result is query aggregate result
     return {operation, model, field, data, query, result, meta}
   } else if (operation === '+') {
     if (!field) { // e.g, create new Article, with some initial Tag, Cataloge...
       let {simple, withs} = extractWiths({data, model})
-      simple.id = await getNextSequenceValue(model)
-      let entry = new Model(simple)
-      withs = await processWiths({operation, prefield: model, field, entry, withs})
+      simple.id = await getNextSequenceValue(model) // do not use session for this function
+      let entry = new Model(simple); entry.$session(session)
+      withs = await processWiths({operation, prefield: model, field, entry, withs, session})
 
       let result = await entry.save()
       let modelID = result.id
       // add transaction here
       let history = new Models.History({
         operation, modelID, model, field, data, query, result, withs, meta,
-      }); await history.save();
+      }); history.$session(session); await history.save();
       return {operation, modelID, model, field, data, query, result, withs, meta}
     } else { // e.g. add new tag, add new catalogues
-      let entry = await Model.find(query)
+      let entry = await Model.find(query).session(session)
       if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
       entry = entry[0]
 
-      let result = await apiSingleField({operation, model, field, data, entry, query, meta})
+      let result = await apiSingleField({operation, model, field, data, entry, query, meta, session})
       return result
     }
   } else if (operation === '*') { // modify top models (simple fields and nested fields)
-    let entry = await Model.find(query)
+    let entry = await Model.find(query).session(session)
     if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
     entry = entry[0]
 
     if (!field) {
       let {simple, withs} = extractWiths({data, model})
       entry.set(simple)
-      let thisresult = await processWiths({operation, prefield: model, field, entry, withs})
+      let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session})
       withs = thisresult
 
       simple = await entry.save()
@@ -425,20 +438,20 @@ async function api ({ operation, data, query, model, meta, field }) {
       // add transaction here
       let history = new Models.History({
         operation, modelID, model, field, data, query, result, withs, meta
-      }); await history.save();
+      }); history.$session(session); await history.save();
       return {operation, modelID, model, field, data, query, result, withs, meta}
     } else {
-      let result = await apiSingleField({operation, model, field, data, entry, query, meta})
+      let result = await apiSingleField({operation, model, field, data, entry, query, meta, session})
       return result
     }
   } else if (operation === '-') {
-    let entry = await Model.find(query)
+    let entry = await Model.find(query).session(session)
     if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${JSON.stringify(query,null,2)} not unique: ${entry}`)
     entry = entry[0]
 
     if (!field) {
       let withs = {}
-      let thisresult = await processWiths({operation, prefield: model, field, entry, withs})
+      let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session})
       withs = thisresult
 
       let simple = await entry.remove()
@@ -447,45 +460,26 @@ async function api ({ operation, data, query, model, meta, field }) {
       // add transaction here
       let history = new Models.History({
         operation, modelID, model, field, data, query, result, withs, meta
-      }); await history.save();
+      }); history.$session(session); await history.save();
       return {operation, modelID, model, field, data, query, result, withs, meta}
     } else {
-      let result = await apiSingleField({operation, model, field, data, entry, query, meta})
+      let result = await apiSingleField({operation, model, field, data, entry, query, meta, session})
       return result
     }
   } else if (operation === 'o') {
-    let entry = await Model.find(query)
+    let entry = await Model.find(query).session(session)
     if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
     entry = entry[0]
 
     if (!field) {
       throw Error(`for ${model}, can only reorder its Tags, Metadatas, Relations or Catalogues`)
     } else {
-      let result = await apiSingleField({operation, model, field, data, entry, query, meta})
+      let result = await apiSingleField({operation, model, field, data, entry, query, meta, session})
       return result
     }
   } else {
     throw Error(`operation should be one of '+', '-', '*', not ${operation}`)
   }
-}
-
-async function toNextField({operation, prefield, field, entry, eachdata, name}) {
-  // process flags
-  let this_sub_entry = await querySub({entry, data: eachdata, field: name})
-  let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({
-    model: name,
-    field,
-    data:eachdata,
-    sub: true
-  })
-  let thisresult = await APIs[`${fieldPrefix}API`]({
-    operation,
-    prefield: prefield+`-${fieldPrefix}`,
-    field: fieldSuffix,
-    entry: this_sub_entry,
-    data: newdata
-  })
-  return {[fieldPrefix]: thisresult}
 }
 
 async function flagsAPI ({operation, prefield, field, entry, data}) {
@@ -519,9 +513,9 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
   }
 }
 
-async function DFSSearch({model, id, entry, path, type}) {
+async function DFSSearch({model, id, entry, path, type, session}) {
   if (!entry) {
-    let r = await Models[model].find({id})
+    let r = await Models[model].find({id}).session(session)
     if (r.length !== 1) throw Error(`not single result when query ${model} with ${id}\nmodel:${model} id:${id} entry:${entry}, path:${path}, type:${type}`)
     entry = r[0]
   }
@@ -530,20 +524,20 @@ async function DFSSearch({model, id, entry, path, type}) {
   for (let id of items) {
     let next = [...path, id]
     if (path.includes(id)) return next
-    let result = await DFSSearch({model, id, path:next, type})
+    let result = await DFSSearch({model, id, path:next, type, session})
     if (result) return result
   }
 }
-async function testFamilyLoop({model, entry}) {
+async function testFamilyLoop({model, entry, session}) {
   let cycle
-  cycle = await DFSSearch({model, entry, path: [entry.id], type: 'fathers'})
+  cycle = await DFSSearch({model, entry, path: [entry.id], type: 'fathers', session})
   if (cycle) return cycle.join("=>")
-  cycle = await DFSSearch({model, entry, path: [entry.id], type: 'children'})
+  cycle = await DFSSearch({model, entry, path: [entry.id], type: 'children', session})
   if (cycle) return cycle.join("<=")
   return false
 }
 
-async function familyAPI ({operation, prefield, field, entry, data, type}) {
+async function familyAPI ({operation, prefield, field, entry, data, type, session}) {
   // field should always be '' or undefined
   // prefield could be any
   // type must be fathers or chindren
@@ -565,7 +559,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
       } else {
         queryData = each
       }
-      let r = await Models[model].find(queryData)
+      let r = await Models[model].find(queryData).session(session)
       if (r.length !== 1) throw Error(`not single result when query ${model} with ${JSON.stringify(each,null,2)}\n${JSON.stringify(r),null,2}`)
       let anotherEntry = r[0]
       fullquerys.push({id: anotherEntry.id, anotherEntry})
@@ -582,7 +576,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
       result.push(fullquery)
       reverseRelations.push({anotherEntry, toPush: {id: entry.id}})
     }
-    let loop = await testFamilyLoop({model, entry})
+    let loop = await testFamilyLoop({model, entry, session})
     if (loop) throw Error(`detect family loop for model ${model}, ${JSON.stringify(entry,null,2)}\nloop:${loop}`)
     // after test loop, add reverse family relation
     for (let eachJob of reverseRelations) {
@@ -621,11 +615,11 @@ async function familyAPI ({operation, prefield, field, entry, data, type}) {
     return newIDs.map(_ => ({id: _}))
   }
 }
-async function fathersAPI ({operation, prefield, field, entry, data}) {
-  return await familyAPI({operation, prefield, field, entry, data, type:'fathers'})
+async function fathersAPI ({operation, prefield, field, entry, data, session}) {
+  return await familyAPI({operation, prefield, field, entry, data, type:'fathers', session})
 }
-async function childrenAPI ({operation, prefield, field, entry, data}) {
-  return await familyAPI({operation, prefield, field, entry, data, type:'children'})
+async function childrenAPI ({operation, prefield, field, entry, data, session}) {
+  return await familyAPI({operation, prefield, field, entry, data, type:'children', session})
 }
 
 /* comment:
@@ -633,7 +627,7 @@ async function childrenAPI ({operation, prefield, field, entry, data}) {
   * for catalogues, tags and relations, check duplicate in front end
   * for auto added tags, ignore duplicated tags when added
 */
-async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
+async function taglikeAPI ({name, operation, prefield, field, data, entry, session}) {
   // tags, catalogues, metadatas, relations
   const query_key = name.slice(0,-1)+'_id' // key to query subdocument array, e.g. tag_id in tags field
   let tpath = prefield
@@ -646,7 +640,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
   if (field) { // e.g. metadatas.flags, tags.flags
     let result = []
     for (let eachdata of data) {
-      let this_sub_entry = await querySub({entry, data: eachdata, field: name})
+      let this_sub_entry = await querySub({entry, data: eachdata, field: name, session})
       let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({
         model: name,
         field,
@@ -658,13 +652,14 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         prefield: prefield+`-${fieldPrefix}`,
         field: fieldSuffix,
         entry: this_sub_entry,
-        data: newdata
+        data: newdata,
+        session
       })
       let this_result = {[fieldPrefix]: thisresult, id: this_sub_entry.id}
       result.push(this_result)
       if (name === 'relations') { // relationsFieldHook
         let {other_model, other_id} = this_sub_entry
-        let other_entry = await Models[other_model].find({id: other_id}) // process this later, so use the global name
+        let other_entry = await Models[other_model].find({id: other_id}).session(session) // process this later, so use the global name
         if (other_entry.length !== 1) {
           throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
         }
@@ -680,11 +675,11 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
     if (operation === '+') { // data should be array
       for (let eachdata of data) {
         let {simple, withs} = extractWiths({data: eachdata, model: name, sub: true})
-        simple.id = await getNextSequenceValue(prefield)
+        simple.id = await getNextSequenceValue(prefield) // not use session
         // fullquery delete the query_key, only have query_key_id
         // query_entry is the entry for the 'Tag'
         // let {query_id, rawquery, fullquery, query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true})
-        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true})
+        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true, session})
         if (name === 'relations') { // relationsCreateHookBeforeWiths
           let relationInfo = extractRelationInfo({full_tag_query, entry_model, entry_id})
           let {
@@ -693,7 +688,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
             from_id, from_model,
             to_id, to_model,
           } = relationInfo
-          other_entry = await Models[other_model].find({id: other_id})
+          other_entry = await Models[other_model].find({id: other_id}).session(session)
           if (other_entry.length !== 1) {
             throw Error(`can not get unique entry for ${other_model} by id:${other_id}, ${JSON.stringify(full_tag_query,null,2)}, ${JSON.stringify(relationInfo,null,2)}`)
           }
@@ -708,7 +703,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         let index = entry[name].push(full_tag_query)
         let this_sub_entry = entry[name][index - 1]
 
-        withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name})
+        withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
         let thisresult = Object.assign({}, raw_tag_query, withs)
         result.push(thisresult)
         // update reverse
@@ -741,10 +736,10 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         eachdata = Object.assign({}, eachdata)
         let eachdataraw = Object.assign({}, eachdata)
         // eachdata delete __query__
-        let this_sub_entry = await querySub({entry, data: eachdata, field: name})
+        let this_sub_entry = await querySub({entry, data: eachdata, field: name, session})
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         // fullquery delete the query_key, only have query_key_id
-        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, test:true, getEntry: true})
+        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, test:true, getEntry: true, session})
 
         let relationChangeOtherFlag = false
         let oldTag, newTag
@@ -753,14 +748,14 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
           let new_sub_relation = extractRelationInfo({full_tag_query, entry_model, entry_id, old:this_sub_entry})
           let old_other_entry
 
-          other_entry = await Models[new_sub_relation.other_model].find({id: new_sub_relation.other_id}) // process this later, so use the global name
+          other_entry = await Models[new_sub_relation.other_model].find({id: new_sub_relation.other_id}).session(session) // process this later, so use the global name
           if (other_entry.length !== 1) {
             throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
           }
           other_entry = other_entry[0]
           // delete old sub_relations in old other_entry
           if (old_sub_relation.other_id !== new_sub_relation.other_id || old_sub_relation.other_model !== new_sub_relation.other_model) {
-            old_other_entry = await Models[old_sub_relation.other_model].find({id: old_sub_relation.other_id}) // delete this
+            old_other_entry = await Models[old_sub_relation.other_model].find({id: old_sub_relation.other_id}).session(session) // delete this
             if (old_other_entry.length !== 1) {
               throw Error(`can not get unique entry for ${old_sub_relation.other_model} by id:${old_sub_relation.other_id}`)
             }
@@ -771,7 +766,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
 
             let old_code = `${old_other_entry.id}-${this_sub_entry.id}`
             let new_code = `${other_entry.id}-${this_sub_entry.id}`
-            let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]})
+            let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]}).session(session)
             if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${this_tag_model}`)
             oldTag = r[0]
             oldTag.r[entry_model] = oldTag.r[entry_model].filter(_ => _ !== old_code)
@@ -788,7 +783,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         if ((tag_query_entry && (this_sub_entry[query_key] !== tag_query_entry.id))) {
           // console.log('eachdata:', eachdata, 'tag_query_entry:', tag_query_entry, 'this_sub_entry:', this_sub_entry, 'simple:', simple)
           if (!oldTag) {
-            let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]})
+            let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]}).session(session)
             if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${this_tag_model}`)
             oldTag = r[0]
           }
@@ -811,7 +806,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         this_sub_entry.set(simple)
         simple.id = this_sub_entry.id
         simple[query_key] = this_sub_entry[query_key]
-        withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name})
+        withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
         let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
 
@@ -844,7 +839,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
       let entries = []
       if (data) {
         for (let eachdata of data) {
-          let this_sub_entry = await querySub({entry, data: eachdata, field: name})
+          let this_sub_entry = await querySub({entry, data: eachdata, field: name, session})
           entries.push(this_sub_entry)
         }
       } else {
@@ -853,7 +848,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
       for (let this_sub_entry of entries) {
         let simple = {}
         let withs = {}
-        withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name})
+        withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
 
         simple.id = this_sub_entry.id
         simple[query_key] = this_sub_entry[query_key]
@@ -861,7 +856,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
         let thisresult = Object.assign({}, simple, withs)
         result.push(thisresult)
 
-        let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]})
+        let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]}).session(session)
         if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${this_tag_model}`)
         let taglike = r[0]
         let code = `${entry.id}-${this_sub_entry.id}`
@@ -870,7 +865,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
 
         if (name === 'relations') { // relationsDeleteHook
           let {other_model, other_id} = this_sub_entry
-          let other_entry = await Models[other_model].find({id: other_id}) // process this later, so use the global name
+          let other_entry = await Models[other_model].find({id: other_id}).session(session) // process this later, so use the global name
           if (other_entry.length !== 1) {
             throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
           }
@@ -904,10 +899,10 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry}) {
     }
   }
 }
-async function metadatasAPI ({operation, prefield, field, data, entry}) {
+async function metadatasAPI ({operation, prefield, field, data, entry, session}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "metadatas"
-  return await taglikeAPI({name, operation, prefield, field, data, entry})
+  return await taglikeAPI({name, operation, prefield, field, data, entry, session})
 }
 
 function extractRelationInfo ({full_tag_query, entry_model, entry_id, old}) {
@@ -961,28 +956,19 @@ function extractRelationInfo ({full_tag_query, entry_model, entry_id, old}) {
   }
   return {other_model, other_id, aorb, other_aorb, from_id, from_model, to_id, to_model}
 }
-async function relationsAPI ({operation, prefield, field, data, entry}) {
+async function relationsAPI ({operation, prefield, field, data, entry, session}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "relations"
-  return await taglikeAPI({
-    name,
-    operation,
-    prefield,
-    field,
-    data,
-    entry,
-    //createHook: relationsCreateHook,
-    //modifyHook: relationsModifyHook,
-  })
+  return await taglikeAPI({ name, operation, prefield, field, data, entry, session})
 }
 
-async function cataloguesAPI ({operation, prefield, field, data, entry}) {
+async function cataloguesAPI ({operation, prefield, field, data, entry, session}) {
   const name = "catalogues"
-  return await taglikeAPI({name, operation, prefield, field, data, entry})
+  return await taglikeAPI({name, operation, prefield, field, data, entry, session})
 }
-async function tagsAPI ({operation, prefield, field, data, entry}) {
+async function tagsAPI ({operation, prefield, field, data, entry, session}) {
   const name = "tags"
-  return await taglikeAPI({name, operation, prefield, field, data, entry})
+  return await taglikeAPI({name, operation, prefield, field, data, entry, session})
 }
 let APIs = {
   flagsAPI,
