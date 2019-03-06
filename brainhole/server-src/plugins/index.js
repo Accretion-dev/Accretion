@@ -4,7 +4,34 @@ import path from 'path'
 import globals from "../globals"
 
 let components = ["hook", 'task', 'searchTemplate', 'model', 'data']
+let HookAction = {
+  relations: [],
+  metadatas: [],
+  tags: [],
+  catalogues: [],
+  fathers: [],
+  children: [],
+}
 
+function updateHooks (plugins) {
+  for (let eachPlugin of plugins) {
+    if (eachPlugin.hook) {
+      for (let eachHook of eachPlugin.hook) {
+        let uuid = eachHook.uuid
+        let parameters = Object.assign({}, eachHook.parameters, {uuid})
+        let thishook = eachHook.function(parameters)
+        for (let hooktype of Object.keys(thishook)) {
+          HookAction[hooktype].push(thishook[hooktype])
+        }
+      }
+    }
+    if (eachPlugin.task) {
+      for (let eachTask of eachPlugin.task) {
+
+      }
+    }
+  }
+}
 async function initPlugins () {
   let pluginModel = mongoose.connection.db.collection('Plugins')
   let plugins = []
@@ -29,9 +56,11 @@ async function initPlugins () {
         active: false
       })
     }
+    let pluginDictModel = Object.assign({}, pluginDict)
     for (let component of components) {
       let componentDir = path.join(pluginDir, component)
       if (!pluginDict[component]) pluginDict[component] = []
+      if (!pluginDictModel[component]) pluginDictModel[component] = []
       if (!fs.existsSync(componentDir)) continue
       fs.readdirSync(componentDir).forEach(subfilename => {
         let componentFile = path.join(componentDir, subfilename)
@@ -47,7 +76,8 @@ async function initPlugins () {
         }
         if (oldSubConfig) {
           Object.assign(componentDict, {
-            active: oldSubConfig.active
+            active: oldSubConfig.active,
+            parameters: oldSubConfig.parameters,
           })
         } else {
           Object.assign(componentDict, {
@@ -55,16 +85,21 @@ async function initPlugins () {
           })
         }
         pluginDict[component].push(componentDict)
+        let withoutFunction = Object.assign({}, componentDict)
+        delete withoutFunction.function
+        pluginDictModel[component].push(withoutFunction)
       })
     }
     plugins.push(pluginDict)
     await pluginModel.updateOne(
       {uid},
-      {$set: pluginDict},
+      {$set: pluginDictModel},
       {upsert: true}
     )
   }
   globals.plugins = plugins
+  updateHooks(plugins)
+  console.log(HookAction)
   return plugins
 }
 
@@ -94,59 +129,8 @@ async function initPlugins () {
       children: [],
     }
   }
-
 */
-let Hooks = []
-let HookAction = {
-  relations: {
-    '+':[],
-    '-':[],
-    '*':[],
-  },
-  metadatas: {
-    '+':[],
-    '-':[],
-    '*':[],
-  },
-  tags: {
-    '+':[],
-    '-':[],
-    '*':[],
-  },
-  catalogues: {
-    '+':[],
-    '-':[],
-    '*':[],
-  },
-  fathers: {
-    '+':[],
-    '-':[],
-    '*':[],
-  },
-  children: {
-    '+':[],
-    '-':[],
-    '*':[],
-  },
-}
 
-// several official hooks
-function fmailyHook (parameters) {
 
-}
-
-async function updateHooks () {
-  let hook_models = await mongoose.models.Hook.find({})
-  hook_models = hook_models.filter(_ => _.active)
-  for (let hook_model of hook_models) {
-    let uid = hook_model.uid
-    let hook = Hooks.find(_ => _.uid === uid)
-    if (!hook) continue // in case of not consistent data base
-    for (let taglikes of Object.keys(HookAction)) {
-
-    }
-  }
-
-}
 
 export default {initPlugins}
