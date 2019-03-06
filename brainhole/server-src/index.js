@@ -1,4 +1,5 @@
 import debugSettings from './debug-settings'
+import buildTest from './buildTest'
 import 'babel-polyfill'
 import WebSocket from 'ws'
 import cookieParser from 'cookie-parser'

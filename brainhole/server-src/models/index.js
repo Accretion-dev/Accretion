@@ -5,6 +5,10 @@ import __ from './models'
 const {Models, api, Withs, All, getRequire} = __
 const consola = require('consola')
 const User = Models.User
+let initPlugins = require('../plugins').default.initPlugins
+
+//mongoose.set('debug', true)
+mongoose.set('useCreateIndex', true)
 
 async function initIDs ({config}) {
   // set the init id for all models
@@ -89,5 +93,6 @@ async function init ({config, databaseConfig}) {
   } else {
     await initProductDatabase()
   }
+  await initPlugins()
 }
 export default init

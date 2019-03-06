@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import models from './default'
 import _ from 'lodash'
 import passportLocalMongoose from 'passport-local-mongoose'
+import globals from "../globals"
 let Schema = mongoose.Schema
 
 let formatMap = new Map()
@@ -46,8 +47,7 @@ let others = [
   'Config',
   'UserConfig',
   'IDs',
-  'Editing',
-  'Workspace',
+  'Editing', 'Workspace'
 ]
 
 let WithTag = [...top]
@@ -116,7 +116,7 @@ async function getNextSequenceValue(name) {
     {name},
     {$inc: {count: 1}}
   )
-  return doc.value.count;
+  return doc.value.count
 }
 
 /* Api entry function
@@ -404,6 +404,10 @@ async function api({ operation, data, query, model, meta, field, session }) {
     return result
   } catch (error) {
     await session.abortTransaction()
+    if (error.codeName === 'WriteConflict') {
+      console.trace()
+      console.log('write conflict debug info:', {operation, data, query, model, meta, field})
+    }
     throw error
   }
 }
@@ -1174,7 +1178,7 @@ AllWithUser.forEach(key => {
   let schemaDict = Model.schema
   schemaDict.user = foreignSchemas.User
 })
-// 4. comment, createdAt, modifiedAt, _id for All and subSchema
+// 4. comment, createdAt, modifiedAt, id for All and subSchema
 let extras = {
   id: { type: Number, auto: true },
   comment: { type: String, index: true },
@@ -1197,10 +1201,21 @@ AllWithTimeComment.forEach(key => {
   Object.assign(Model.schema, extras)
 })
 Object.keys(subSchema).forEach(key => {
-  if (['history', 'family'].includes(key)) return // not add for these models
+  if (['family'].includes(key)) return // not add for these models
   let Model = subSchema[key]
   Model.add(extras)
 })
+
+extras = { // about autoadd and hooks
+  _autoAdd: { type: Boolean, default: false },
+  _confirmed: { type: Boolean, default: false },
+  _origins: { type: Object, default: null },
+}
+Object.keys(subSchema).forEach(key => {
+  let Model = subSchema[key]
+  Model.add(extras)
+})
+
 // 5. generate reverse field for Tag, Metadata, Relation and Catalogue
 let todo =['Tag', 'Catalogue', 'Relation', 'Metadata']
 for (let key of todo) {
