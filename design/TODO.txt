@@ -2,3 +2,4 @@
 * [ ] add to new operation: 'hookActive', 'hookDeactive'
 * [ ] function: updateHooks
 * [ ] function: applyHook
+* [ ] modify Tags to have translation feature
