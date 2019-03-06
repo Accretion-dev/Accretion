@@ -129,6 +129,7 @@
         * families:
   * hooks:
     * [ ] delete all reverse of Taglike model, return other_models
+    * [ ] return 'with' give change diff
     * design:
       * tow kinds of model: articleLike and tagLike
       * origin:

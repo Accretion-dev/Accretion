@@ -1,0 +1,4 @@
+* [ ] taglike delete all r models
+* [ ] add to new operation: 'hookActive', 'hookDeactive'
+* [ ] function: updateHooks
+* [ ] function: applyHook
