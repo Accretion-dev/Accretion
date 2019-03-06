@@ -27,7 +27,7 @@
       "test-final.js"
     ],
     "sources": [
-      "server/*"
+      "./server/**/*.js"
     ]
   },
   "dependencies": {

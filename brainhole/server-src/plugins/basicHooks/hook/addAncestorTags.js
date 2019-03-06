@@ -1,7 +1,7 @@
 // this is a function generator, it return the real hook function with parameters
 function gen(parameters) {
   // this function will be injected into the taglikeAPI
-  async function addAncestorTags({operation, entry, }) {
+  async function addAncestorTags({operation, entry, old_sub_entry, new_sub_entry}) {
     let {uuid} = parameters
     if (operation === "+") {
 

@@ -25,12 +25,12 @@ function updateHooks (plugins) {
         }
       }
     }
-    if (eachPlugin.task) {
+    if (eachPlugin.task) { // for auto run task
       for (let eachTask of eachPlugin.task) {
-
       }
     }
   }
+  globals.HookAction = HookAction
 }
 async function initPlugins () {
   let pluginModel = mongoose.connection.db.collection('Plugins')
@@ -64,6 +64,7 @@ async function initPlugins () {
       if (!fs.existsSync(componentDir)) continue
       fs.readdirSync(componentDir).forEach(subfilename => {
         let componentFile = path.join(componentDir, subfilename)
+        console.log(componentFile)
         let componentDict = require(componentFile).default
         componentDict.origin = pluginDict.name
         if (!componentDict.uid) throw Error(`all component should have a uid! current is ${JSON.stringify(pluginDict,null,2)}`)
@@ -98,8 +99,9 @@ async function initPlugins () {
     )
   }
   globals.plugins = plugins
+  console.log('plugins:', plugins)
   updateHooks(plugins)
-  console.log(HookAction)
+  console.log('HookAction:', HookAction)
   return plugins
 }
 

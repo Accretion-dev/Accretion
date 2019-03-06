@@ -652,8 +652,13 @@ async function childrenAPI ({operation, prefield, field, entry, data, session}) 
   * for catalogues, tags and relations, check duplicate in front end
   * for auto added tags, ignore duplicated tags when added
 */
+async function processAutoActions (auto_actions) {
+  // make unique
+  return auto_actions
+}
 async function taglikeAPI ({name, operation, prefield, field, data, entry, session}) {
   // tags, catalogues, metadatas, relations
+  let hooks = globals.HookAction[name]
   const query_key = name.slice(0,-1)+'_id' // key to query subdocument array, e.g. tag_id in tags field
   let tpath = prefield
   let tmodel = name[0].toUpperCase() + name.slice(1,-1)
@@ -661,6 +666,10 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
   let entry_model = entry.schema.options.collection
   let entry_id = entry.id
   let other_entry
+  let auto_actions = {
+    add: [],
+    del: [],
+  }
 
   if (field) { // e.g. metadatas.flags, tags.flags
     let result = []
@@ -753,7 +762,14 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           tag_query_entry.r[entry_model].push(`${other_entry.id}-${this_sub_entry.id}`)
           await tag_query_entry.save()
         }
+
+        for (let thishook of hooks) {
+          let {add, del} = thishook({operation, entry, new_sub_entry: this_sub_entry._doc})
+          auto_actions.add = auto_actions.add.concat(add)
+          auto_actions.del = auto_actions.add.concat(del)
+        }
       }
+      auto_actions = await processAutoActions(auto_actions)
       return result
     } else if (operation === '*') {
       let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
@@ -762,6 +778,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         let eachdataraw = Object.assign({}, eachdata)
         // eachdata delete __query__
         let this_sub_entry = await querySub({entry, data: eachdata, field: name, session})
+        let old_sub_entry = Object.assign({}, this_sub_entry._doc)
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         // fullquery delete the query_key, only have query_key_id
         let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, test:true, getEntry: true, session, entry_model})
@@ -857,7 +874,14 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           other_entry.markModified(name)
           await other_entry.save()
         }
+
+        for (let thishook of hooks) {
+          let {add, del} = thishook({operation, entry, old_sub_entry, new_sub_entry: this_sub_entry._doc})
+          auto_actions.add = auto_actions.add.concat(add)
+          auto_actions.del = auto_actions.add.concat(del)
+        }
       }
+      auto_actions = await processAutoActions(auto_actions)
       return result
     } else if (operation === '-') {
       let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
@@ -871,6 +895,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         entries = entry[name].map(_ => _)
       }
       for (let this_sub_entry of entries) {
+        let old_sub_entry = Object.assign({}, this_sub_entry._doc)
         let {simple, withs} = extractWiths({data: this_sub_entry._doc, model: name, sub: true})
         //simple = {}
         withs = {}
@@ -903,7 +928,13 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           taglike.r[entry_model] = taglike.r[entry_model].filter(_ => _ !== code)
           await taglike.save()
         }
+        for (let thishook of hooks) {
+          let {add, del} = thishook({operation, entry, old_sub_entry})
+          auto_actions.add = auto_actions.add.concat(add)
+          auto_actions.del = auto_actions.add.concat(del)
+        }
       }
+      auto_actions = await processAutoActions(auto_actions)
       return result
     } else if (operation === 'o') {
       let newIDs = data.map(_ => _.id).sort()
