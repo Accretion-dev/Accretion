@@ -13,7 +13,7 @@ let HookAction = {
   children: [],
 }
 
-function updateHooks (plugins) {
+async function updateHooks (plugins) {
   let initHookErrors = []
   for (let eachPlugin of plugins) {
     if (eachPlugin.hook) {
@@ -21,7 +21,7 @@ function updateHooks (plugins) {
         let uuid = eachHook.uuid
         let parameters = Object.assign({}, eachHook.parameters, {uuid})
         try {
-          let thishook = eachHook.function(parameters)
+          let thishook = await eachHook.function(parameters)
           for (let hooktype of Object.keys(thishook)) {
             HookAction[hooktype].push(thishook[hooktype])
           }
@@ -70,7 +70,6 @@ async function initPlugins () {
       if (!fs.existsSync(componentDir)) continue
       fs.readdirSync(componentDir).forEach(subfilename => {
         let componentFile = path.join(componentDir, subfilename)
-        console.log(componentFile)
         let componentDict = require(componentFile).default
         componentDict.origin = pluginDict.name
         if (!componentDict.uid) throw Error(`all component should have a uid! current is ${JSON.stringify(pluginDict,null,2)}`)
@@ -106,7 +105,7 @@ async function initPlugins () {
   }
   globals.plugins = plugins
   console.log('plugins:', plugins)
-  let initHookErrors = updateHooks(plugins)
+  let initHookErrors = await updateHooks(plugins)
   console.log('HookAction:', HookAction)
   if (initHookErrors.length) {
     throw Error(`init hook function error: ${JOSN.stringify(initHookErrors,null,2)}`)

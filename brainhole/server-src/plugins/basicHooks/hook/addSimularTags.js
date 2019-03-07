@@ -1,4 +1,4 @@
-function gen(parameters) {
+async function gen(parameters) {
   async function addSimularTags (parameters) {
     let {uuid} = parameters
     return {
