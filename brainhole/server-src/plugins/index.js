@@ -14,14 +14,19 @@ let HookAction = {
 }
 
 function updateHooks (plugins) {
+  let initHookErrors = []
   for (let eachPlugin of plugins) {
     if (eachPlugin.hook) {
       for (let eachHook of eachPlugin.hook) {
         let uuid = eachHook.uuid
         let parameters = Object.assign({}, eachHook.parameters, {uuid})
-        let thishook = eachHook.function(parameters)
-        for (let hooktype of Object.keys(thishook)) {
-          HookAction[hooktype].push(thishook[hooktype])
+        try {
+          let thishook = eachHook.function(parameters)
+          for (let hooktype of Object.keys(thishook)) {
+            HookAction[hooktype].push(thishook[hooktype])
+          }
+        } catch (error) {
+          initHookErrors.push({uuid: eeachHook.uuid, error: error})
         }
       }
     }
@@ -31,6 +36,7 @@ function updateHooks (plugins) {
     }
   }
   globals.HookAction = HookAction
+  return initHookErrors
 }
 async function initPlugins () {
   let pluginModel = mongoose.connection.db.collection('Plugins')
@@ -100,9 +106,11 @@ async function initPlugins () {
   }
   globals.plugins = plugins
   console.log('plugins:', plugins)
-  updateHooks(plugins)
+  let initHookErrors = updateHooks(plugins)
   console.log('HookAction:', HookAction)
-  return plugins
+  if (initHookErrors.length) {
+    throw Error(`init hook function error: ${JOSN.stringify(initHookErrors,null,2)}`)
+  }
 }
 
 // functions about hooks and tasks
