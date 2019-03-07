@@ -8,7 +8,8 @@ import serveStatic from 'serve-static'
 import passport from 'passport'
 import mongoose from 'mongoose'
 import mongodb from 'mongodb'
-import database_init from './models'
+import __ from './models'
+const {init:database_init} = __
 import globalConfig from "../configs/config.js"
 import yaml from 'node-yaml'
 import Subwss from './api/wsserver.js'
