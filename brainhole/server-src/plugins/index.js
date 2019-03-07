@@ -16,17 +16,20 @@ let HookAction = {
 async function updateHooks (plugins) {
   let initHookErrors = []
   for (let eachPlugin of plugins) {
+    if (!eachPlugin.active) continue
     if (eachPlugin.hook) {
       for (let eachHook of eachPlugin.hook) {
-        let uuid = eachHook.uuid
-        let parameters = Object.assign({}, eachHook.parameters, {uuid})
+        if (!eachHook.active) continue
+        let uid = eachHook.uid
+        let parameters = Object.assign({}, eachHook.parameters, {uid})
         try {
           let thishook = await eachHook.function(parameters)
           for (let hooktype of Object.keys(thishook)) {
+            if (!HookAction[hooktype]) HookAction[hooktype] = []
             HookAction[hooktype].push(thishook[hooktype])
           }
         } catch (error) {
-          initHookErrors.push({uuid: eeachHook.uuid, error: error})
+          initHookErrors.push({plugin:eachPlugin.uid, hook: eachHook.uid, error: error.message})
         }
       }
     }
@@ -108,7 +111,7 @@ async function initPlugins () {
   let initHookErrors = await updateHooks(plugins)
   console.log('HookAction:', HookAction)
   if (initHookErrors.length) {
-    throw Error(`init hook function error: ${JOSN.stringify(initHookErrors,null,2)}`)
+    throw Error(`init hook function error: ${JSON.stringify(initHookErrors,null,2)}`)
   }
 }
 

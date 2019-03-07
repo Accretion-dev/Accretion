@@ -6,6 +6,7 @@ const {Models, api, Withs, All, getRequire} = __
 const consola = require('consola')
 const User = Models.User
 let initPlugins = require('../plugins').default.initPlugins
+import globals from 'globals'
 
 //mongoose.set('debug', true)
 mongoose.set('useCreateIndex', true)
@@ -95,4 +96,4 @@ async function init ({config, databaseConfig}) {
   }
   await initPlugins()
 }
-export default init
+export default {init}

@@ -324,7 +324,16 @@ async function apiSingleField ({operation, model, field, data, entry, query, met
   simple = await entry.save()
   result = simple
   let modelID = simple.id
-  // add transaction here
+
+  // hooks
+  let hooks = globals.HookAction[model]
+  if (hooks && hooks.length) {
+    for (let hook of hooks) {
+      if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
+      await hook({operation, entry:result._doc})
+    }
+  }
+
   let history = new Models.History({
     operation, modelID, model, field, data, query, result, withs, meta,
   }); history.$session(session); await history.save();
@@ -434,7 +443,15 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
 
       let result = await entry.save()
       let modelID = result.id
-      // add transaction here
+      // hooks
+      let hooks = globals.HookAction[model]
+      if (hooks && hooks.length) {
+        for (let hook of hooks) {
+          if (hook.test && !hook.test({operation, entry: result._doc, field})) continue
+          await hook({operation, entry:result._doc})
+        }
+      }
+
       let history = new Models.History({
         operation, modelID, model, field, data, query, result, withs, meta,
       }); history.$session(session); await history.save();
@@ -461,7 +478,16 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       simple = await entry.save()
       let result = simple
       let modelID = result.id
-      // add transaction here
+
+      // hooks
+      let hooks = globals.HookAction[model]
+      if (hooks && hooks.length) {
+        for (let hook of hooks) {
+          if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
+          await hook({operation, entry:result._doc})
+        }
+      }
+
       let history = new Models.History({
         operation, modelID, model, field, data, query, result, withs, meta
       }); history.$session(session); await history.save();
@@ -483,7 +509,16 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let simple = await entry.remove()
       let result = simple
       let modelID = result.id
-      // add transaction here
+
+      // hooks
+      let hooks = globals.HookAction[model]
+      if (hooks && hooks.length) {
+        for (let hook of hooks) {
+          if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
+          await hook({operation, entry:result._doc})
+        }
+      }
+
       let history = new Models.History({
         operation, modelID, model, field, data, query, result, withs, meta
       }); history.$session(session); await history.save();
@@ -496,6 +531,15 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
     let entry = await Model.find(query).session(session)
     if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
     entry = entry[0]
+
+    // hooks
+    let hooks = globals.HookAction[model]
+    if (hooks && hooks.length) {
+      for (let hook of hooks) {
+        if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
+        await hook({operation, entry:result._doc})
+      }
+    }
 
     if (!field) {
       throw Error(`for ${model}, can only reorder its Tags, Metadatas, Relations or Catalogues`)
@@ -764,7 +808,8 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         }
 
         for (let thishook of hooks) {
-          let {add, del} = thishook({operation, entry, new_sub_entry: this_sub_entry._doc})
+          if (thishook.test && !thishook.test({operation, entry, new_sub_entry: this_sub_entry._doc})) continue
+          let {add, del} = await thishook({operation, entry, new_sub_entry: this_sub_entry._doc})
           auto_actions.add = auto_actions.add.concat(add)
           auto_actions.del = auto_actions.add.concat(del)
         }
@@ -876,7 +921,8 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         }
 
         for (let thishook of hooks) {
-          let {add, del} = thishook({operation, entry, old_sub_entry, new_sub_entry: this_sub_entry._doc})
+          if (thishook.test && !thishook.test({operation, entry, old_sub_entry, new_sub_entry: this_sub_entry._doc})) continue
+          let {add, del} = await thishook({operation, entry, old_sub_entry, new_sub_entry: this_sub_entry._doc})
           auto_actions.add = auto_actions.add.concat(add)
           auto_actions.del = auto_actions.add.concat(del)
         }
@@ -929,7 +975,8 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           await taglike.save()
         }
         for (let thishook of hooks) {
-          let {add, del} = thishook({operation, entry, old_sub_entry})
+          if (thishook.test && !thishook.test({operation, entry, old_sub_entry})) continue
+          let {add, del} = await thishook({operation, entry, old_sub_entry})
           auto_actions.add = auto_actions.add.concat(add)
           auto_actions.del = auto_actions.add.concat(del)
         }
