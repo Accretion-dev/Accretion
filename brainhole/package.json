@@ -19,7 +19,9 @@
     "test-profile": "inspect node_modules/ava/profile.js test.js "
   },
   "nodemonConfig": {
-    "ignore": ["**/test.js"],
+    "ignore": [
+      "**/test.js"
+    ],
     "delay": "2500"
   },
   "ava": {
@@ -38,6 +40,7 @@
     "cookie-parser": "^1.4.3",
     "cors": "^2.8.5",
     "cross-env": "^5.2.0",
+    "delay": "^4.1.0",
     "express": "^4.16.3",
     "express-session": "^1.15.6",
     "express-ws": "^4.0.0",

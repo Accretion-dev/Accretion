@@ -4,7 +4,8 @@ import _ from 'lodash'
 import yaml from 'node-yaml'
 let config = require('./nuxt.config.js')
 let databaseConfig = yaml.readSync('../configs/mongod.yml')
-import database_init from './server/models'
+import _models from './server/models'
+const {init: database_init} = _models
 import __ from './server/models/models'
 const {Models, api, WithsDict, All, getRequire, bulkAdd} = __
 import mongoose from 'mongoose'
@@ -12,6 +13,7 @@ import test from 'ava'
 import globals from './server/globals'
 import fs from 'fs'
 import path from 'path'
+import delay from 'delay'
 
 if (globalConfig.database !== 'test') {
   throw Error(`you can only run unittest on test database!`)
@@ -20,6 +22,8 @@ if (globalConfig.database !== 'test') {
 test.before('init database', async t => {
   globalConfig.demoData = false
   globalConfig.unittest = true
+  await delay(5000)
+  console.log('delay 5000')
   await database_init({config: globalConfig, databaseConfig})
   console.log('Setup complete, init database')
 })
