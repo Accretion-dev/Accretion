@@ -22,7 +22,7 @@ if (globalConfig.database !== 'test') {
 test.before('init database', async t => {
   globalConfig.demoData = false
   globalConfig.unittest = true
-  await delay(5000)
+  await delay(1000)
   console.log('delay 5000')
   await database_init({config: globalConfig, databaseConfig})
   console.log('Setup complete, init database')
@@ -1834,70 +1834,379 @@ test('catalogues+flags', async t => {
   t.pass()
 })
 
-test.skip('complicated-relation+bulk+tags+flags', async t => {
+test('tags+flags', async t => {
   let testWiths = "tags"
-  let Relations, R, r, Tags, T
-  if("bulk add Relations") {
-    Relations = [
-      {name: t.title + '-larger',  symmetric: false},
-      {name: t.title + '-smaller', symmetric: false},
-      {name: t.title + '-simular', symmetric: true},
-      {name: t.title + '-different', symmetric: true},
-      {name: t.title + '-classmate', symmetric: true, type: 'group', hook: 'group'},
-      {name: t.title + '-same_author', symmetric: true, type: 'group', hook: 'group'},
-      {name: t.title + '-same', symmetric: true, hook: 'same', onlyFor: ['Tag']},
-      {name: t.title + '-same2', symmetric: true, hook: 'same', onlyFor: ['Tag']},
-      {name: t.title + '-CN2EN', symmetric: false, type: 'translation'},
-      {name: t.title + '-CN2JP', symmetric: false, type: 'translation'},
-    ]
-    R = {}
-    r = await bulkAdd({model: 'Relation', data: Relations})
-    for (let index in r) {
-      let id = r[index].id
-      let each = Relations[index]
-      each.id = id
-      let namesplits = each.name.split('-')
-      let name = namesplits[namesplits.length - 1]
-      R[name] = each
-    }
-  }
-  if('bulk add Tags, test complicated-relations'){
-    Tags = [
-      {
-        name: t.title + '-astronomy'
-      },
-      {
-        name: t.title + '-galaxy',
-        relations: [
-          {
-            relation: { name: R.CN2EN.name },
-            from: { name: t.title + '-xingxi' }
-          }
-        ],
-        fathers: [
-          { name: t.title + '-astronomy'}
-        ]
-      },
-      {
-        name: t.title + '-xingxi'
-        // should auto add {family, relations}
-      },
-    ]
+  let Tags = [
+    {name: t.title + '-0'},
+    {name: t.title + '-1'},
+    {name: t.title + '-2'},
+    {name: t.title + '-3'},
+    {name: t.title + '-4'},
+  ]
+  let T = {}
+  for (let each of Tags) {
+    let result = await api({
+      operation: '+',
+      data: each,
+      model: "Tag"
+    })
+    let id = result.modelID
+    each.id = id
   }
 
-  t.pass()
-  return
-  // delete test Relations
-  for (let each of Relations) {
+  // begin test
+  let todos = WithsDict.WithTag
+  for (let each of todos) {
+    async function testTagCount(array) {
+      let counts = []
+      for (let tag of Tags) {
+        let eachTag = (await Models.Tag.findOne({id: tag.id}))._doc
+        counts.push(eachTag.r[each].length)
+      }
+      // console.log(array, counts)
+      t.deepEqual(array, counts)
+    }
+    let Model = Models[each]
+    let pks = getRequire(Model)
+    let data, refetch, refetch_, result, id, updated, tags, copy, newtags, rawdata, toDelete
+    data = {
+      comment: `${each} ${t.title} test`,
+      flags: {
+        init_flags: true
+      }
+    }
+    if (pks.length) {
+      for (let pk of pks) {
+        data[pk] = `${each} ${t.title} test`
+      }
+    }
+
+    rawdata = Object.assign({}, data)
+    tags = [
+      { tag_id: Tags[0].id, },
+      { tag_id: Tags[1].id, comment: 'test comment' },
+      { tag_id: Tags[2].id, comment: 'test comment' },
+      {
+        tag_id: Tags[3].id,
+        comment: 'test comment',
+        flags: {debug: true, test: false, ttest: false}
+      },
+      {
+        tag: {
+          name: t.title + '-0' // [0]
+        },
+        flags: {debug: true, test:null, ttest: false}
+      },
+      {
+        tag: {
+          id: Tags[1].id
+        },
+        flags: {debug: true, test:null, ttest: false}
+      },
+    ]
+    copy = tags.map(_ => Object.assign({}, _))
+
+    if("create, modify with data.tags") {
+      // create with data.tags
+      data.tags = tags
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      t.deepEqual(tags, copy) // not change tags inside the api
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      for (let index in updated) { // repleace all withs data
+        Object.assign(refetch_.tags[index], tags[index])
+      }
+      Object.assign(refetch_, rawdata) // repleace all simple data
+      t.deepEqual(refetch, refetch_)
+      await testTagCount([2,2,1,1,0])
+
+      // modify both simple and withs (flags and tags)
+      updated = result.withs.tags // have id in each tag
+      data.comment = `${each} ${t.title} modified`
+      data.flags.in_trush = false
+      data.flags.ddebug = true
+      newtags = [ // old [0] and [1] have two value
+        { // [1]
+          id: updated[1].id, // have two value, must use id to search
+          comment: 'test comment updated',
+          flags: {
+            add_new_flag: true
+          },
+        },
+        { // [3] => [4] only this one can modify with name, others have dupoicated term
+          tag: {
+            name: t.title + '-4'
+          },
+          __query__: {
+            tag: {
+              name: t.title + '-3'
+            },
+          },
+          comment: 'update comment',
+          flags: {debug: 'change to false'}
+        },
+        { // [2]
+          __query__: {
+            tag_id: updated[2].tag_id,
+          },
+          comment: 'new comment',
+          flags: {debug: 'change to false', add_new_flag: true}
+        },
+      ]
+      data.tags = newtags // only modify these tags
+      result = await api({
+        operation: '*',
+        data,
+        model: each,
+        query: {id}
+      })
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      Object.assign(refetch_, _.omit(data, ['tags'])) // replace simple
+      updated = newtags.map(__ => _.omit(__, ['__query__']) )
+      Object.assign(refetch_.tags[1], updated[0])
+      Object.assign(refetch_.tags[3], updated[1])
+      Object.assign(refetch_.tags[2], updated[2])
+      t.deepEqual(refetch, refetch_)
+      await testTagCount([2,2,1,0,1])
+
+      // delete it
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
+      await testTagCount([0,0,0,0,0])
+    }
+    if("add, modify, delete and reorder tags with field"){
+      // create with no tags
+      delete data.tags
+      result = await api({
+        operation: '+',
+        data,
+        model: each
+      })
+      id = result.modelID
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch, data)
+      t.deepEqual(refetch, refetch_)
+      await testTagCount([0,0,0,0,0])
+
+      // add tags with field
+      result = await api({
+        operation: '+',
+        data: { tags: copy },
+        model: each,
+        query: {id},
+        field: 'tags',
+      })
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      updated = result.withs.tags
+      for (let index in updated) {
+        Object.assign(refetch_.tags[index], updated[index])
+      }
+      t.deepEqual(refetch, refetch_)
+      await testTagCount([2,2,1,1,0])
+
+      // modify with fields
+      updated = result.withs.tags
+      newtags = [ // the same modify as the first test
+        { // [1], have two value
+          id: updated[0].id,
+          comment: 'test comment updated with field',
+          flags: {
+            add_new_flag: true, update_with_field: true
+          }
+        },
+        { // [3] only this one can modify with name, others have duplicated term
+          tag: {
+            name: t.title + '-4'
+          },
+          __query__: {
+            tag: {
+              name: t.title + '-3'
+            },
+          },
+          comment: 'test comment modified with field',
+          flags: {debug: 'change to false with field'}
+        },
+        { // [2]
+          __query__: {
+            tag_id: updated[2].tag_id,
+          },
+          comment: 'new comment modified with field',
+          flags: {debug: 'modify to blabla', add_new_flag: false, modify_with_field: true}
+        },
+      ]
+      result = await api({
+        operation: '*',
+        data: {tags: newtags},
+        model: each,
+        query: {id},
+        field: 'tags'
+      })
+      refetch = (await Model.findOne({id}))._doc
+      refetch_ = Object.assign({}, refetch)
+      Object.assign(refetch_, _.omit(data, ['tags'])) // replace simple field
+      updated = newtags.map(__ => _.omit(__, ['__query__']) )
+      Object.assign(refetch_.tags[1], updated[0])
+      Object.assign(refetch_.tags[3], updated[1])
+      Object.assign(refetch_.tags[2], updated[2])
+      t.deepEqual(refetch, refetch_)
+      await testTagCount([2,2,1,0,1])
+
+      // delete tag only
+      updated = result.withs.tags
+      toDelete = [
+        { // [1]
+          id: updated[0].id,
+        },
+        { // [3] only this one can modify with name, others have duplicated term
+          __query__: {
+            tag: {
+              name: t.title + '-4'
+            },
+          },
+        },
+        { // [2]
+          __query__: {
+            tag_id: updated[2].tag_id,
+          },
+        },
+      ]
+      result = await api({
+        operation: '-',
+        data: {tags: toDelete},
+        model: each,
+        query: {id},
+        field: 'tags'
+      })
+      refetch = (await Model.findOne({id}))._doc.tags
+      let ids = updated.map(_=>_.id)
+      refetch_ = refetch.filter(_ => ids.includes(_.id))
+      t.is(refetch_.length, 0)
+      await testTagCount([1,2,0,0,0])
+
+      // test reorder
+      ids = refetch.map(_ => ({id: _.id}))
+      let newIDs = [ids[0], ids[2], ids[1]]
+      result = await api({
+        operation: 'o',
+        data: {tags: newIDs},
+        model: each,
+        query: {id},
+        field: 'tags'
+      })
+      refetch = (await Model.findOne({id}))._doc.tags
+      let refetchIDs = Array.from(refetch).map(_ => ({id: _.id}))
+      t.deepEqual(newIDs, refetchIDs)
+      await testTagCount([1,2,0,0,0])
+    }
+    if("add, modify and delete tags.flags with field"){
+      /* now we have three tags: [
+        {[2]},
+        {[2]},
+        {[1]},
+      ], only the later two have flags*/
+      // add flags in tag
+      let newData = [
+        {id: refetch[0].id, flags: {add_by_field_flag: true}},
+        {id: refetch[1].id, flags: {add_by_field_flag: true}},
+      ]
+      result = await api({
+        operation: '+',
+        data: {tags: newData},
+        model: each,
+        query: {id},
+        field: 'tags.flags'
+      })
+      refetch = (await Model.findOne({id}))._doc.tags
+      t.is(newData[0].flags.add_by_field_flag, refetch[0].flags.add_by_field_flag)
+      t.is(newData[1].flags.add_by_field_flag, refetch[1].flags.add_by_field_flag)
+      await testTagCount([1,2,0,0,0])
+
+      // modify flags in tag
+      let toModify = refetch.map(__ => _.pick(__, ["id", "flags"])) // old tags
+      toModify = toModify.slice(1,) // only the later two have flags
+      toModify[0].flags.debug = 'hahaha'
+      toModify[1].flags.debug = 'lalala'
+      toModify[1].flags.ddebug = 'huhuhu'
+      result = await api({
+        operation: '*',
+        data: {tags: toModify},
+        model: each,
+        query: {id},
+        field: 'tags.flags'
+      })
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc.tags
+      refetch = refetch.slice(1,)
+      t.is( refetch[0].flags.debug, toModify[0].flags.debug )
+      t.is( refetch[0].flags.debug, toModify[0].flags.debug )
+      t.is( refetch[1].flags.ddebug, toModify[1].flags.ddebug )
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc.tags
+      await testTagCount([1,2,0,0,0])
+
+      // delete flags in tag
+      toDelete = refetch.map(__ => _.pick(__, ["id", "flags"]))
+      toDelete = toDelete.slice(1,) // only the later two have flags
+      rawdata = toDelete[0].flags.debug
+      delete toDelete[0].flags.debug // do not delete first
+      result = await api({
+        operation: '-',
+        data: {tags: toDelete},
+        model: each,
+        query: {id},
+        field: 'tags.flags'
+      })
+      refetch = await Model.findOne({id})
+      refetch = refetch._doc.tags
+      refetch = refetch.slice(1,)
+      for (let index in refetch) {
+        let inter = _.intersection(
+          Object.keys(refetch[index].flags),
+          Object.keys(toDelete[index].flags)
+        )
+        t.is(inter.length, 0)
+      }
+      t.is(refetch[0].flags.debug, rawdata)
+      await testTagCount([1,2,0,0,0])
+
+      // delete the entry, clean up
+      let oldresult = result
+      result = await api({
+        operation: '-',
+        model: each,
+        query: {id}
+      })
+      refetch = await Model.findOne({id})
+      t.true(refetch === null)
+      await testTagCount([0,0,0,0,0])
+    }
+  }
+
+  // delete Tags
+  for (let each of Tags) {
     let id = each.id
     let result = await api({
       operation: '-',
       query: {id},
-      model: 'Relation'
+      model: "Tag"
     })
-    let refetch = await Models.Relation.findOne({id})
+    let refetch = await Models.Tag.findOne({id})
     t.true(refetch === null)
   }
+  t.pass()
+
 })
 test.skip('test', async t => {
   let Article = Models.Article
@@ -1928,6 +2237,57 @@ test.skip('test', async t => {
   console.log(a)
   console.log(b)
   console.log(b.tags[0])
+  t.pass()
+})
+test.skip('bulkAdd without hooks', async t => {
+  let Relations, R, r, Tags, T
+  if("bulk add Relations") {
+    Relations = [
+      {name: t.title + '-larger',  symmetric: false},
+      {name: t.title + '-smaller', symmetric: false},
+      {name: t.title + '-simular', symmetric: true},
+      {name: t.title + '-different', symmetric: true},
+      {name: t.title + '-classmate', symmetric: true, type: 'group', hook: 'group'},
+      {name: t.title + '-same_author', symmetric: true, type: 'group', hook: 'group'},
+      {name: t.title + '-same', symmetric: true, hook: 'same', onlyFor: ['Tag']},
+      {name: t.title + '-same2', symmetric: true, hook: 'same', onlyFor: ['Tag']},
+      {name: t.title + '-CN2EN', symmetric: false, type: 'translation'},
+      {name: t.title + '-CN2JP', symmetric: false, type: 'translation'},
+    ]
+    R = {}
+    r = await bulkAdd({model: 'Relation', data: Relations})
+    for (let index in r) {
+      let id = r[index].id
+      let each = Relations[index]
+      each.id = id
+      let namesplits = each.name.split('-')
+      let name = namesplits[namesplits.length - 1]
+      R[name] = each
+    }
+  }
+  if('bulk add Tags, test complicated-tags'){
+    Tags = [
+      {
+        name: t.title + '-astronomy'
+      },
+      {
+        name: t.title + '-galaxy',
+        relations: [
+          {
+            relation: { name: R.CN2EN.name },
+            from: { name: t.title + '-xingxi' }
+          }
+        ],
+        fathers: [
+          { name: t.title + '-astronomy'}
+        ]
+      },
+      {
+        name: t.title + '-xingxi'
+        // should auto add {family, relations}
+      },
+    ]
+  }
   t.pass()
 })
 
