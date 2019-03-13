@@ -5,6 +5,7 @@ import passportLocalMongoose from 'passport-local-mongoose'
 import globals from "../globals"
 let Schema = mongoose.Schema
 let todo
+let modelsRaw = models
 
 // first create these base models, they do not have withs
 let SchemasRaw = { }
@@ -99,12 +100,20 @@ function stringifyStructTree (input) {
 function initModels () {
   let Models = Object.assign({}, ModelsRaw)
   let Schemas = Object.assign({}, SchemasRaw)
+  let models = Object.assign({}, modelsRaw)
+
+  let modelFromPlugins = globals.pluginsData.model.map(_ => _.uid)
+  for (let model of globals.pluginsData.model) {
+    models[model.uid] = model
+  }
 
   let top = [
     'Article',
     'Website',
     'File',
+    ...modelFromPlugins
   ]
+
   let WithTag = [...top]
   let WithCatalogue = [...top]
   let WithRelation = [...top, 'Tag']
@@ -449,7 +458,7 @@ async function apiSingleField ({operation, model, field, data, entry, query, met
   let modelID = simple.id
 
   // hooks
-  let hooks = globals.HookAction[model]
+  let hooks = globals.pluginsData.hook[model]
   if (hooks && hooks.length) {
     for (let hook of hooks) {
       if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
@@ -568,7 +577,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let result = await entry.save()
       let modelID = result.id
       // hooks
-      let hooks = globals.HookAction[model]
+      let hooks = globals.pluginsData.hook[model]
       if (hooks && hooks.length) {
         for (let hook of hooks) {
           if (hook.test && !hook.test({operation, entry: result._doc, field})) continue
@@ -604,7 +613,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let modelID = result.id
 
       // hooks
-      let hooks = globals.HookAction[model]
+      let hooks = globals.pluginsData.hook[model]
       if (hooks && hooks.length) {
         for (let hook of hooks) {
           if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
@@ -635,7 +644,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let modelID = result.id
 
       // hooks
-      let hooks = globals.HookAction[model]
+      let hooks = globals.pluginsData.hook[model]
       if (hooks && hooks.length) {
         for (let hook of hooks) {
           if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
@@ -657,7 +666,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
     entry = entry[0]
 
     // hooks
-    let hooks = globals.HookAction[model]
+    let hooks = globals.pluginsData.hook[model]
     if (hooks && hooks.length) {
       for (let hook of hooks) {
         if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
@@ -823,7 +832,7 @@ async function processAutoActions (auto_actions) {
 async function taglikeAPI ({name, operation, prefield, field, data, entry, session}) {
   let Models = globals.Models
   // tags, catalogues, metadatas, relations
-  let hooks = globals.HookAction[name]
+  let hooks = globals.pluginsData.hook[name]
   const query_key = name.slice(0,-1)+'_id' // key to query subdocument array, e.g. tag_id in tags field
   let tpath = prefield
   let tmodel = name[0].toUpperCase() + name.slice(1,-1)

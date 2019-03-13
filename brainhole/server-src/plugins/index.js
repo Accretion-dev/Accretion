@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import fs from 'fs'
 import path from 'path'
 import globals from "../globals"
+globals.pluginsData = {}
 
 let components = ["hook", 'task', 'searchTemplate', 'model', 'data']
 let HookAction = {
@@ -13,24 +14,38 @@ let HookAction = {
   children: [],
 }
 
+function updateData (plugins) {
+  let models = []
+  let data = []
+  for (let eachPlugin of plugins) {
+    if (!eachPlugin.active) continue
+    for (let each of eachPlugin.model) {
+      models.push(each)
+    }
+    for (let each of eachPlugin.data) {
+      if (!each.active) continue
+      data.push(each.data)
+    }
+  }
+  globals.pluginsData.model = models
+  globals.pluginsData.data = data
+}
 async function updateHooks (plugins) {
   let initHookErrors = []
   for (let eachPlugin of plugins) {
     if (!eachPlugin.active) continue
-    if (eachPlugin.hook) {
-      for (let eachHook of eachPlugin.hook) {
-        if (!eachHook.active) continue
-        let uid = eachHook.uid
-        let parameters = Object.assign({}, eachHook.parameters, {uid})
-        try {
-          let thishook = await eachHook.function(parameters)
-          for (let hooktype of Object.keys(thishook)) {
-            if (!HookAction[hooktype]) HookAction[hooktype] = []
-            HookAction[hooktype].push(thishook[hooktype])
-          }
-        } catch (error) {
-          initHookErrors.push({plugin:eachPlugin.uid, hook: eachHook.uid, error: error.message})
+    for (let eachHook of eachPlugin.hook) {
+      if (!eachHook.active) continue
+      let uid = eachHook.uid
+      let parameters = Object.assign({}, eachHook.parameters, {uid})
+      try {
+        let thishook = await eachHook.function(parameters)
+        for (let hooktype of Object.keys(thishook)) {
+          if (!HookAction[hooktype]) HookAction[hooktype] = []
+          HookAction[hooktype].push(thishook[hooktype])
         }
+      } catch (error) {
+        initHookErrors.push({plugin:eachPlugin.uid, hook: eachHook.uid, error: error.message})
       }
     }
     if (eachPlugin.task) { // for auto run task
@@ -38,11 +53,11 @@ async function updateHooks (plugins) {
       }
     }
   }
-  globals.HookAction = HookAction
+  globals.pluginsData.hook = HookAction
   return initHookErrors
 }
-async function initPlugins () {
-  let pluginModel = mongoose.connection.db.collection('Plugins')
+async function initPlugins ({allActive}) {
+  let pluginModel = globals.pluginModel
   let plugins = []
   let pluginNames = fs.readdirSync(__dirname)
   let pluginUIDs = []
@@ -58,14 +73,20 @@ async function initPlugins () {
     pluginUIDs.push(uid)
 
     let oldConfig = await pluginModel.findOne({uid})
-    if (oldConfig) {
+    if (allActive) {
       Object.assign(pluginDict, {
-        active: oldConfig.active
+        active: true
       })
     } else {
-      Object.assign(pluginDict, {
-        active: false
-      })
+      if (oldConfig) {
+        Object.assign(pluginDict, {
+          active: oldConfig.active
+        })
+      } else {
+        Object.assign(pluginDict, {
+          active: false
+        })
+      }
     }
     let pluginDictModel = Object.assign({}, pluginDict)
     // for different component, e.g. model, hook, task, data
@@ -112,13 +133,15 @@ async function initPlugins () {
       {upsert: true}
     )
   }
+  // console.log('allPlugins:', await pluginModel.find({}).toArray())
   globals.plugins = plugins
   console.log('plugins:', plugins)
   let initHookErrors = await updateHooks(plugins)
-  console.log('HookAction:', HookAction)
+  console.log('pluginsData:', globals.pluginsData)
   if (initHookErrors.length) {
     throw Error(`init hook function error: ${JSON.stringify(initHookErrors,null,2)}`)
   }
+  updateData(plugins)
 }
 
 // functions about hooks and tasks

@@ -49,15 +49,8 @@ async function initIDs ({config}) {
   }
 }
 
-async function initTestDatabase ({config, databaseConfig}) {
+async function initTestDatabase ({config}) {
   let User = globals.Models.User
-  if (config.demoData || config.unittest) {
-    consola.ready({
-      message: `clean database`,
-      badge: true
-    })
-    let dropResult = await mongoose.connection.db.dropDatabase()
-  }
   await initIDs({config})
   // create default user
   let exist = await User.findOne({username: 'accretion'})
@@ -68,11 +61,6 @@ async function initTestDatabase ({config, databaseConfig}) {
     })
     await user.setPassword('cc')
     await user.save()
-  }
-  // init with test data
-  if (config.demoData) {
-    console.log('fill with demoData')
-    let da = new fillDemo()
   }
 }
 async function initProductDatabase () {
@@ -93,10 +81,28 @@ async function init ({config, databaseConfig}) {
     console.error(msg)
     consola.error(msg)
   }
-  await initPlugins()
+  globals.pluginModel = mongoose.connection.db.collection('Plugins')
+
+  // clean database if test database and unittest
+  if (databaseName === "test") {
+    if (config.demoData || config.unittest) {
+      consola.ready({
+        message: `clean database`,
+        badge: true
+      })
+      let dropResult = await mongoose.connection.db.dropDatabase()
+    }
+    if (config.demoData) {
+      console.log('fill with demoData')
+      let da = new fillDemo()
+    }
+  }
+
+  // if unittest, active all plugin by default
+  await initPlugins({allActive: databaseName === "test" && config.unittest})
   initModels()
   if (databaseName === "test") {
-    await initTestDatabase({config, databaseConfig})
+    await initTestDatabase({config})
   } else {
     await initProductDatabase()
   }

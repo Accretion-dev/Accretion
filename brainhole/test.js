@@ -25,7 +25,20 @@ test.before('init database', async t => {
   await delay(1000)
   console.log('delay 5000')
   await database_init({config: globalConfig, databaseConfig})
-  console.log('Setup complete, init database')
+  for (let plugin of globals.plugins) {
+    let entry = await globals.pluginModel.findOne({uid: plugin.uid})
+    t.truthy(entry)
+    entry.active = true
+    for (let data of entry.data) {
+      data.active = true
+    }
+    await globals.pluginModel.updateOne(
+      {uid: plugin.uid},
+      {$set: entry}
+    )
+  }
+  console.log('all models:', globals.All)
+  console.log('Setup complete, init database, enable all plugins')
 })
 
 test('after init database', async t => {
