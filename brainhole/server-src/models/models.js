@@ -4,6 +4,44 @@ import _ from 'lodash'
 import passportLocalMongoose from 'passport-local-mongoose'
 import globals from "../globals"
 let Schema = mongoose.Schema
+let todo
+
+// first create these base models, they do not have withs
+let SchemasRaw = { }
+// this special Models are not modified by APIs
+let special = [
+  'IDs',
+  'History',
+  'User',
+]
+let others = [
+  'Config', 'UserConfig',
+  'Editing', 'Workspace'
+]
+// add id and comment for all of them
+todo = [...others, ...special]
+todo.forEach(key => {
+  let Model = models[key]
+  Object.assign(Model.schema, {
+    id: { type: Number, auto: true },
+    comment: { type: String, index: true },
+  })
+})
+// should not modify history and user through API
+todo = [...others, ...special]
+todo.forEach(key => {
+  let Model = models[key]
+  let schemaDict = Model.schema
+  SchemasRaw[key] = new Schema(schemaDict, {collection: key})
+})
+// plugin user
+SchemasRaw.User.plugin(passportLocalMongoose)
+let ModelsRaw = {}
+todo.forEach(key => {
+  ModelsRaw[key] = mongoose.model(key, SchemasRaw[key])
+})
+globals.Models = ModelsRaw
+globals.Schemas = SchemasRaw
 
 let formatMap = new Map()
 formatMap.set(String, 'string')
@@ -11,7 +49,6 @@ formatMap.set(Boolean, 'boolean')
 formatMap.set(Date, 'date')
 formatMap.set(Schema.Types.Mixed, 'object')
 formatMap.set(Number, 'id')
-
 // TODO: supported format
 let metadataFormats = {
   'id': { type: String },
@@ -33,82 +70,238 @@ let metadataFormats = {
   'bool': { type: Boolean },
 }
 
-let top = [
-  'Article',
-  'Website',
-  'File',
-  'Book',
-  'Snippet',
-  'Info',
-]
-
-let others = [
-  'History',
-  'Config',
-  'UserConfig',
-  'IDs',
-  'Editing', 'Workspace'
-]
-
-let WithTag = [...top]
-let WithCatalogue = [...top]
-let WithRelation = [...top, 'Tag']
-// tag-like models have displayName, discription fields
-let TagLike = ['Tag', 'Catalogue', 'MetaData', 'Relation']
-
-let WithFather = [...top, 'Tag', 'Catalogue']
-let WithChild = [...top, 'Tag', 'Catalogue']
-let WithMetadata = [...WithFather] // and all nested fields
-
-let modelAll = [...WithMetadata, 'Metadata', 'Relation']
-
-let WithFlag = [...modelAll] // and all nested fields
-
-let All = [...modelAll, ...others]
-let AllWithUser = [...modelAll, 'UserConfig']
-let AllWithTimeComment = [...modelAll]
-
-let WithsDict = {
-  WithTag,
-  WithCatalogue,
-  WithRelation,
-  WithFather,
-  WithChild,
-  WithMetadata,
-  WithFlag,
-}
-
-let modelTypes = {
-    tops: top,
-    article: ['Article', 'Info', 'Book'],
-    website: ['Website'],
-    file: ['File'],
-    cross: top,
-    tag: ['Tag'],
-}
-
-// Extro fields of each fields
-// e.g. {'Article': ["tags", "catalogues"...]...}
-let Withs = {}
-All.forEach(key => Withs[key] = [])
-Object.keys(WithsDict).forEach(key => {
-  let fieldName = key.slice(4).toLowerCase()
-  if (fieldName === 'child') {
-    fieldName = fieldName + 'ren'
+// stringify structTree
+function stringifyStructTree (input) {
+  let result = {}
+  if (input instanceof Schema) {
+    let keys = Object.keys(input.tree)
+    keys = keys.filter(_ => _ !== '__v')
+    keys = keys.filter(_ => !(input.tree[_] instanceof mongoose.VirtualType))
+    keys.forEach(key => {
+      result[key] = stringifyStructTree(input.tree[key])
+    })
+    return result
+  } else if (Array.isArray(input)) {
+    return [stringifyStructTree(input[0])]
   } else {
-    fieldName = fieldName + 's'
+    let keys = Object.keys(input)
+    if (keys.includes('type') && typeof(input.type) === 'function') {
+      return formatMap.get(input.type)
+    } else {
+      keys.forEach(key => {
+        result[key] = stringifyStructTree(input[key])
+      })
+      return result
+    }
   }
-  WithsDict[key].forEach(eachmodel => {
-    Withs[eachmodel].push(fieldName)
+}
+// model init function
+function initModels () {
+  let Models = Object.assign({}, ModelsRaw)
+  let Schemas = Object.assign({}, SchemasRaw)
+
+  let top = [
+    'Article',
+    'Website',
+    'File',
+  ]
+  let WithTag = [...top]
+  let WithCatalogue = [...top]
+  let WithRelation = [...top, 'Tag']
+  let TagLike = ['Tag', 'Catalogue', 'MetaData', 'Relation']
+  let WithFather = [...top, 'Tag', 'Catalogue']
+  let WithChild = [...top, 'Tag', 'Catalogue']
+  let WithMetadata = [...WithFather] // and all nested fields
+  let modelAll = [...WithMetadata, 'Metadata', 'Relation']
+  let WithFlag = [...modelAll] // and all nested fields
+  let All = [...modelAll, ...others]
+  let AllWithUser = [...modelAll, 'UserConfig']
+  let AllWithTimeComment = [...modelAll]
+  let WithsDict = {
+    WithTag,
+    WithCatalogue,
+    WithRelation,
+    WithFather,
+    WithChild,
+    WithMetadata,
+    WithFlag,
+  }
+  // Extro fields of each fields
+  // e.g. {'Article': ["tags", "catalogues"...]...}
+  let Withs = {}
+  All.forEach(key => Withs[key] = [])
+  Object.keys(WithsDict).forEach(key => {
+    let fieldName = key.slice(4).toLowerCase()
+    if (fieldName === 'child') {
+      fieldName = fieldName + 'ren'
+    } else {
+      fieldName = fieldName + 's'
+    }
+    WithsDict[key].forEach(eachmodel => {
+      Withs[eachmodel].push(fieldName)
+    })
   })
-})
 
-let methods, schemaData
+  let schemaData
 
+  // compile all schemas
+  let foreignSchemas = {
+    User: {
+      username: { type: String }
+    }
+  }
+  let subSchema = {}
+  // tags, catalogues
+  let todos = ['Tag', 'Catalogue']
+  todos.forEach(ModelName => {
+    let type = ModelName.toLowerCase()
+    let withName = `With${ModelName}`
+    schemaData = {
+      [type+"_id"]: { type: Number },
+    }
+    subSchema[type] = new Schema(schemaData)
+    WithsDict[withName].forEach(key => {
+      let Model = models[key]
+      let schemaDict = Model.schema
+      schemaDict[`${type}s`] = [subSchema[type]]
+    })
+  })
+  // relations
+  schemaData = {
+    relation_id: { type: Number },
+    parameter: { type: Schema.Types.Mixed },
+    from_model: { type: String },
+    from_id: { type: Number },
+    to_model: { type: String },
+    to_id: { type: Number },
+    other_model: { type: String },
+    other_id: { type: Number },
+    aorb: { type: String },
+  }
+  subSchema.relation = new Schema(schemaData)
+  WithRelation.forEach(key => {
+    let Model = models[key]
+    let schemaDict = Model.schema
+    schemaDict.relations = [subSchema.relation]
+  })
+  // family
+  schemaData = {
+    id: { type: Number },
+  }
+  subSchema.family = new Schema(schemaData)
+  WithFather.forEach(key => {
+    let Model = models[key]
+    let schemaDict = Model.schema
+    schemaDict.fathers = [subSchema.family]
+  })
+  WithChild.forEach(key => {
+    let Model = models[key]
+    let schemaDict = Model.schema
+    schemaDict.children = [subSchema.family]
+  })
+  // metadatas (for WithMetadata and subSchema)
+  schemaData = {
+    metadata_id: { type: Number },
+    value: { type: Schema.Types.Mixed },
+  }
+  subSchema.metadata = new Schema(schemaData)
+  WithMetadata.forEach(key => {
+    let Model = models[key]
+    let schemaDict = Model.schema
+    schemaDict.metadatas = [subSchema.metadata]
+  })
+  // flags (for WithFlags and subSchema)
+  WithFlag.forEach(key => {
+    let Model = models[key]
+    let schemaDict = Model.schema
+    schemaDict.flags = { type: Schema.Types.Mixed }
+  })
+  Object.keys(subSchema).forEach(key => { // all subSchema except fathers and child have flags
+    if (['fathers', 'children', 'family'].includes(key)) return
+    let Model = subSchema[key]
+    Model.add({flags:{ type: Schema.Types.Mixed }})
+  })
+  // add user
+  AllWithUser.forEach(key => {
+    let Model = models[key]
+    let schemaDict = Model.schema
+    schemaDict.user = foreignSchemas.User
+  })
+  // add comment, createdAt, modifiedAt, id for All and subSchema
+  let extras = {
+    id: { type: Number, auto: true },
+    comment: { type: String, index: true },
+  }
+  All.forEach(key => {
+    let Model = models[key]
+    Object.assign(Model.schema, extras)
+  })
+  Object.keys(subSchema).forEach(key => {
+    if (['history', 'family'].includes(key)) return // not add for these models
+    let Model = subSchema[key]
+    Model.add(extras)
+  })
+  extras = {
+    createdAt: { type: Date, default: Date.now },
+    modifiedAt: { type: Date, default: Date.now },
+  }
+  AllWithTimeComment.forEach(key => {
+    let Model = models[key]
+    Object.assign(Model.schema, extras)
+  })
+  Object.keys(subSchema).forEach(key => {
+    if (['family'].includes(key)) return // not add for these models
+    let Model = subSchema[key]
+    Model.add(extras)
+  })
+  extras = { // about autoadd and hooks
+    _confirmed: { type: Boolean, default: false },
+    _origins: { type: Object, default: null },
+  }
+  Object.keys(subSchema).forEach(key => {
+    let Model = subSchema[key]
+    Model.add(extras)
+  })
+  // generate reverse field for Tag, Metadata, Relation and Catalogue
+  let todo =['Tag', 'Catalogue', 'Relation', 'Metadata']
+  for (let key of todo) {
+    let Model = models[key]
+    let schemaDict = Model.schema
+    schemaData = {}
+    for (let refkey of WithsDict[`With${key}`]) {
+      schemaData[refkey] = [{type: String}]
+    }
+    schemaDict.r = schemaData
+  }
 
-/* operation type:
-2. create, modify, delete
-*/
+  // 6. generate schemas
+  modelAll.forEach(key => {
+    let Model = models[key]
+    let schemaDict = Model.schema
+    Schemas[key] = new Schema(schemaDict, {collection: key})
+  })
+  let structTree = globals.structTree = stringifyStructTree(Schemas)
+
+  // generate models
+  modelAll.forEach(key => {
+    Models[key] = mongoose.model(key, Schemas[key])
+  })
+  globals.Models = Models
+  globals.Schemas = Schemas
+
+  globals.Withs = Withs
+  globals.WithsDict = WithsDict
+  globals.subSchema = subSchema
+  globals.All = All
+  if (globals.isMain) {
+    console.log('model info:', _.pick(globals, ['Withs', 'subSchema', 'structTree', 'Models', 'WithsDict']))
+  }
+
+  globals.api = api
+  globals.mongoose = mongoose
+
+  return {Models, Schemas, structTree, globals, All, Withs, WithsDict}
+}
 
 // _id of new top model and its submodel
 async function getNextSequenceValue(name) {
@@ -119,79 +312,6 @@ async function getNextSequenceValue(name) {
   return doc.value.count
 }
 
-/* Api entry function
-    operation: create, delete and modify, aggregate, findOne
-    * agregate and findOne:
-      just search and return result
-    * create
-      * with field: (e.g. tags, catalogues)
-        only create new submodels (e.g. add tags, add catalogues)
-      * without field:
-        create new top models with its submodels
-    * modify
-      * with field:
-        modify subfields with specific _id
-      * without field:
-        modify top models
-*/
-// TODO: add history and transaction
-/* different behavior with different combine of operation, data and query
-  operation can be
-    * '+': add or create
-    * '-': delete
-    * '*': modify
-  if operation is '+'
-    if !field:
-      create new document
-        processWiths
-    else:
-      add new 'tag' in field
-        if (field.indexOf('.')) >= 0
-          let [fieldPrefix, ..fieldSuffix]
-          data = data[fieldPrefix]
-          field = fieldSuffix.join('')
-        else
-          data = data[field]
-          field = ''
-        xxxAPI({operation, data, field, entry})
-        // in xxxAPI, again test field, if not ''
-        // should extract data, split field and call another API
-    elif operation is '-':
-      if !field:
-        processWiths // data change to null for all withsName
-        delete this document
-      else:
-        only delete some 'tag'
-        if (field.indexOf('.')) >= 0
-          let [fieldPrefix, ..fieldSuffix]
-          data = data[fieldPrefix]
-          field = fieldSuffix.join('')
-        else
-          data = data[field]
-          field = ''
-        xxxAPI({operation, data, field, entry})
-        // in xxxAPI, again test field, if not ''
-        // should extract data, split field and call another API
-    elif operation is '*':
-      if !field:
-        modify simple keys
-        processWiths
-          for each xxxAPI, if operations is modified
-            if data.id, get subentry with id
-            elif data[primarykey]
-              get subentry with primarykey
-              check duplicate
-                duplicate only happend at metadatas
-      else:
-        if (field.indexOf('.')) >= 0
-          let [fieldPrefix, ..fieldSuffix]
-          data = data[fieldPrefix]
-          field = fieldSuffix.join('')
-        else
-          data = data[field]
-          field = ''
-        xxxAPI({operation, data, field})
-*/
 let SubWiths = {
   'metadatas': ['flags'],
   'tags': ['flags'],
@@ -199,6 +319,7 @@ let SubWiths = {
   'relations': ['flags'],
 }
 async function queryTaglikeID ({field, query, test, getEntry, session, entry_model}) {
+  let Models = globals.Models
   // fullquery delete the query_key, only have query_key_id
   // query for foreignField if do not know id, else just include id
   let query_id, rawquery, fullquery, query_entry
@@ -268,6 +389,8 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
   }
   return {tag_query_id: query_id, raw_tag_query: rawquery, full_tag_query: fullquery, tag_query_entry: query_entry}
 }
+
+// all APIs
 async function querySub({entry, data, field, session}) {
   // query subdocument in a subdocument array (like tags, metadatas)
   let result, rawquery, fullquery
@@ -300,7 +423,7 @@ async function querySub({entry, data, field, session}) {
 }
 function extractSingleField ({model, field, data, sub}) {
   let fieldPrefix, fieldSuffix, newdata
-  let thisWiths = sub ? SubWiths : Withs
+  let thisWiths = sub ? SubWiths : globals.Withs
   if (field.indexOf('.') >= 0)  {
     [fieldPrefix, ...fieldSuffix] = field.split('.')
     fieldSuffix = fieldSuffix.join('.')
@@ -334,7 +457,7 @@ async function apiSingleField ({operation, model, field, data, entry, query, met
     }
   }
 
-  let history = new Models.History({
+  let history = new globals.Models.History({
     operation, modelID, model, field, data, query, result, withs, meta,
   }); history.$session(session); await history.save();
   return {operation, modelID, model, field, data, query, result, withs, meta}
@@ -347,7 +470,7 @@ function extractWiths ({ data, model, sub }) {
   if (sub) {
     thisWiths = SubWiths
   } else {
-    thisWiths = Withs
+    thisWiths = globals.Withs
   }
   let withs = thisWiths[model]
   if (!withs.length) {
@@ -378,7 +501,7 @@ async function processWiths ({ operation, prefield, field, entry, withs, sub, se
     if (sub) {
       thisWiths = SubWiths[sub]
     } else {
-      thisWiths = Withs[prefield]
+      thisWiths = globals.Withs[prefield]
     }
   } else { // only add/modify given withs
     thisWiths = Object.keys(withs)
@@ -427,6 +550,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
     query, model: model is always needed, query is needed in -*o
     field is needed when you want to operate the subfield instead of the entry
   */
+  let Models = globals.Models
   let Model = mongoose.models[model]
   if (!Model) throw Error(`unknown model ${model}`)
 
@@ -584,6 +708,7 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
 }
 
 async function DFSSearch({model, id, entry, path, type, session}) {
+  let Models = globals.Models
   if (!entry) {
     let r = await Models[model].find({id}).session(session)
     if (r.length !== 1) throw Error(`not single result when query ${model} with ${id}\nmodel:${model} id:${id} entry:${entry}, path:${path}, type:${type}`)
@@ -629,7 +754,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
       } else {
         queryData = each
       }
-      let r = await Models[model].find(queryData).session(session)
+      let r = await globals.Models[model].find(queryData).session(session)
       if (r.length !== 1) throw Error(`not single result when query ${model} with ${JSON.stringify(each,null,2)}\n${JSON.stringify(r),null,2}`)
       let anotherEntry = r[0]
       fullquerys.push({id: anotherEntry.id, anotherEntry})
@@ -691,16 +816,12 @@ async function fathersAPI ({operation, prefield, field, entry, data, session}) {
 async function childrenAPI ({operation, prefield, field, entry, data, session}) {
   return await familyAPI({operation, prefield, field, entry, data, type:'children', session})
 }
-/* comment:
-  * do not reject duplicate metadatas
-  * for catalogues, tags and relations, check duplicate in front end
-  * for auto added tags, ignore duplicated tags when added
-*/
 async function processAutoActions (auto_actions) {
   // make unique
   return auto_actions
 }
 async function taglikeAPI ({name, operation, prefield, field, data, entry, session}) {
+  let Models = globals.Models
   // tags, catalogues, metadatas, relations
   let hooks = globals.HookAction[name]
   const query_key = name.slice(0,-1)+'_id' // key to query subdocument array, e.g. tag_id in tags field
@@ -1126,7 +1247,7 @@ async function bulkAdd({model, data, session, meta}) {
       })
       result.push(r.result)
     }
-    let history = new Models.History({
+    let history = new globals.Models.History({
       operation:'++', data, meta,
     }); history.$session(session); await history.save();
 
@@ -1139,225 +1260,5 @@ async function bulkAdd({model, data, session, meta}) {
   }
 }
 
-
-/* compile all schemas
-1. generate nested schemas (only with simple field)
-2. add
-    tags, catalogues, relations
-    family
-    metadata
-    flags
-  for all needed schemas
-3. add user field for AllSimple
-4. add createdAt, modifiedAt, comment for all schema
-5. generate schema
-*/
-
-// 1. generate nested schemas (only with simple field), used later
-//Object.keys(models).forEach(key => {
-//  let Model = models[key]
-//  let nestedKeys
-//  if (Model.nestedKeys === 'all') {
-//    nestedKeys = Object.keys(Model.schema)
-//  } else {
-//    nestedKeys = Model.nestedKeys
-//  }
-//  let schema = _.pick(Model.schema, nestedKeys)
-//  schema._id = { type: Number, default: null },
-//  foreignSchemas[key] = schema
-//})
-// schemes of model when cited in other model
-let foreignSchemas = {
-  User: {
-    username: { type: String }
-  }
-}
-// 2. add subdocuments (e.g., tags in Article)
-let subSchema = {}
-
-// tags, catalogues
-let todos = ['Tag', 'Catalogue']
-todos.forEach(ModelName => {
-  let type = ModelName.toLowerCase()
-  let withName = `With${ModelName}`
-  schemaData = {
-    [type+"_id"]: { type: Number },
-  }
-  subSchema[type] = new Schema(schemaData)
-  WithsDict[withName].forEach(key => {
-    let Model = models[key]
-    let schemaDict = Model.schema
-    schemaDict[`${type}s`] = [subSchema[type]]
-  })
-})
-
-// relations (tops and Tag)
-// relations of the same or the different models
-schemaData = {
-  relation_id: { type: Number },
-  parameter: { type: Schema.Types.Mixed },
-  from_model: { type: String },
-  from_id: { type: Number },
-  to_model: { type: String },
-  to_id: { type: Number },
-  other_model: { type: String },
-  other_id: { type: Number },
-  aorb: { type: String },
-}
-subSchema.relation = new Schema(schemaData)
-WithRelation.forEach(key => {
-  let Model = models[key]
-  let schemaDict = Model.schema
-  schemaDict.relations = [subSchema.relation]
-})
-
-schemaData = {
-  id: { type: Number },
-}
-subSchema.family = new Schema(schemaData)
-// family
-WithFather.forEach(key => {
-  let Model = models[key]
-  let schemaDict = Model.schema
-  schemaDict.fathers = [subSchema.family]
-})
-WithChild.forEach(key => {
-  let Model = models[key]
-  let schemaDict = Model.schema
-  schemaDict.children = [subSchema.family]
-})
-
-// metadatas (for WithMetadata and subSchema)
-schemaData = {
-  metadata_id: { type: Number },
-  value: { type: Schema.Types.Mixed },
-}
-subSchema.metadata = new Schema(schemaData)
-WithMetadata.forEach(key => {
-  let Model = models[key]
-  let schemaDict = Model.schema
-  schemaDict.metadatas = [subSchema.metadata]
-})
-
-// flags (for WithFlags and subSchema)
-WithFlag.forEach(key => {
-  let Model = models[key]
-  let schemaDict = Model.schema
-  schemaDict.flags = { type: Schema.Types.Mixed }
-})
-Object.keys(subSchema).forEach(key => { // all subSchema except fathers and child have flags
-  if (['fathers', 'children', 'family'].includes(key)) return
-  let Model = subSchema[key]
-  Model.add({flags:{ type: Schema.Types.Mixed }})
-})
-// 3. user
-AllWithUser.forEach(key => {
-  let Model = models[key]
-  let schemaDict = Model.schema
-  schemaDict.user = foreignSchemas.User
-})
-// 4. comment, createdAt, modifiedAt, id for All and subSchema
-let extras = {
-  id: { type: Number, auto: true },
-  comment: { type: String, index: true },
-}
-All.forEach(key => {
-  let Model = models[key]
-  Object.assign(Model.schema, extras)
-})
-Object.keys(subSchema).forEach(key => {
-  if (['history', 'family'].includes(key)) return // not add for these models
-  let Model = subSchema[key]
-  Model.add(extras)
-})
-extras = {
-  createdAt: { type: Date, default: Date.now },
-  modifiedAt: { type: Date, default: Date.now },
-}
-AllWithTimeComment.forEach(key => {
-  let Model = models[key]
-  Object.assign(Model.schema, extras)
-})
-Object.keys(subSchema).forEach(key => {
-  if (['family'].includes(key)) return // not add for these models
-  let Model = subSchema[key]
-  Model.add(extras)
-})
-
-extras = { // about autoadd and hooks
-  _autoAdd: { type: Boolean, default: false },
-  _confirmed: { type: Boolean, default: false },
-  _origins: { type: Object, default: null },
-}
-Object.keys(subSchema).forEach(key => {
-  let Model = subSchema[key]
-  Model.add(extras)
-})
-
-// 5. generate reverse field for Tag, Metadata, Relation and Catalogue
-let todo =['Tag', 'Catalogue', 'Relation', 'Metadata']
-for (let key of todo) {
-  let Model = models[key]
-  let schemaDict = Model.schema
-  schemaData = {}
-  for (let refkey of WithsDict[`With${key}`]) {
-    schemaData[refkey] = [{type: String}]
-  }
-  schemaDict.r = schemaData
-}
-
-// 6. generate schemas
-let Schemas = { }
-let outputNames = [...All, 'User']
-outputNames.forEach(key => {
-  let Model = models[key]
-  let schemaDict = Model.schema
-  Schemas[key] = new Schema(schemaDict, {collection: key})
-})
-
-// plugin user
-Schemas.User.plugin(passportLocalMongoose)
-
-// stringify structTree
-function stringifyStructTree (input) {
-  let result = {}
-  if (input instanceof Schema) {
-    let keys = Object.keys(input.tree)
-    keys = keys.filter(_ => _ !== '__v')
-    keys = keys.filter(_ => !(input.tree[_] instanceof mongoose.VirtualType))
-    keys.forEach(key => {
-      result[key] = stringifyStructTree(input.tree[key])
-    })
-    return result
-  } else if (Array.isArray(input)) {
-    return [stringifyStructTree(input[0])]
-  } else {
-    let keys = Object.keys(input)
-    if (keys.includes('type') && typeof(input.type) === 'function') {
-      return formatMap.get(input.type)
-    } else {
-      keys.forEach(key => {
-        result[key] = stringifyStructTree(input[key])
-      })
-      return result
-    }
-  }
-}
-let structTree = stringifyStructTree(Schemas)
-d.s = Schemas
-d.mongoose = mongoose
-
-// generate models
-let Models = {}
-outputNames.forEach(key => {
-  Models[key] = mongoose.model(key, Schemas[key])
-})
-// init ids
-
-d.Models = Models
-d.api = api
-if (d.main) {
-  console.log('model info:', {Withs, subSchema, structTree, Schemas, foreignSchemas, Models, outputNames, WithsDict})
-}
-
-export default {Models, api, WithsDict, All, Withs, getRequire, bulkAdd}
+// export
+export default {api, initModels, getRequire, bulkAdd}

@@ -1,12 +1,12 @@
 import passport from 'passport'
 import express from 'express'
 import __ from '../models/models'
-const {Models} = __
-const {User} = Models
 let router = express.Router()
 import sessions from '../api/sessions'
+import globals from '../globals'
 
 router.post('/register/', async (req, res) => {
+  let User = globals.Models.User
   let {username, password} = req.body
   let exist = await User.findOne({username})
   if (exist) {

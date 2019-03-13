@@ -47,14 +47,16 @@ async function initPlugins () {
   let pluginNames = fs.readdirSync(__dirname)
   let pluginUIDs = []
   let componentUIDs = []
+  // for each plugin
   for (let filename of pluginNames) {
     let pluginDir = path.join(__dirname, filename)
     if (!fs.statSync(pluginDir).isDirectory()) continue
     let pluginDict = require(pluginDir).default
-    let uid = pluginDict.uid
+    let uid = pluginDict.uid // uid for each plugin
     if (!uid) throw Error(`Plugin should have a uid! current is ${JSON.stringify(pluginDict,null,2)}`)
     if (pluginUIDs.includes(uid)) throw Error(`Deplicated uid for plugin: ${pluginDict}`)
     pluginUIDs.push(uid)
+
     let oldConfig = await pluginModel.findOne({uid})
     if (oldConfig) {
       Object.assign(pluginDict, {
@@ -66,29 +68,33 @@ async function initPlugins () {
       })
     }
     let pluginDictModel = Object.assign({}, pluginDict)
+    // for different component, e.g. model, hook, task, data
     for (let component of components) {
       let componentDir = path.join(pluginDir, component)
+      // init component to []
       if (!pluginDict[component]) pluginDict[component] = []
       if (!pluginDictModel[component]) pluginDictModel[component] = []
       if (!fs.existsSync(componentDir)) continue
       fs.readdirSync(componentDir).forEach(subfilename => {
         let componentFile = path.join(componentDir, subfilename)
         let componentDict = require(componentFile).default
+        // console.log(component, componentFile, componentDict)
         componentDict.origin = pluginDict.name
         if (!componentDict.uid) throw Error(`all component should have a uid! current is ${JSON.stringify(pluginDict,null,2)}`)
-        componentDict.uid = `${uid}-${componentDict.uid}`
-        if (componentUIDs.includes(componentDict.uid)) throw Error(`Deplicated uid for component ${componentDict.uid} in plugin ${JSON.stringify(pluginDict,null,2)}`)
-        componentUIDs.push(uid)
-        let oldSubConfig
-        if (oldSubConfig) {
-          let oldSubConfig = pluginUIDs[component].find(_ => _.uid === componentDict.uid)
+        if (component !== 'model') { // for models, the uid of component itself should be unique
+          componentDict.uid = `${uid}-${componentDict.uid}`
         }
+        if (componentUIDs.includes(componentDict.uid)) throw Error(`Deplicated uid for component ${componentDict.uid} in plugin ${JSON.stringify(pluginDict,null,2)}`)
+        componentUIDs.push(componentDict.uid)
+        let oldSubConfig = oldConfig && oldConfig[component].find(_ => _.uid === componentDict.uid)
         if (oldSubConfig) {
+          // use the saved active and parameters
           Object.assign(componentDict, {
             active: oldSubConfig.active,
             parameters: oldSubConfig.parameters,
           })
         } else {
+          // use the default active and parameters
           Object.assign(componentDict, {
             active: false
           })

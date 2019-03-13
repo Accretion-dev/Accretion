@@ -1,4 +1,4 @@
-import debugSettings from './server/debug-settings-test'
+// import debugSettings from './server/debug-settings-test'
 import globalConfig from "./configs/config.js"
 import _ from 'lodash'
 import yaml from 'node-yaml'
@@ -7,7 +7,7 @@ let databaseConfig = yaml.readSync('../configs/mongod.yml')
 import _models from './server/models'
 const {init: database_init} = _models
 import __ from './server/models/models'
-const {Models, api, WithsDict, All, getRequire, bulkAdd} = __
+const {api, getRequire, bulkAdd} = __
 import mongoose from 'mongoose'
 import test from 'ava'
 import globals from './server/globals'
@@ -34,6 +34,9 @@ test('after init database', async t => {
 })
 
 test('transaction-base', async t => {
+  let Models = globals.Models
+  let WithsDict = globals.WithsDict
+  let All = globals.All
   // test simple add for Article
   console.log('transaction-base test')
   let session, start, end
@@ -67,6 +70,9 @@ test('transaction-base', async t => {
 })
 
 test('basic', async t => { // create, modify and delete for All model
+  let Models = globals.Models
+  let WithsDict = globals.WithsDict
+  let All = globals.All
   for (let each of All) {
     let Model = Models[each]
     let pks = getRequire(Model)
@@ -114,6 +120,9 @@ test('basic', async t => { // create, modify and delete for All model
   t.pass()
 })
 test('flags', async t => {
+  let Models = globals.Models
+  let WithsDict = globals.WithsDict
+  let All = globals.All
   let todos = WithsDict.WithFlag
   for (let each of todos) {
     let Model = Models[each]
@@ -227,6 +236,9 @@ test('flags', async t => {
   t.pass()
 })
 test('metadatas+flags', async t => {
+  let Models = globals.Models
+  let WithsDict = globals.WithsDict
+  let All = globals.All
   // init Metadatas
   let Metadatas = [
     {name: t.title + '-rate', format: 'string'},
@@ -619,6 +631,9 @@ test('metadatas+flags', async t => {
   t.pass()
 })
 test('relations+flags', async t => {
+  let Models = globals.Models
+  let WithsDict = globals.WithsDict
+  let All = globals.All
   // init relations
   let testWiths = "relations"
   let Relations = [
@@ -1170,6 +1185,9 @@ test('relations+flags', async t => {
   t.pass()
 })
 test('family', async t => {
+  let Models = globals.Models
+  let WithsDict = globals.WithsDict
+  let All = globals.All
   // contains one exception for familyLoop
   // init relations
   let testWiths = "fathers"
@@ -1432,6 +1450,9 @@ test('family', async t => {
   t.pass()
 })
 test('catalogues+flags', async t => {
+  let Models = globals.Models
+  let WithsDict = globals.WithsDict
+  let All = globals.All
   // init relations
   let testWiths = "catalogues"
   let Catalogues = [
@@ -1835,6 +1856,9 @@ test('catalogues+flags', async t => {
 })
 
 test('tags+flags', async t => {
+  let Models = globals.Models
+  let WithsDict = globals.WithsDict
+  let All = globals.All
   let testWiths = "tags"
   let Tags = [
     {name: t.title + '-0'},
