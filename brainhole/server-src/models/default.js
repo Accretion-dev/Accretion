@@ -26,10 +26,10 @@ const User = {
 const History = {
   schema: {
     time: { type: Date, default: Date.now },
-    operation: { type: String, index: true },
-    modelID: { type: Number, index: true},
-    model: { type: String, index: true},
-    field: { type: String, index: true },
+    operation: { type: String },
+    modelID: { type: Number },
+    model: { type: String },
+    field: { type: String },
     query: { type: Schema.Types.Mixed },
     data: { type: Schema.Types.Mixed },
     result: { type: Schema.Types.Mixed },
@@ -37,6 +37,8 @@ const History = {
     withs:  { type: Schema.Types.Mixed },
     meta: { type: Schema.Types.Mixed },
     other_result: { type: Schema.Types.Mixed },
+    origin: { type: Schema.Types.Mixed },
+    flags: { type: Schema.Types.Mixed },
   }
 }
 const Plugins = {

@@ -15,6 +15,10 @@ import fs from 'fs'
 import path from 'path'
 import delay from 'delay'
 
+function clone(obj) {
+  return JSON.parse(JSON.stringify(obj))
+}
+
 if (globalConfig.database !== 'test') {
   throw Error(`you can only run unittest on test database!`)
 }
@@ -38,7 +42,6 @@ test.before('init database', async t => {
   console.log('all models:', globals.All)
   console.log('Setup complete, init database, enable all plugins')
 })
-
 test('after init database', async t => {
   t.true(!!globals.plugins)
   t.pass()
@@ -687,7 +690,7 @@ test('relations+flags', async t => {
     async function testRelationConsistent(result) {
       for (let relation of result.relations) {
         let this_sub_entry = relation
-        let that_sub_entry = Object.assign({}, relation._doc)
+        let that_sub_entry = clone(relation._doc)
         if (this_sub_entry.aorb==='a') {
           that_sub_entry.other_id = this_sub_entry.from_id
           that_sub_entry.other_model = this_sub_entry.from_model
@@ -704,7 +707,7 @@ test('relations+flags', async t => {
         other_entry = other_entry[0]
         let other_that_sub_entry = other_entry.relations.find(_ => _.id===that_sub_entry.id)
         t.true(!!other_that_sub_entry, JSON.stringify({this_sub_entry, that_sub_entry, other_that_sub_entry},null,2))
-        other_that_sub_entry = other_that_sub_entry._doc
+        other_that_sub_entry = clone(other_that_sub_entry._doc) // if not clone, will get stuck here...
         t.deepEqual(other_that_sub_entry, that_sub_entry, JSON.stringify({this_sub_entry, that_sub_entry, other_that_sub_entry},null,2))
       }
     }
