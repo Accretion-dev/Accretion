@@ -1,4 +1,6 @@
 import mongoose from 'mongoose'
+import __ from '../plugins'
+const {components} = __
 const {Schema} = mongoose
 
 // most search can be done by searchKey
@@ -37,6 +39,16 @@ const History = {
     other_result: { type: Schema.Types.Mixed },
   }
 }
+const Plugins = {
+  schema: {
+    uid: { type: String },
+    name: { type: String },
+    author: { type: String },
+    author_email: { type: String },
+    description: { type: String },
+  }
+}
+components.map(_ => Plugins.schema[_] = [{type: mongoose.Schema.Types.Mixed}])
 
 // four import meta info for all other model
 const Metadata = {
@@ -167,7 +179,7 @@ const Workspace = {
 }
 
 export default {
-  IDs, User, History, 
+  IDs, User, History, Plugins,
   Metadata, Catalogue, Tag, Relation,
   Article, Website, File,
   Config, UserConfig,

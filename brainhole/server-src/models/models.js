@@ -14,6 +14,7 @@ let special = [
   'IDs',
   'History',
   'User',
+  'Plugins',
 ]
 let others = [
   'Config', 'UserConfig',
@@ -563,8 +564,12 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
   let Model = mongoose.models[model]
   if (!Model) throw Error(`unknown model ${model}`)
 
-  if (operation === 'aggregate' || operation === 'findOne') { // search
+  if (operation === 'a') { // search
     let result = await Model.aggregate(data).session(session)
+    // result is query aggregate result
+    return {operation, model, field, data, query, result, meta}
+  } else if (operation === 'f') {
+    let result = await Model.find(data).session(session)
     // result is query aggregate result
     return {operation, model, field, data, query, result, meta}
   } else if (operation === '+') {

@@ -57,7 +57,7 @@ async function updateHooks (plugins) {
   return initHookErrors
 }
 async function initPlugins ({allActive}) {
-  let pluginModel = globals.pluginModel
+  let pluginModel = globals.Models.Plugins
   let plugins = []
   let pluginNames = fs.readdirSync(__dirname)
   let pluginUIDs = []
@@ -73,6 +73,7 @@ async function initPlugins ({allActive}) {
     pluginUIDs.push(uid)
 
     let oldConfig = await pluginModel.findOne({uid})
+    if (oldConfig) oldConfig = oldConfig._doc
     if (allActive) {
       Object.assign(pluginDict, {
         active: true
@@ -107,7 +108,7 @@ async function initPlugins ({allActive}) {
         }
         if (componentUIDs.includes(componentDict.uid)) throw Error(`Deplicated uid for component ${componentDict.uid} in plugin ${JSON.stringify(pluginDict,null,2)}`)
         componentUIDs.push(componentDict.uid)
-        let oldSubConfig = oldConfig && oldConfig[component].find(_ => _.uid === componentDict.uid)
+        let oldSubConfig = oldConfig && oldConfig[component] && oldConfig[component].find(_ => _.uid === componentDict.uid)
         if (oldSubConfig) {
           // use the saved active and parameters
           Object.assign(componentDict, {
@@ -127,7 +128,7 @@ async function initPlugins ({allActive}) {
       })
     }
     plugins.push(pluginDict)
-    await pluginModel.updateOne(
+    await pluginModel.findOneAndUpdate(
       {uid},
       {$set: pluginDictModel},
       {upsert: true}
@@ -174,4 +175,4 @@ async function initPlugins ({allActive}) {
 
 
 
-export default {initPlugins}
+export default {initPlugins, components}

@@ -81,7 +81,6 @@ async function init ({config, databaseConfig}) {
     console.error(msg)
     consola.error(msg)
   }
-  globals.pluginModel = mongoose.connection.db.collection('Plugins')
 
   // clean database if test database and unittest
   if (databaseName === "test") {
