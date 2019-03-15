@@ -18,6 +18,15 @@ import delay from 'delay'
 function clone(obj) {
   return JSON.parse(JSON.stringify(obj))
 }
+function assignExists (a, b) {
+  let exists = Object.keys(a)
+  exists = exists.filter(_ => _ in b)
+  let newb = _.pick(b, exists)
+  Object.assign(a, newb)
+}
+function J(obj) {
+  return JSON.stringify(obj,null,2)
+}
 
 if (globalConfig.database !== 'test') {
   throw Error(`you can only run unittest on test database!`)
@@ -250,7 +259,7 @@ test('flags', async t => {
   t.pass()
 })
 
-test.only('all basic api', async t => {
+test.only('test all taglike api', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -270,13 +279,14 @@ test.only('all basic api', async t => {
       let Model = Models[each]
       let pks = getRequire(Model)
       let data, refetch, refetch_, result, id, updated
-      let taglike, newtaglike, rawdata, toDelete, tname
+      let taglike, newtaglike, deltaglike, rawdata, toDelete, tname
+      let getNewTaglike, getDelTaglike, modifyMap
       let testFunctions = {}
       let testDatas = {}
       async function doTest({refetch, refetch_}) {
         if (testDatas[tname]) {
           for (let key of Object.keys(testFunctions)) {
-            if (testDatas[tname][key]) {
+            if (testDatas && testDatas[tname][key]) {
               await testFunctions[key]({refetch, refetch_, data: testDatas[tname][key]})
             }
           }
@@ -329,7 +339,6 @@ test.only('all basic api', async t => {
             each.id = id
           }
         }
-        let getNewTaglike
         if (name === 'relations') {
           taglike = [
             { relation_id: T[0].id, // all _id
@@ -367,7 +376,7 @@ test.only('all basic api', async t => {
               to: {id:D[10].id}, comment: 'update comment 3', flags: {debug: 'change to false', debug: 'change to false'}, },
             { // _Q_: relation; M: relation(4 => 1)
               __query__: { relation: { name: T[4].name, } },
-              relation_id: T[1].id, comment: 'new new comment 4', flags: {debug: 'change to false', add_new_flag: true} },
+              relation_id: T[0].id, comment: 'new new comment 4', flags: {debug: 'change to false', add_new_flag: true} },
             { // _Q_: relation; Q: from; M: to (0->5 => 9->0)
               __query__: { relation: { name: T[5].name, }, },
               from: {id:D[9].id}, comment: 'new comment 5', flags: {debug: 'change to false', add_new_flag: true} },
@@ -415,12 +424,17 @@ test.only('all basic api', async t => {
                 t.deepEqual(other_that_sub_entry, that_sub_entry, JSON.stringify({this_sub_entry, that_sub_entry, other_that_sub_entry},null,2))
               }
             }
+            let NN = taglike.length
             testDatas = {
               '0-0': {
-                testRelationCount: [...Array(10).keys()].map(_ => 2),
-                testRelationConsistent: true
+                testRelationCount: [...Array(NN).keys()].map(_ => 2),
+                testRelationConsistent: true },
+              '0-1': {
+                testRelationCount: [4,2,4,0,0,2,2,2,2,2],
+                testRelationConsistent: true },
+              '0-2': {
+                testRelationCount: [...Array(NN).keys()].map(_ => 0),
               }
-
             }
           }
         } else if (name === 'metadatas') {
@@ -489,20 +503,57 @@ test.only('all basic api', async t => {
           })
           id = result.modelID
           refetch = clone((await Model.findOne({id}))._doc)
-          refetch_ = Object.assign({}, refetch)
+          refetch_ = clone(refetch)
           for (let index in taglike) { // repleace all withs data
-            Object.assign(refetch_[name][index], taglike[index])
+            assignExists(refetch_[name][index], taglike[index])
           }
           Object.assign(refetch_, _.omit(data, [name])) // repleace all simple data
           t.deepEqual(refetch, refetch_)
-          debugger
           await doTest({refetch, refetch_})
+        }
+        if(tname='0-1') { // modify with data.taglike
+          updated = refetch[name]
+          data.comment = `${each} ${name} modified`; data.flags.debug = false; data.flags.add_new_flag = true;
+          newtaglike = getNewTaglike(updated)
+          data[name] = newtaglike
+          result = await api({
+            operation: '*',
+            data,
+            model: each,
+            query: {id}
+          })
+          refetch = clone((await Model.findOne({id}))._doc)
+          refetch_ = clone(refetch)
+          Object.assign(refetch_, _.omit(data, [name])) // replace simple
+          for (let index in newtaglike) { // repleace all withs data
+            assignExists(refetch_[name][index], newtaglike[index])
+          }
+          t.deepEqual(refetch, refetch_)
+          await doTest({refetch, refetch_})
+        }
+        if(tname='0-2') { // modify with data.taglike
+          result = await api({
+            operation: '-',
+            model: each,
+            query: {id}
+          })
+          refetch = await Model.findOne({id})
+          t.true(refetch === null)
         }
       }
       if ("add, modify, delete (and reorder) taglike with field") {
-
+        if(tname='1-0') {
+        }
+        if(tname='1-1') {
+        }
+        if(tname='1-2') {
+        }
+        if(tname='1-3') {
+        }
+        if(tname='1-4') {
+        }
       }
-      if ("add, modify and delete taglike.flags with field" && name !== 'flags') {
+      if ("add, modify and delete taglike.flags with field") {
 
       }
 
@@ -535,7 +586,6 @@ test.only('all basic api', async t => {
   }
   t.pass()
 })
-
 
 test('metadatas+flags', async t => {
   let Models = globals.Models
