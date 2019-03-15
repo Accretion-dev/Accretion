@@ -10,6 +10,7 @@ import globals from '../globals'
 console.log('in models/index.js:', {initModels, getRequire})
 
 //mongoose.set('debug', true)
+mongoose.set('useFindAndModify', false)
 mongoose.set('useCreateIndex', true)
 
 async function initIDs ({config}) {

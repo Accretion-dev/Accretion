@@ -27,7 +27,10 @@ todo.forEach(key => {
   let Model = models[key]
   Object.assign(Model.schema, {
     id: { type: Number, auto: true },
-    comment: { type: String, index: true },
+    comment: { type: String },
+    // should not have index for these special models
+    // or you will get 'background operations' errors in unittest because
+    // you are dropping collections while building indexes on them
   })
 })
 // should not modify history and user through API
@@ -578,14 +581,18 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
   if (origin === undefined) origin = 'manual'
   let flags = {}
 
-  if (operation === 'a') { // search
-    let result = await Model.aggregate(data).session(session)
+  if (operation === 'aggregate') { // search
+    let result = await Model.aggregate(query).session(session)
     // result is query aggregate result
-    return {operation, model, field, data, query, result, meta}
-  } else if (operation === 'f') {
-    let result = await Model.find(data).session(session)
+    return result
+  } else if (operation === 'find') {
+    let result = await Model.find(query).session(session)
     // result is query aggregate result
-    return {operation, model, field, data, query, result, meta}
+    return result
+  } else if (operation === 'findOne') {
+    let result = await Model.findOne(query).session(session)
+    // result is query aggregate result
+    return result
   } else if (operation === '+') {
     let entry
     if (query && !field) {
