@@ -266,10 +266,10 @@ test.only('test all taglike api', async t => {
   let apis = [
     //{name: 'flags', withname: 'WithFlag'},
     //{name: 'family', withname: 'WithFather'},
-    //{name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
+    {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
     {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
     {name: 'relations', withname: 'WithRelation', model:'Relation'},
-    //{name: 'tags', withname: 'WithTag', model:'Tag'},
+    {name: 'tags', withname: 'WithTag', model:'Tag'},
   ]
   const pstep = true
   for (let apiname of apis) {
@@ -531,7 +531,7 @@ test.only('test all taglike api', async t => {
           }
         } else if (name === 'catalogues' || name === 'tags') {
           let n = name.slice(0, -1)
-          let n_id = name + "_id"
+          let n_id = n + "_id"
           taglike = [
             { [n_id]: T[0].id,
               comment: 'test comment', flags: { debug: true }, },
@@ -541,22 +541,60 @@ test.only('test all taglike api', async t => {
               comment: 'test comment', flags: { debug: true }, },
             { [n_id]: T[3].id,
               comment: 'test comment', flags: { debug: true }, },
-            { [n_id]: T[4].id,
-              comment: 'test comment', flags: { debug: true }, },
             { [n_id]: T[5].id,
+              comment: 'test comment', flags: { debug: true }, },
+            { [n_id]: T[6].id,
+              comment: 'test comment', flags: { debug: true }, },
+            { [n_id]: T[7].id,
+              comment: 'test comment', flags: { debug: true }, },
+            { [n_id]: T[8].id,
               comment: 'test comment', flags: { debug: true }, },
           ]
           getNewTaglike = (U) => { return [
-            { id: U[1].id, // M: value, comment and flags
-              comment: 'test comment updated', flags: { debug: 'change to false', add_new_flag: true }, },
-            { // _Q_: metadata; Q: metadata; M: metadata(3 => 4)
-              __query__: { metadata: { name: T[3].name }, },
-              metadata: { name: T[4].name }, comment: 'update comment', flags: { debug: 'change to false', add_new_flag: true }, },
-            { // _Q_: metadata_id; M: value...
-              __query__: { metadata_id: U[2].metadata_id, },
-              comment: 'new comment', flags: { debug: 'change to false', add_new_flag: true }, },
+            { id: U[0].id,
+              comment: 'test comment updated 0', flags: { debug: false, add_new_flag: true }, },
+            { __query__: { [n_id]: T[1].id, },
+              comment: 'test comment updated 1', flags: { debug: false, add_new_flag: true }, },
+            { __query__: { [n]: { id: T[2].id, } },
+              comment: 'new comment 2', flags: {debug: false, add_new_flag: true}
+            },
+            { __query__: { [n]: { name: T[3].name }, },
+              [n]: { id: T[4].id },
+              comment: 'update comment 3', flags: {debug: false, add_new_flag: true}
+            },
           ]}
 
+          getDelTaglike = (U) => { return [
+            { id: updated[0].id, },
+            { __query__: { [n]: { name: T[4].name }, }, },
+            { __query__: { [n_id]: U[2][n_id], }, }, ] }
+          if ('test fuctions and results') {
+            testFunctions.testCount = async ({data}) => {
+              let array = data
+              let counts = []
+              let length = array.length
+              let count = 0
+              for (let taglike of T) {
+                let eachentry = (await Models[tagModel].findOne({id: taglike.id}))._doc
+                counts.push(eachentry.r[each].length)
+                count += 1
+                if (count === length) break
+              }
+              t.deepEqual(array, counts, J({array, counts}))
+            }
+            let NN = taglike.length
+            testDatas = {
+              '0-0': { testCount: [1,1,1,1,0,1,1,1,1], },
+              '0-1': { testCount: [1,1,1,0,1,1,1,1,1], },
+              '0-2': { testCount: [0,0,0,0,0,0,0,0,0], },
+              '1-0': { testCount: [0,0,0,0,0,0,0,0,0], },
+              '1-1': { testCount: [1,1,1,1,0,1,1,1,1], },
+              '1-2': { testCount: [1,1,1,0,1,1,1,1,1], },
+              '1-3': { testCount: [0,1,0,0,0,1,1,1,1], },
+              '1-4': { testCount: [0,1,0,0,0,1,1,1,1], },
+              '2-0': { testCount: [0,0,0,0,0,0,0,0,0], },
+            }
+          }
         }
       }
       // do tests
