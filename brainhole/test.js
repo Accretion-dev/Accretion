@@ -465,6 +465,8 @@ test.only('test all taglike api', async t => {
               '1-4': {
                 testRelationCount: [2,2,4,0,0,2,2,2,0,0],
                 testRelationConsistent: true, },
+              '2-0': {
+                testRelationCount: [...Array(NN).keys()].map(_ => 0), },
             }
           }
         } else if (name === 'metadatas') {
@@ -569,9 +571,9 @@ test.only('test all taglike api', async t => {
           })
           refetch = await Model.findOne({id})
           t.true(refetch === null)
-          await doTest({refetch})
+          await doTest({})
           if (pstep) console.log(`  ${tname} done`) } }
-      if ("add, modify, delete (and reorder) taglike with field") {
+      if("add, modify, delete (and reorder) taglike with field") {
         if(tname='1-0') { // create clean articlelike
           delete data[name]
           result = await api({
@@ -625,7 +627,7 @@ test.only('test all taglike api', async t => {
           t.deepEqual(refetch, refetch_)
           await doTest({refetch})
           if (pstep) console.log(`  ${tname} done`) }
-        if(tname='1-3') {
+        if(tname='1-3') { // delete some taglike with field
           updated = refetch[name]
           toDelete = getDelTaglike(updated)
           result = await api({
@@ -644,7 +646,7 @@ test.only('test all taglike api', async t => {
           t.is(refetch_.length, 0)
           if (pstep) console.log(`  ${tname} done`)
         }
-        if(tname='1-4') {
+        if(tname='1-4') { // reorder al taglikes
           refetch = clone((await Model.findOne({id}))._doc)[name]
           ids = refetch.map(_ => ({id: _.id}))
           let newIDs = _.shuffle(ids)
@@ -660,17 +662,93 @@ test.only('test all taglike api', async t => {
           refetch = refetch[name]
           let refetchIDs = Array.from(refetch).map(_ => ({id: _.id}))
           t.deepEqual(newIDs, refetchIDs)
-          if (pstep) console.log(`  ${tname} done`)
-        }
-      }
-      if ("add, modify and delete taglike.flags with field") {
+          if (pstep) console.log(`  ${tname} done`) } }
+      if("add, modify and delete taglike.flags with field") {
+        // add flag with field
+        tname = 'modify flag'
+        let newData = [
+          {id: refetch[0].id, flags: {add_by_field_flag: true}},
+          {id: refetch[1].id, flags: {add_by_field_flag: true}},
+        ]
+        result = await api({
+          operation: '+',
+          data: {[name]: newData},
+          model: each,
+          query: {id},
+          field: `${name}.flags`
+        })
+        refetch = (await Model.findOne({id}))._doc[name]
+        t.is(newData[0].flags.add_by_field_flag, refetch[0].flags.add_by_field_flag)
+        t.is(newData[1].flags.add_by_field_flag, refetch[1].flags.add_by_field_flag)
+        if (pstep) console.log(`  ${tname} done`)
 
+        // modify flags with field
+        tname = 'modify flag'
+        let toModify = refetch.map(__ => _.pick(__, ["id", "flags"])) // old metadatas
+        toModify[0].flags.debug = 'hahaha'
+        toModify[1].flags.debug = 'lalala'
+        toModify[1].flags.new_added = 'huhuhu'
+        result = await api({
+          operation: '*',
+          data: {[name]: toModify},
+          model: each,
+          query: {id},
+          field: `${name}.flags`
+        })
+        refetch = await Model.findOne({id})
+        refetch = refetch._doc[name]
+        t.is( refetch[0].flags.debug, toModify[0].flags.debug )
+        t.is( refetch[1].flags.debug, toModify[1].flags.debug )
+        t.is( refetch[1].flags.new_added, toModify[1].flags.new_added )
+        if (pstep) console.log(`  ${tname} done`)
+
+        // delete flags in metadata
+        tname = 'delete flag'
+        refetch = clone((await Model.findOne({id}))._doc)[name]
+        let toDeleteRaw = refetch.map(__ => _.pick(__, ["id", "flags"]))
+        toDelete = toDeleteRaw.slice(0,2)
+        let toDeleteIDs = toDelete.map(_ => _.id)
+        result = await api({
+          operation: '-',
+          data: {[name]: toDelete},
+          model: each,
+          query: {id},
+          field: `${name}.flags`
+        })
+        refetch = clone((await Model.findOne({id}))._doc)[name]
+        for (let index=0;index<refetch.lenth;index++) {
+          let subentry = refetch[index]
+          if (toDeleteIDs.includes(subentry.id)) {
+            t.is(Object.keys(subentry.flags), 0)
+          } else {
+            t.deepEqual(subentry.flags, toDeleteRaw[index].flags)
+          }
+        }
+        if (pstep) console.log(`  ${tname} done`)
+
+        // delete the entry, clean up
+        tname = '2-0'
+        let oldresult = result
+        result = await api({
+          operation: '-',
+          model: each,
+          query: {id}
+        })
+        refetch = await Model.findOne({id})
+        t.true(refetch === null)
+        await doTest({})
+        if (pstep) console.log(`  ${tname} done`)
       }
 
       if('clean up') {
         // delete N articles
         for (let d of D) {
-          if (!d.id) continue
+          let entry = await api({
+            operation: 'findOne',
+            query: {id: d.id},
+            model: each
+          })
+          if (!entry) continue
           let result = await api({
             operation: '-',
             query: {id: d.id},
