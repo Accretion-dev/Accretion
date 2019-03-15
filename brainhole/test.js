@@ -267,15 +267,17 @@ test.only('test all taglike api', async t => {
     //{name: 'flags', withname: 'WithFlag'},
     //{name: 'family', withname: 'WithFather'},
     //{name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
-    //{name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
+    {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
     {name: 'relations', withname: 'WithRelation', model:'Relation'},
     //{name: 'tags', withname: 'WithTag', model:'Tag'},
   ]
+  const pstep = true
   for (let apiname of apis) {
     let {name, withname, model: tagModel} = apiname
     console.log(`test ${name}`)
     let todos = WithsDict[withname]
     for (let each of todos) {
+      if (pstep) console.log(`... ${each}`)
       let Model = Models[each]
       let pks = getRequire(Model)
       let data, refetch, refetch_, result, id, ids, updated
@@ -295,7 +297,6 @@ test.only('test all taglike api', async t => {
       let D = []
       let T = []
       let N = 10
-      const pstep = true
       if('setup') {
         // create N+1 articles, only create N-1 of them, D[0] is created later
         for (let i=0; i<=N; i++) {
@@ -494,6 +495,40 @@ test.only('test all taglike api', async t => {
               __query__: { metadata_id: U[2].metadata_id, },
               value: 'test rate string 2 modified', comment: 'new comment', flags: { debug: 'change to false', add_new_flag: true }, },
           ]}
+          modifyMap = {
+            0:1, 1:3, 2:2
+          }
+          getDelTaglike = (U) => { return [
+            { id: updated[0].id, },
+            { __query__: { metadata: { name: T[4].name }, }, },
+            { __query__: { metadata_id: U[2].metadata_id, }, }, ] }
+          if ('test fuctions and results') {
+            testFunctions.testMetadataCount = async ({data}) => {
+              let array = data
+              let counts = []
+              let length = array.length
+              let count = 0
+              for (let metadata of T) {
+                let eachMetadata = (await Models.Metadata.findOne({id: metadata.id}))._doc
+                counts.push(eachMetadata.r[each].length)
+                count += 1
+                if (count === length) break
+              }
+              t.deepEqual(array, counts, J({array, counts}))
+            }
+            let NN = taglike.length
+            testDatas = {
+              '0-0': { testMetadataCount: [2,2,1,1,0], },
+              '0-1': { testMetadataCount: [2,2,1,0,1], },
+              '0-2': { testMetadataCount: [0,0,0,0,0], },
+              '1-0': { testMetadataCount: [0,0,0,0,0], },
+              '1-1': { testMetadataCount: [2,2,1,1,0], },
+              '1-2': { testMetadataCount: [2,2,1,0,1], },
+              '1-3': { testMetadataCount: [1,2,0,0,0], },
+              '1-4': { testMetadataCount: [1,2,0,0,0], },
+              '2-0': { testMetadataCount: [0,0,0,0,0], },
+            }
+          }
         } else if (name === 'catalogues' || name === 'tags') {
           let n = name.slice(0, -1)
           let n_id = name + "_id"
@@ -558,7 +593,11 @@ test.only('test all taglike api', async t => {
           refetch_ = clone(refetch)
           Object.assign(refetch_, _.omit(data, [name])) // replace simple
           for (let index in newtaglike) { // repleace all withs data
-            assignExists(refetch_[name][index], newtaglike[index])
+            if (modifyMap) {
+              assignExists(refetch_[name][modifyMap[index]], newtaglike[index])
+            } else {
+              assignExists(refetch_[name][index], newtaglike[index])
+            }
           }
           t.deepEqual(refetch, refetch_)
           await doTest({refetch})
@@ -622,7 +661,11 @@ test.only('test all taglike api', async t => {
           refetch_ = clone(refetch)
           Object.assign(refetch_, _.omit(data, [name])) // replace simple
           for (let index in newtaglike) { // repleace all withs data
-            assignExists(refetch_[name][index], newtaglike[index])
+            if (modifyMap) {
+              assignExists(refetch_[name][modifyMap[index]], newtaglike[index])
+            } else {
+              assignExists(refetch_[name][index], newtaglike[index])
+            }
           }
           t.deepEqual(refetch, refetch_)
           await doTest({refetch})
