@@ -265,26 +265,28 @@ test.only('test all taglike api', async t => {
   let All = globals.All
   let apis = [
     //{name: 'flags', withname: 'WithFlag'},
-    // {name: 'family', withname: 'WithFather'},
-    {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
-    {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
+    //{name: 'family', withname: 'WithFather'},
+    //{name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
+    //{name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
     {name: 'relations', withname: 'WithRelation', model:'Relation'},
-    {name: 'tags', withname: 'WithTag', model:'Tag'},
+    //{name: 'tags', withname: 'WithTag', model:'Tag'},
   ]
   const pstep = true
   for (let apiname of apis) {
     let {name, withname, model: tagModel} = apiname
     console.log(`test ${name}`)
     let todos = WithsDict[withname]
-    for (let each of todos) {
+    for (let each of todos.slice(0,1)) {
       if (pstep) console.log(`... ${each}`)
       let Model = Models[each]
       let pks = getRequire(Model)
       let data, refetch, refetch_, result, id, ids, updated
       let taglike, newtaglike, deltaglike, rawdata, toDelete, tname
-      let getNewTaglike, getDelTaglike, modifyMap
+      let getNewTaglike, getDelTaglike, modifyMap, getOtherData, input
+      let __
       let testFunctions = {}
       let testDatas = {}
+      let omitnames = [name]
       async function doTest({refetch, result}) {
         if (testDatas[tname]) {
           for (let key of Object.keys(testFunctions)) {
@@ -401,7 +403,7 @@ test.only('test all taglike api', async t => {
                 count += 1
                 if (count === length) break
               }
-              // console.log(array, counts)
+              // console.log({array, counts})
               t.deepEqual(array, counts, JSON.stringify({array, counts}))
             }
             testFunctions.testRelationConsistent = async ({refetch}) => {
@@ -441,7 +443,7 @@ test.only('test all taglike api', async t => {
               }
             }
 
-            let NN = taglike.length
+            let NN = taglike.relations.length
             testDatas = {
               '0-0': {
                 testRelationCount: [...Array(NN).keys()].map(_ => 2),
@@ -596,11 +598,26 @@ test.only('test all taglike api', async t => {
             }
           }
         } else if (name === 'family') {
-
+          omitnames = ['fathers', 'children']
+          taglike = {
+            fathers: [
+              {id: D[1].id},
+              {id: D[2].id},
+              {comment: D[5].comment},
+            ],
+            children: [
+              {id: D[3].id},
+              {id: D[4].id},
+            ]
+          }
+          getDelTaglike = (U) => {
+          }
           if('test functions and results') {
             testFunctions.countFamily = async ({data}) => {
               let array = data
               let result = []
+              let length = array.length
+              let count = 0
               for (let data of D) {
                 let entry = await Models[each].findOne({id:data.id})
                 if (entry) {
@@ -608,11 +625,13 @@ test.only('test all taglike api', async t => {
                 } else {
                   result.push([-1,-1])
                 }
+                count += 1
+                if (count === length) break
               }
               t.deepEqual(array, result)
             }
-            testFunctions.testFamilyConsistent = async ({result}) => {
-              result = result.result
+            testFunctions.testFamilyConsistent = async ({refetch}) => {
+              result = refetch
               for (let type of ['fathers', 'children']) {
                 for (let item of result[type]) {
                   let other_entry = (await Models[each].findOne({id: item.id}))._doc
@@ -623,7 +642,6 @@ test.only('test all taglike api', async t => {
               }
             }
             testFunctions.testFamilyDeleteConsistent = async ({result}) => {
-              result = result.result
               let {id: modelID, withs} = result
               for (let type of ['fathers', 'children']) {
                 if (!withs[type]) continue
@@ -635,152 +653,253 @@ test.only('test all taglike api', async t => {
                 }
               }
             }
-
-          }
+            testDatas = {
+              '0-0': {
+                countFamily: [[3,2],[0,1],[0,1],[1,0],[1,0],[0,1]],
+                testFamilyConsistent: true },
+              '0-2': {
+                countFamily: [[-1,-1],[0,0],[0,0],[0,0],[0,0],[0,0]],
+                testFamilyDeleteConsistent: true },
+              '1-1': {
+                countFamily: [[3,2],[0,1],[0,1],[1,0],[1,0],[0,1]],
+                testFamilyConsistent: true },
+              '1-3-fathers': {
+                countFamily: [[3,1],[0,1],[0,1],[1,0],[0,0],[0,1]],
+                testFamilyDeleteConsistent: true },
+              '1-3-children': {
+                countFamily: [[2,1],[0,1],[0,1],[1,0],[0,0],[0,0]],
+                testFamilyDeleteConsistent: true },
+              '1-5-family-loop': {
+                countFamily: [[1,1],[0,1],[0,0],[1,0],[0,0],[0,0]],
+                testFamilyDeleteConsistent: true },
+              }
+            }
         } else if (name === 'flags') {
         }
+      }
+      // test functions
+      async function createWithTaglike (input) {
+        let {data, taglike, model} = input
+        let omitnames = Object.keys(taglike)
+        let datause = Object.assign({}, data, taglike)
+        let result = await api({
+          operation: '+',
+          data: datause,
+          model,
+        })
+        let id = result.modelID
+        data.id = id
+        let refetch = clone((await Model.findOne({id}))._doc)
+        let refetch_ = clone(refetch)
+        for (let name in Object.keys(taglike)) {
+          for (let index in taglike[name]) { // repleace all withs data
+            assignExists(refetch_[name][index], taglike[name][index])
+          }
+        }
+        Object.assign(refetch_, _.omit(data, omitnames)) // repleace all simple data
+        t.deepEqual(refetch, refetch_)
+        return {result, refetch}
+      }
+      async function modifyWithTaglike (input) {
+        let {data, newtaglike, query, modifyMap, model} = input
+        let omitnames = Object.keys(newtaglike)
+        data.comment = `${each} ${name} modified`; data.flags.debug = false; data.flags.add_new_flag = true;
+        let datause = Object.assign({}, data, newtaglike)
+        let result = await api({
+          operation: '*',
+          data: datause,
+          model,
+          query,
+        })
+        let refetch = clone((await Model.findOne(query))._doc)
+        let refetch_ = clone(refetch)
+        Object.assign(refetch_, _.omit(data, omitnames)) // replace simple
+        for (let name in Object.keys(newtaglike)) {
+          for (let index in newtaglike[name]) { // repleace all withs data
+            if (modifyMap) {
+              assignExists(refetch_[name][modifyMap[index]], newtaglike[name][index])
+            } else {
+              assignExists(refetch_[name][index], newtaglike[name][index])
+            }
+          }
+        }
+        t.deepEqual(refetch, refetch_)
+        return {result, refetch}
+      }
+      async function deleteWithID (input) {
+        let {query, model} = input
+        let result = await api({
+          operation: '-',
+          model,
+          query,
+        })
+        let refetch = await Model.findOne(query)
+        t.true(refetch === null)
+        return {result, refetch}
+      }
+      async function createWithCleanData (input) {
+        let {data, model} = input
+        let result = await api({
+          operation: '+',
+          data,
+          model,
+        })
+        let id = result.modelID
+        data.id = id
+        let refetch = clone((await Model.findOne({id}))._doc)
+        let refetch_ = clone(refetch)
+        Object.assign(refetch_, data) // replace simple
+        t.deepEqual(refetch, refetch_)
+        return {result, refetch}
+      }
+      async function addWithField (input) {
+        let {query, taglike, model} = input
+        let fields = Object.keys(taglike)
+        if (fields.length>1) throw Error(`more than one field! ${taglike}`)
+        let field = fields[0]
+        let result = await api({
+          operation: '+',
+          data: taglike,
+          model,
+          query,
+          field,
+        })
+        let id = result.modelID
+        let refetch = clone((await Model.findOne({id}))._doc)
+        let refetch_ = clone(refetch)
+        for (let index in taglike[field]) { // repleace all withs data
+          assignExists(refetch_[field][index], taglike[field][index])
+        }
+        t.deepEqual(refetch, refetch_)
+        return {result, refetch}
+      }
+      async function modifyWithField (input) {
+        let {query, newtaglike, modifyMap, model} = input
+        let fields = Object.keys(newtaglike)
+        if (fields.length>1) throw Error(`more than one field! ${taglike}`)
+        let field = fields[0]
+        let result = await api({
+          operation: '*',
+          data: newtaglike,
+          model,
+          query,
+          field,
+        })
+        let refetch = clone((await Model.findOne(query))._doc)
+        let refetch_ = clone(refetch)
+        for (let index in newtaglike[field]) { // repleace all withs data
+          if (modifyMap) {
+            assignExists(refetch_[field][modifyMap[index]], newtaglike[field][index])
+          } else {
+            assignExists(refetch_[field][index], newtaglike[field][index])
+          }
+        }
+        t.deepEqual(refetch, refetch_)
+        return {result, refetch}
+      }
+      async function deleteWithField (input) {
+        let {query, deltaglike, model} = input
+        let fields = Object.keys(deltaglike)
+        if (fields.length>1) throw Error(`more than one field! ${taglike}`)
+        let field = fields[0]
+        let result = await api({
+          operation: '-',
+          data: deltaglike,
+          model,
+          query,
+          field
+        })
+        let refetch = clone((await Model.findOne(query))._doc)
+        let nrefetch = refetch[field]
+        let updated = result.withs[field]
+        let ids = updated.map(_=>_.id)
+        let refetch_ = nrefetch.filter(_ => ids.includes(_.id))
+        t.is(refetch_.length, 0)
+        return {result, refetch}
       }
 
       // do tests
       if("create, modify with data.taglike") {
         if(tname='0-0') { // create with data.taglike
-          Object.assign(data, taglike)
-          result = await api({
-            operation: '+',
-            data,
-            model: each
-          })
-          id = result.modelID
-          refetch = clone((await Model.findOne({id}))._doc)
-          refetch_ = clone(refetch)
-          for (let name in Object.keys(taglike)) {
-            for (let index in taglike[name]) { // repleace all withs data
-              assignExists(refetch_[name][index], taglike[name][index])
-            }
-          }
-          Object.assign(refetch_, _.omit(data, [name])) // repleace all simple data
-          t.deepEqual(refetch, refetch_)
-          await doTest({refetch})
+          input = {data, taglike, model:each}
+          __ = await createWithTaglike(input)
+          result = __.result
+          refetch = __.refetch
+          await doTest({refetch, result})
           if (pstep) console.log(`  ${tname} done`) }
-        if(tname='0-1') { // modify with data.taglike
+        if((tname='0-1') && name !== 'family') { // modify with data.taglike
           updated = refetch[name]
-          data.comment = `${each} ${name} modified`; data.flags.debug = false; data.flags.add_new_flag = true;
           newtaglike = getNewTaglike(updated)
-          Object.assign(data, newtaglike)
-          result = await api({
-            operation: '*',
-            data,
-            model: each,
-            query: {id}
-          })
-          refetch = clone((await Model.findOne({id}))._doc)
-          refetch_ = clone(refetch)
-          Object.assign(refetch_, _.omit(data, [name])) // replace simple
-          for (let name in Object.keys(newtaglike)) {
-            for (let index in newtaglike[name]) { // repleace all withs data
-              if (modifyMap) {
-                assignExists(refetch_[name][modifyMap[index]], newtaglike[name][index])
-              } else {
-                assignExists(refetch_[name][index], newtaglike[name][index])
-              }
-            }
-          }
-          t.deepEqual(refetch, refetch_)
+          input = {data, newtaglike, query: {id: result.result.id}, modifyMap, model:each}
+          __ = await modifyWithTaglike (input)
+          result = __.result
+          refetch = __.refetch
           await doTest({refetch, result})
           if (pstep) console.log(`  ${tname} done`) }
         if(tname='0-2') { // modify with data.taglike
-          result = await api({
-            operation: '-',
-            model: each,
-            query: {id}
-          })
-          refetch = await Model.findOne({id})
-          t.true(refetch === null)
+          __ = await deleteWithID({query: {id: result.result.id}, model:each})
+          result = __.result
           await doTest({result})
           if (pstep) console.log(`  ${tname} done`) } }
       if("add, modify, delete (and reorder) taglike with field") {
         if(tname='1-0') { // create clean articlelike
-          for (let name of Object.keys(taglike)) {
-            delete data[name]
-          }
-          result = await api({
-            operation: '+',
-            data,
-            model: each
-          })
-          id = result.modelID
-          data.id = id
-          refetch = clone((await Model.findOne({id}))._doc)
-          refetch_ = clone(refetch)
-          Object.assign(refetch_, data) // replace simple
-          t.deepEqual(refetch, refetch_)
+          input = {data, model:each}
+          __ = await createWithCleanData(input)
+          result = __.result
+          refetch = __.refetch
           await doTest({refetch, result})
           if (pstep) console.log(`  ${tname} done`)
         }
         if(tname='1-1') { // add taglike with field
-          result = await api({
-            operation: '+',
-            data: taglike,
-            model: each,
-            query: {id},
-            field: name,
-          })
-          id = result.modelID
-          refetch = clone((await Model.findOne({id}))._doc)
-          refetch_ = clone(refetch)
-          Object.assign(refetch_, _.omit(data, [name])) // replace simple
-          for (let name in Object.keys(taglike)) {
-            for (let index in taglike[name]) { // repleace all withs data
-              assignExists(refetch_[name][index], taglike[name][index])
-            }
-          }
-          t.deepEqual(refetch, refetch_)
+          input = {query:{id: result.result.id}, taglike, model:each}
+          __ = await addWithField(input)
+          result = __.result
+          refetch = __.refetch
           await doTest({refetch, result})
           if (pstep) console.log(`  ${tname} done`) }
-        if(tname='1-2') { // modify taglike with field
+        if((tname='1-2') && name !== 'family') { // modify taglike with field
           updated = refetch[name]
           newtaglike = getNewTaglike(updated)
-          result = await api({
-            operation: '*',
-            data: newtaglike,
-            model: each,
-            query: {id},
-            field: name
-          })
-          refetch = clone((await Model.findOne({id}))._doc)
-          refetch_ = clone(refetch)
-          Object.assign(refetch_, _.omit(data, [name])) // replace simple
-          for (let name in Object.keys(newtaglike)) {
-            for (let index in newtaglike[name]) { // repleace all withs data
-              if (modifyMap) {
-                assignExists(refetch_[name][modifyMap[index]], newtaglike[name][index])
-              } else {
-                assignExists(refetch_[name][index], newtaglike[name][index])
-              }
-            }
-          }
-          t.deepEqual(refetch, refetch_)
+          input = {query:{id: result.result.id}, newtaglike, modifyMap, model:each}
+          __ = await modifyWithField(input)
+          result = __.result
+          refetch = __.refetch
           await doTest({refetch, result})
           if (pstep) console.log(`  ${tname} done`) }
-        if(tname='1-3') { // delete some taglike with field
+        if((tname='1-3') && name !== 'family') { // delete some taglike with field
           updated = refetch[name]
-          toDelete = getDelTaglike(updated)
+          deltaglike = getDelTaglike(updated)
+          input = {query:{id: result.result.id}, deltaglike, model:each}
+          __ = await deleteWithField(input)
+          result = __.result
+          refetch = __.refetch
+          await doTest({refetch, result})
+          if (pstep) console.log(`  ${tname} done`)
+        } else { // test family delete
+          updated = refetch[name]
+          let toDeleteAll = getDelTaglike(updated)
+          tname='1-3-children'
+          toDelete = toDeleteAll.children
           result = await api({
             operation: '-',
-            data: toDelete,
+            data: {children: toDelete.data},
             model: each,
-            query: {id},
-            field: name
+            query: {id: toDelete.id},
+            field: 'children'
           })
-          refetch = clone((await Model.findOne({id}))._doc)
           await doTest({refetch, result})
-          refetch = refetch[name]
-          updated = result.withs[name]
-          ids = updated.map(_=>_.id)
-          refetch_ = refetch.filter(_ => ids.includes(_.id))
-          t.is(refetch_.length, 0)
-          if (pstep) console.log(`  ${tname} done`)
+          tname='1-3-fathers'
+          toDelete = toDeleteAll.fathers
+          result = await api({
+            operation: '-',
+            data: {fathers: toDelete.data},
+            model: each,
+            query: {id: toDelete.id},
+            field: 'fathers'
+          })
+          await doTest({refetch, result})
         }
+
         if(tname='1-4') { // reorder al taglikes
           refetch = clone((await Model.findOne({id}))._doc)[name]
           ids = refetch.map(_ => ({id: _.id}))
@@ -798,8 +917,10 @@ test.only('test all taglike api', async t => {
           let refetchIDs = Array.from(refetch).map(_ => ({id: _.id}))
           t.deepEqual(newIDs, refetchIDs)
           if (pstep) console.log(`  ${tname} done`) } }
-      if("add, modify and delete taglike.flags with field") {
+      if(0&&"add, modify and delete taglike.flags with field") {
         // add flag with field
+        debugger
+        id = data.id
         tname = 'modify flag'
         let newData = [
           {id: refetch[0].id, flags: {add_by_field_flag: true}},
@@ -813,6 +934,7 @@ test.only('test all taglike api', async t => {
           field: `${name}.flags`
         })
         refetch = (await Model.findOne({id}))._doc[name]
+        debugger
         t.is(newData[0].flags.add_by_field_flag, refetch[0].flags.add_by_field_flag)
         t.is(newData[1].flags.add_by_field_flag, refetch[1].flags.add_by_field_flag)
         if (pstep) console.log(`  ${tname} done`)
@@ -863,14 +985,8 @@ test.only('test all taglike api', async t => {
 
         // delete the entry, clean up
         tname = '2-0'
-        let oldresult = result
-        result = await api({
-          operation: '-',
-          model: each,
-          query: {id}
-        })
-        refetch = await Model.findOne({id})
-        t.true(refetch === null)
+        __ = await deleteWithID({query: {id: data.id}, model:each})
+        result = __.result
         await doTest({result})
         if (pstep) console.log(`  ${tname} done`)
       }
