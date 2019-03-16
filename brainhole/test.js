@@ -266,17 +266,17 @@ test.only('test all taglike api', async t => {
   let apis = [
     //{name: 'flags', withname: 'WithFlag'},
     //{name: 'family', withname: 'WithFather'},
-    //{name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
-    //{name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
+    {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
+    {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
     {name: 'relations', withname: 'WithRelation', model:'Relation'},
-    //{name: 'tags', withname: 'WithTag', model:'Tag'},
+    {name: 'tags', withname: 'WithTag', model:'Tag'},
   ]
   const pstep = true
   for (let apiname of apis) {
     let {name, withname, model: tagModel} = apiname
     console.log(`test ${name}`)
     let todos = WithsDict[withname]
-    for (let each of todos.slice(0,1)) {
+    for (let each of todos) {
       if (pstep) console.log(`... ${each}`)
       let Model = Models[each]
       let pks = getRequire(Model)
