@@ -901,6 +901,7 @@ test.only('test all taglike api', async t => {
         }
 
         if(tname='1-4') { // reorder al taglikes
+          id = data.id
           refetch = clone((await Model.findOne({id}))._doc)[name]
           ids = refetch.map(_ => ({id: _.id}))
           let newIDs = _.shuffle(ids)
@@ -917,15 +918,20 @@ test.only('test all taglike api', async t => {
           let refetchIDs = Array.from(refetch).map(_ => ({id: _.id}))
           t.deepEqual(newIDs, refetchIDs)
           if (pstep) console.log(`  ${tname} done`) } }
-      if(0&&"add, modify and delete taglike.flags with field") {
+      if("add, modify and delete taglike.flags with field") {
         // add flag with field
-        debugger
         id = data.id
         tname = 'modify flag'
+        let oldData = [
+          {id: refetch[0].id, flags: refetch[0].flags},
+          {id: refetch[1].id, flags: refetch[1].flags},
+        ]
         let newData = [
           {id: refetch[0].id, flags: {add_by_field_flag: true}},
           {id: refetch[1].id, flags: {add_by_field_flag: true}},
         ]
+        Object.assign(oldData[0].flags, newData[0].flags)
+        Object.assign(oldData[1].flags, newData[1].flags)
         result = await api({
           operation: '+',
           data: {[name]: newData},
@@ -933,10 +939,10 @@ test.only('test all taglike api', async t => {
           query: {id},
           field: `${name}.flags`
         })
-        refetch = (await Model.findOne({id}))._doc[name]
-        debugger
-        t.is(newData[0].flags.add_by_field_flag, refetch[0].flags.add_by_field_flag)
-        t.is(newData[1].flags.add_by_field_flag, refetch[1].flags.add_by_field_flag)
+        refetch = clone((await Model.findOne({id}))._doc)[name]
+        refetch = refetch.map(__ => _.pick(__, ["id", "flags"])).slice(0,2) // old metadatas
+        // console.log(J({refetch, oldData}))
+        t.deepEqual(refetch, oldData)
         if (pstep) console.log(`  ${tname} done`)
 
         // modify flags with field

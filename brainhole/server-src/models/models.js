@@ -228,12 +228,12 @@ function initModels () {
   WithFlag.forEach(key => {
     let Model = models[key]
     let schemaDict = Model.schema
-    schemaDict.flags = { type: Schema.Types.Mixed }
+    schemaDict.flags = { type: Schema.Types.Mixed, default: {} }
   })
   Object.keys(subSchema).forEach(key => { // all subSchema except fathers and child have flags
     if (['fathers', 'children', 'family'].includes(key)) return
     let Model = subSchema[key]
-    Model.add({flags:{ type: Schema.Types.Mixed }})
+    Model.add({flags:{ type: Schema.Types.Mixed, default: {} }})
   })
   // add user
   AllWithUser.forEach(key => {
@@ -767,16 +767,13 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
   // prefield could be any
   if (field) throw Error('field should always be blank or undefined, debug it!')
   if (operation === '+') {
-    entry.flags = data
-    return {thisresult: entry.flags}
-  } else if (operation === '*') {
-    if (!entry.flags) {
-      entry.flags = data
-    } else {
-      entry.flags = Object.assign(entry.flags, data)
-    }
+    entry.flags = Object.assign(entry.flags, data)
     entry.markModified('flags')
-    return {thisresult: entry.flags}
+    return {flags: entry.flags}
+  } else if (operation === '*') {
+    entry.flags = Object.assign(entry.flags, data)
+    entry.markModified('flags')
+    return {flags: entry.flags}
   } else if (operation === '-') {
     if (data) { // delete given flags
       let keys = Object.keys(data)
@@ -787,7 +784,7 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
     } else { // delete all flags
       entry.flags = undefined
     }
-    return {thisresult: entry.flags}
+    return {flags: entry.flags}
   } else if (operation === 'o') {
     throw Error('can not reorder a flag!')
   }
