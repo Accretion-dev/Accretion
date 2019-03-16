@@ -1,5 +1,3 @@
-* [ ] taglike delete all r models
-* [ ] add to new operation: 'hookActive', 'hookDeactive'
-* [ ] function: updateHooks
-* [ ] function: applyHook
-* [ ] modify Tags to have translation feature
+* origin feature and its unittest
+* taglike delete all r models and its unittest
+* all hooks features and their unittest
