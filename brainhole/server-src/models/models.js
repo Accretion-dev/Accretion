@@ -424,7 +424,7 @@ async function querySub({entry, data, field, session}) {
       throw Error(`id ${data.id} not exists in ${field}\nentry:${JSON.stringify(entry,null,2)}\ndata:${JSON.stringify(entry,null,2)}\nfield:${field}`)
     return result
   } else if ('__query__' in data) {
-    fullquery = data
+    fullquery = Object.assign({}, data)
     let query = data.__query__
     delete fullquery.__query__
 
