@@ -99,7 +99,7 @@ test('basic', async t => { // create, modify and delete for All model
   for (let each of All) {
     let Model = Models[each]
     let pks = getRequire(Model)
-    let data, refetch, refetch_, result
+    let data, refetch, refetch_, result, id, rawdata
     data = {
       comment: `${each} basic test`,
     }
@@ -108,16 +108,58 @@ test('basic', async t => { // create, modify and delete for All model
         data[pk] = `${each} basic test`
       }
     }
+    rawdata = Object.assign({}, data)
     // create
     result = await api({
       operation: '+',
       data,
       model: each
     })
-    let id = result.modelID
+    id = result.modelID
     refetch = clone((await Model.findOne({id}))._doc)
     refetch_ = Object.assign({}, refetch, data)
     t.deepEqual(refetch, refetch_)
+    t.is(result.flags.entry, true)
+    t.is(result.flags.origin.length,1)
+    // create with origin manual
+    result = await api({
+      operation: '+',
+      query:{id},
+      data,
+      model: each
+    })
+    t.is(result.flags.entry, false)
+    t.is(result.flags.origin.length, 0)
+    // create with origin auto1
+    result = await api({
+      operation: '+',
+      query:{id},
+      data,
+      model: each,
+      origin: {id: 'auto1'}
+    })
+    t.is(result.flags.entry, false)
+    t.is(result.flags.origin.length, 1)
+    // create with origin auto1, addNothing
+    result = await api({
+      operation: '+',
+      query:{id},
+      data,
+      model: each,
+      origin: {id: 'auto1'}
+    })
+    t.is(result.flags.entry, false)
+    t.is(result.flags.origin.length, 0)
+    // create with origin auto2
+    result = await api({
+      operation: '+',
+      query:{id},
+      data,
+      model: each,
+      origin: {id: 'auto2'}
+    })
+    t.is(result.flags.entry, false)
+    t.is(result.flags.origin.length, 1)
     // modify
     data = {
       comment: `${each} basic modified`
@@ -131,12 +173,58 @@ test('basic', async t => { // create, modify and delete for All model
     refetch = clone((await Model.findOne({id}))._doc)
     refetch_ = Object.assign({}, refetch, data)
     t.deepEqual(refetch, refetch_)
-    // delete
+    // delete manual and auto1
+    result = await api({
+      operation: '-',
+      model: each,
+      query: {id},
+      origin: [{id: 'manual'}, {id: 'auto1'}]
+    })
+    t.is(result.flags.entry, false)
+    t.is(result.flags.origin.length, 2)
+    // delete manual again
     result = await api({
       operation: '-',
       model: each,
       query: {id}
     })
+    t.is(result.flags.entry, false)
+    t.is(result.flags.origin.length, 0)
+    // delete manual auto2, delete entry
+    result = await api({
+      operation: '-',
+      model: each,
+      query: {id},
+      origin: [{id: 'auto2'}]
+    })
+    t.is(result.flags.entry, true)
+    t.is(result.flags.origin.length, 1)
+    refetch = await Model.findOne({id})
+    t.true(refetch === null)
+    // add with multiply origin
+    result = await api({
+      operation: '+',
+      data: rawdata,
+      model: each,
+      origin: [
+        {id: 'manual'},
+        {id: 'auto1'},
+        {id: 'auto2'},
+        {id: 'auto3'},
+      ]
+    })
+    t.is(result.flags.entry, true)
+    t.is(result.flags.origin.length, 4)
+    id = result.modelID
+    // delete all
+    result = await api({
+      operation: '-',
+      model: each,
+      query: {id},
+      origin: [], // force delete it, no matter how many origins it has
+    })
+    t.is(result.flags.entry, true)
+    t.is(result.flags.origin.length, 4)
     refetch = await Model.findOne({id})
     t.true(refetch === null)
   }

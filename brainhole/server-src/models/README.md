@@ -3,12 +3,11 @@
 ```
 flags:
   +
-    addNonExists
-    addExists:
-      addNothing, addOrigin
+    entry: true or false # whether a new entry is added
+    origin: origins added
   -
-    deleteEntry
-    deleteOrigin
+    entry: true or false # whether the entry is deleted
+    origin: origins deleted
 ```
 ## about output of *API
 ```

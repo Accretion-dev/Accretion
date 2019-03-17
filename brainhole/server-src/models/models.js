@@ -28,6 +28,7 @@ todo.forEach(key => {
   Object.assign(Model.schema, {
     id: { type: Number, auto: true },
     comment: { type: String },
+    origin: [{ type: Schema.Types.Mixed }],
     // should not have index for these special models
     // or you will get 'background operations' errors in unittest because
     // you are dropping collections while building indexes on them
@@ -245,7 +246,7 @@ function initModels () {
   let extras = {
     id: { type: Number, auto: true },
     comment: { type: String, index: true },
-    origin: [{ type: String }],
+    origin: [{ type: Schema.Types.Mixed }],
   }
   All.forEach(key => {
     let Model = models[key]
@@ -569,16 +570,10 @@ async function api({ operation, data, query, model, meta, field, session, origin
   }
 }
 async function apiSessionWrapper ({ operation, data, query, model, meta, field, session, origin }) {
-  /*
-    operations: '+', '-', '*' or 'a', 'f', 'o',
-    data: data to add/modify or delete
-    query, model: model is always needed, query is needed in -*o
-    field is needed when you want to operate the subfield instead of the entry
-  */
   let Models = globals.Models
   let Model = mongoose.models[model]
   if (!Model) throw Error(`unknown model ${model}`)
-  if (origin === undefined) origin = 'manual'
+  if (origin === undefined) origin = {id: 'manual', time:new Date()}
   let flags = {}
 
   if (operation === 'aggregate') { // search
@@ -595,34 +590,51 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
     return result
   } else if (operation === '+') {
     let entry
-    if (query && !field) {
-      entry = await Model.find(query).session(session)
+    if (query && !field) { // add with origin
+      entry = await Model.findOne(query).session(session)
       // if entry matched, only update the origin
       if (entry) {
-        flags.addExists = true
-        let oldOrigin = entry.origin
-        if (oldOrigin.includes(origin)) {
-          flags.addNothing = true
-        } else {
-          flags.addOrigin = true
-          entry.origin.push(origin)
+        if (!origin) throw Error('should have origin if query is not null in +')
+        if (!Array.isArray(origin)) origin = [origin]
+        let originIDs = origin.map(_ => _.id)
+        let oldOriginIDs = entry.origin.map(_ => _.id)
+        let addOrigin = []
+        for (let eachorigin of origin) {
+          if (!oldOriginIDs.includes(eachorigin.id)) {
+            let toAdd = Object.assign({},
+              eachorigin,
+              {time: new Date()}
+            )
+            entry.origin.push(toAdd)
+            addOrigin.push(toAdd)
+          }
+        }
+        flags.origin = addOrigin
+        flags.entry = false
+        if (addOrigin.length) {
+          await entry.save()
         }
         let modelID = entry.id
         let withs = null
         let result = entry
 
-        await entry.save()
-
         let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags}
         // let history = new globals.Models.History(returnData); history.$session(session); await history.save();
         let history = await saveHistory(returnData, session)
         return returnData
+      } else {
+        flags.entry = true
+        flags.origin = origin
       }
+    } else {
+      flags.entry = true
+      if (!Array.isArray(origin)) origin = [origin]
+      flags.origin = origin
     }
     if (!field) { // e.g, create new Article, with some initial Tag, Cataloge...
       let {simple, withs} = extractWiths({data, model})
       simple.id = await getNextSequenceValue(model) // do not use session for this function
-      simple.origin = [origin] // setup origin
+      simple.origin = origin // setup origin
       let entry = new Model(simple); entry.$session(session)
       withs = await processWiths({operation, prefield: model, field, entry, withs, session, origin})
 
@@ -689,28 +701,35 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
     if (!field) {
       // if origin is null, delete it without doubt
       // but if origin is not null, only delete the origins
-      if (origin !== null && !simpleModels.includes(model)) {
+      if (!Array.isArray(origin)) origin = [origin]
+      if (origin.length) {
+        if (!Array.isArray(origin)) origin = [origin]
+        let originIDs = origin.map(_ => _.id)
         let oldOrigin = entry.origin
-        let originLeft = oldOrigin.filter(_ => _ !== origin)
+        let originDeleted = oldOrigin.filter(_ => originIDs.includes(_.id))
+        let originLeft = oldOrigin.filter(_ => !originIDs.includes(_.id))
+        flags.origin = originDeleted
         if (originLeft.length) { // only delete this origin
           entry.origin = originLeft
           entry.markModified('origin')
           await entry.save()
-          flags.deleteOrigin = true
 
           let result = entry
           let withs = null
+          flags.entry = false
 
           let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags}
           // let history = new globals.Models.History(returnData); history.$session(session); await history.save();
           let history = await saveHistory(returnData, session)
           return returnData
         } else {
-          flags.deleteLastOrigin = true
+          flags.entry = true
         }
+      } else {
+        flags.entry = true
+        flags.origin = entry.origin
       }
 
-      flags.deleteEntry = true
       // delete this entry
       let withs = {}
       let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session, origin: null}) // origin be null to delete all tags
