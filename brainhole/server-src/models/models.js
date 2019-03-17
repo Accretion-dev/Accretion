@@ -132,6 +132,12 @@ function initModels () {
   let All = [...modelAll, ...others]
   let AllWithUser = [...modelAll, 'UserConfig']
   let AllWithTimeComment = [...modelAll]
+  let WithR = [
+    'Tag',
+    'Catalogue',
+    'Relation',
+    'Metadata',
+  ]
   let WithsDict = {
     WithTag,
     WithCatalogue,
@@ -140,6 +146,7 @@ function initModels () {
     WithChild,
     WithMetadata,
     WithFlag,
+    WithR,
   }
   // Extro fields of each fields
   // e.g. {'Article': ["tags", "catalogues"...]...}
@@ -149,6 +156,8 @@ function initModels () {
     let fieldName = key.slice(4).toLowerCase()
     if (fieldName === 'child') {
       fieldName = fieldName + 'ren'
+    } else if (fieldName === 'r') {
+      fieldName = 'r'
     } else {
       fieldName = fieldName + 's'
     }
@@ -457,7 +466,7 @@ function extractSingleField ({model, field, data, sub}) {
   }
   newdata = data[fieldPrefix]
   if (!newdata) throw Error(`should provide data with field: ${field} in model ${model}`)
-  if (!thisWiths[model].includes(fieldPrefix)) throw Error(`no field ${field} found in model ${model}`)
+  if (!thisWiths[model].includes(fieldPrefix)) throw Error(`no field ${field} found in model ${model}, ${sub}`)
   if (!APIs[`${fieldPrefix}API`]) throw Error(`Do not have api for ${field}`)
   return {newdata, fieldPrefix, fieldSuffix}
 }
@@ -810,6 +819,24 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
   } else if (operation === 'o') {
     throw Error('can not reorder a flag!')
   }
+}
+async function rAPI ({operation, prefield, field, entry, data}) {
+  if (field) throw Error('field should always be blank or undefined, debug it!')
+  if (operation !== '-') throw Error('can only delete r')
+  let keys = Object.keys(entry._doc.r)
+  let toDelete = []
+  let relations = []
+  for (let key of keys) {
+    for (let each of entry.r[key]) {
+      if (key === relations) {
+        relations.push(each)
+        toDelete.push(each)
+      } else {
+        toDelete.push(each)
+      }
+    }
+  }
+  return entry.r
 }
 
 async function DFSSearch({model, id, entry, path, type, session}) {
@@ -1314,6 +1341,7 @@ let APIs = {
   relationsAPI,
   fathersAPI,
   childrenAPI,
+  rAPI,
 }
 
 // manage functions

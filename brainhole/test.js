@@ -1154,6 +1154,112 @@ test('test all taglike api', async t => {
   }
   t.pass()
 })
+test.skip('reverse delete for taglike', async t => {
+  let Models = globals.Models
+  let WithsDict = globals.WithsDict
+  let All = globals.All
+  let apis = [
+    {name: 'relations', withname: 'WithRelation', model:'Relation'},
+    {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
+    {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
+    {name: 'tags', withname: 'WithTag', model:'Tag'},
+  ]
+  const pstep = false
+  for (let apiname of apis) {
+    let {name, withname, model: tagModel} = apiname
+    console.log(`test ${name}`)
+    let todos = WithsDict[withname]
+    for (let each of todos) {
+      if (pstep) console.log(`... ${each}`)
+      let Model = Models[each]
+      let pks = getRequire(Model)
+      let data, refetch, refetch_, result, id, ids, updated
+      let taglike, newtaglike, deltaglike, rawdata, toDelete, tname
+      let getNewTaglike, getDelTaglike, modifyMap, getOtherData, input
+      let __
+      let testFunctions = {}
+      let testDatas = {}
+      let omitnames = [name]
+      let D = []
+      let T = []
+      let N = 15
+      if('setup') {
+        // create N+1 articles, only create N-1 of them, D[0] is created later
+        for (let i=0; i<=N; i++) {
+          data = {
+            comment: `${i} ${each} ${name} test`,
+            flags: { debug: true }
+          }
+          if (pks.length) {
+            for (let pk of pks) {
+              data[pk] = `${i} ${each} ${name} test`
+            }
+          }
+          rawdata = Object.assign({}, data)
+          D.push(rawdata)
+        }
+        for (let i=1; i<=N; i++) {
+          result = await api({
+            operation: '+',
+            data: D[i],
+            model: each
+          })
+          id = result.modelID
+          D[i].id = id
+        }
+        data = D[0]
+        rawdata = Object.assign({}, data)
+        // create Taglike
+        for (let index=0; index<=N; index++) {
+          T.push({
+            name: `${each}-${name}-${index}`,
+            comment: `comment for index ${index}`
+          })
+        }
+        for (let each of T) {
+          let result = await api({
+            operation: '+',
+            data: each,
+            model: tagModel
+          })
+          let id = result.modelID
+          each.id = id
+        }
+      }
+
+
+      if('clean up') {
+        // delete N articles
+        for (let d of D) {
+          let entry = await api({
+            operation: 'findOne',
+            query: {id: d.id},
+            model: each
+          })
+          if (!entry) continue
+          let result = await api({
+            operation: '-',
+            query: {id: d.id},
+            model: each
+          })
+          let refetch = await Models[each].findOne({id: d.id})
+          t.true(refetch === null)
+        }
+        // delete all taglike
+        for (let tt of T) {
+          let result = await api({
+            operation: '-',
+            query: {id: tt.id},
+            model: tagModel
+          })
+          let refetch = await Models[tagModel].findOne({id: tt.id})
+          t.true(refetch === null)
+        }
+      }
+    }
+  }
+  t.pass()
+})
 
 test.skip('test', async t => {
   let Article = Models.Article
