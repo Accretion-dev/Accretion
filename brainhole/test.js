@@ -178,6 +178,7 @@ test('flags', async t => {
       data.comment = `${each} ${t.title} modified`
       data.flags.in_trush = false
       data.flags.ddebug = true
+      delete data.flags.debug
       result = await api({
         operation: '*',
         data,
@@ -185,7 +186,8 @@ test('flags', async t => {
         query: {id}
       })
       refetch = clone((await Model.findOne({id}))._doc)
-      refetch_ = Object.assign({}, refetch, data)
+      refetch_ = Object.assign({}, refetch, _.omit(data, ['flags']))
+      refetch_.flags = Object.assign(refetch_.flags, data.flags)
       t.deepEqual(refetch, refetch_) // test add with flgas and simple
       // clean up, delete this entry
       result = await api({
@@ -223,6 +225,7 @@ test('flags', async t => {
       flags.in_trush = 3
       flags.debug = 4
       flags.debugg = 5
+      delete flags.ddebug
       result = await api({
         operation: '*',
         data:{flags},
@@ -230,8 +233,10 @@ test('flags', async t => {
         query: {id},
         field: 'flags'
       })
-      refetch = (await Model.findOne({id}))._doc
-      t.deepEqual(refetch.flags, flags) // test flags modifyA
+      refetch = (await Model.findOne({id}))._doc.flags
+      refetch_ = Object.assign({}, refetch, flags)
+      t.deepEqual(refetch, refetch_) // test flags modifyA
+      flags = refetch
       // delete with 'flags' field
       let toDelete = {in_trush: true, debug: true}
       for (let name of Object.keys(toDelete)) {
@@ -263,11 +268,11 @@ test('test all taglike api', async t => {
   let WithsDict = globals.WithsDict
   let All = globals.All
   let apis = [
-    {name: 'family', withname: 'WithFather'},
-    {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
-    {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
     {name: 'relations', withname: 'WithRelation', model:'Relation'},
+    {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
+    {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
     {name: 'tags', withname: 'WithTag', model:'Tag'},
+    {name: 'family', withname: 'WithFather'},
   ]
   const pstep = false
   for (let apiname of apis) {
@@ -979,6 +984,8 @@ test('test all taglike api', async t => {
         toModify[0].flags.debug = 'hahaha'
         toModify[1].flags.debug = 'lalala'
         toModify[1].flags.new_added = 'huhuhu'
+        delete toModify[0].flags.add_by_field_flag
+        delete toModify[1].flags.add_by_field_flag
         result = await api({
           operation: '*',
           data: {[name]: toModify},

@@ -341,9 +341,9 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
   if (!(query_key in query || query_key+"_id" in query)) {
     // do not change taglike, no need to query for the new one
     if (test) {
-      return {full_tag_query: query}
+      return {full_tag_query: query, raw_tag_query: Object.assign({}, query)}
     } else {
-      throw Error(`should have ${query_key} or ${query_key}, data:${JSON.stringify(query,null,2)}`)
+      throw Error(`should have ${query_key} or ${query_key}_id, data:${JSON.stringify(query,null,2)}`)
     }
   }
   let this_tag_model = query_key[0].toUpperCase() + query_key.slice(1)
@@ -352,7 +352,7 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
   // fullquery is raw_query + {query_id}
   if (query_key+"_id" in query) {
     query_id = query[query_key+"_id"]
-    rawquery = query
+    rawquery = Object.assign({}, query)
     fullquery = query
     if (getEntry) {
       let r = await Models[this_tag_model].find({id: query_id}).session(session)
@@ -769,22 +769,25 @@ async function flagsAPI ({operation, prefield, field, entry, data}) {
   if (operation === '+') {
     entry.flags = Object.assign(entry.flags, data)
     entry.markModified('flags')
-    return {flags: entry.flags}
+    return data
   } else if (operation === '*') {
     entry.flags = Object.assign(entry.flags, data)
     entry.markModified('flags')
-    return {flags: entry.flags}
+    return data
   } else if (operation === '-') {
+    let deleted = {}
     if (data) { // delete given flags
       let keys = Object.keys(data)
       for (let key of keys) {
+        deleted[key] = entry.flags[key]
         delete entry.flags[key]
       }
       entry.markModified('flags')
     } else { // delete all flags
-      entry.flags = undefined
+      deleted = entry.flags
+      entry.flags = {}
     }
-    return {flags: entry.flags}
+    return deleted
   } else if (operation === 'o') {
     throw Error('can not reorder a flag!')
   }
@@ -947,7 +950,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         }
         other_entry = other_entry[0]
         let that_sub_entry = other_entry[name].find(_ => _.id === this_sub_entry.id)
-        Object.assign(that_sub_entry, this_result)
+        that_sub_entry[fieldSuffix] = this_result[fieldSuffix]
         other_entry.markModified(name)
         await other_entry.save()
       }
@@ -970,6 +973,8 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             from_id, from_model,
             to_id, to_model,
           } = relationInfo
+          if (raw_tag_query.to) raw_tag_query.to_id = to_id
+          if (raw_tag_query.from) raw_tag_query.from_id = from_id
           other_entry = await Models[other_model].find({id: other_id}).session(session)
           if (other_entry.length !== 1) {
             throw Error(`can not get unique entry for ${other_model} by id:${other_id}, ${JSON.stringify(full_tag_query,null,2)}, ${JSON.stringify(relationInfo,null,2)}`)
@@ -1039,6 +1044,9 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           let new_sub_relation = extractRelationInfo({full_tag_query, entry_model, entry_id, old:this_sub_entry})
           let old_other_entry
 
+          if (raw_tag_query.to) raw_tag_query.to_id = new_sub_relation.to_id
+          if (raw_tag_query.from) raw_tag_query.from_id = new_sub_relation.from_id
+
           other_entry = await Models[new_sub_relation.other_model].find({id: new_sub_relation.other_id}).session(session) // process this later, so use the global name
           if (other_entry.length !== 1) {
             throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
@@ -1096,9 +1104,10 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         simple = full_tag_query
         this_sub_entry.set(simple)
         simple.id = this_sub_entry.id
+        raw_tag_query.id = simple.id
         simple[query_key] = this_sub_entry[query_key]
         withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
-        let thisresult = Object.assign({}, simple, withs)
+        let thisresult = Object.assign({}, raw_tag_query, withs)
         result.push(thisresult)
 
         if (name === 'relations') { // relationsModifyHookAfterWiths
