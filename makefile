@@ -9,6 +9,8 @@ installPackages:
 	cd brainhole; bash ../dev-scripts/backend/installPackages
 database:
 	./dev-scripts/startDatabase
+force-restart-database:
+	pkill mongod -sigkill; ./dev-scripts/startDatabase
 brainhole-watch:
 	cd brainhole; npm run watch
 brainhole-dev:
