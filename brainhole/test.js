@@ -92,7 +92,7 @@ test('transaction-base', async t => {
   t.pass()
 })
 
-test.only('basic', async t => { // create, modify and delete for All model
+test('basic', async t => { // create, modify and delete for All model
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -171,7 +171,7 @@ test.only('basic', async t => { // create, modify and delete for All model
     // create newdata with origin auto3
     result = await api({
       operation: '+',
-      query:{id: id+1},
+      query:{comment: newdata.comment},
       data: newdata,
       model: each,
       origin: {id: 'auto3'}
@@ -611,9 +611,9 @@ test('test all taglike api', async t => {
               value: 233, comment: 'test comment', flags: { debug: true }, },
             { metadata: { comment: T[3].comment},
               value: {msg: 'object value'}, comment: 'test comment', flags: { debug: true }, },
-            { metadata: { name: T[0].name },
+            { metadata: { name: T[4].name },
               value: 'test rate string 2', comment: 'test comment', flags: { debug: true }, },
-            { metadata: { id: T[1].id },
+            { metadata: { id: T[5].id },
               value: 'test color string 2', comment: 'test comment', flags: { debug: true }, },
           ]}
           getNewTaglike = (U) => { return {metadatas:[
@@ -621,7 +621,7 @@ test('test all taglike api', async t => {
               value: 'test color string updated', comment: 'test comment updated', flags: { debug: 'change to false', add_new_flag: true }, },
             { // _Q_: metadata; Q: metadata; M: metadata(3 => 4)
               __query__: { metadata: { name: T[3].name }, },
-              metadata: { name: T[4].name }, value: {msg: 'mixed_value modify', mixed_value_add: true}, comment: 'update comment', flags: { debug: 'change to false', add_new_flag: true }, },
+              metadata: { name: T[6].name }, value: {msg: 'mixed_value modify', mixed_value_add: true}, comment: 'update comment', flags: { debug: 'change to false', add_new_flag: true }, },
             { // _Q_: metadata_id; M: value...
               __query__: { metadata_id: U[2].metadata_id, },
               value: 'test rate string 2 modified', comment: 'new comment', flags: { debug: 'change to false', add_new_flag: true }, },
@@ -649,15 +649,15 @@ test('test all taglike api', async t => {
             }
             let NN = taglike.length
             testDatas = {
-              '0-0': { testMetadataCount: [2,2,1,1,0], },
-              '0-1': { testMetadataCount: [2,2,1,0,1], },
-              '0-2': { testMetadataCount: [0,0,0,0,0], },
-              '1-0': { testMetadataCount: [0,0,0,0,0], },
-              '1-1': { testMetadataCount: [2,2,1,1,0], },
-              '1-2': { testMetadataCount: [2,2,1,0,1], },
-              '1-3': { testMetadataCount: [1,2,0,0,0], },
-              '1-4': { testMetadataCount: [1,2,0,0,0], },
-              '2-0': { testMetadataCount: [0,0,0,0,0], },
+              '0-0': { testMetadataCount: [1,1,1,1,1,1,0], },
+              '0-1': { testMetadataCount: [1,1,1,0,1,1,1], },
+              '0-2': { testMetadataCount: [0,0,0,0,0,0,0], },
+              '1-0': { testMetadataCount: [0,0,0,0,0,0,0], },
+              '1-1': { testMetadataCount: [1,1,1,1,1,1,0], },
+              '1-2': { testMetadataCount: [1,1,1,0,1,1,1], },
+              '1-3': { testMetadataCount: [0,1,0,0,0,1,1], },
+              '1-4': { testMetadataCount: [0,1,0,0,0,1,1], },
+              '2-0': { testMetadataCount: [0,0,0,0,0,0,0], },
             }
           }
         } else if (name === 'catalogues' || name === 'tags') {
@@ -1192,7 +1192,7 @@ test('test all taglike api', async t => {
   }
   t.pass()
 })
-test.skip('reverse delete for taglike', async t => {
+test.skip('tag origin system', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -1211,7 +1211,7 @@ test.skip('reverse delete for taglike', async t => {
       if (pstep) console.log(`... ${each}`)
       let Model = Models[each]
       let pks = getRequire(Model)
-      let data, refetch, refetch_, result, id, ids, updated
+      let data, refetch, refetch_, result, id, ids, updated, tt
       let taglike, newtaglike, deltaglike, rawdata, toDelete, tname
       let getNewTaglike, getDelTaglike, modifyMap, getOtherData, input
       let __
@@ -1221,6 +1221,7 @@ test.skip('reverse delete for taglike', async t => {
       let D = []
       let T = []
       let N = 15
+      let TN = 10
       if('setup') {
         // create N+1 articles, only create N-1 of them, D[0] is created later
         for (let i=0; i<=N; i++) {
@@ -1236,7 +1237,7 @@ test.skip('reverse delete for taglike', async t => {
           rawdata = Object.assign({}, data)
           D.push(rawdata)
         }
-        for (let i=1; i<=N; i++) {
+        for (let i=0; i<=N; i++) {
           result = await api({
             operation: '+',
             data: D[i],
@@ -1248,7 +1249,7 @@ test.skip('reverse delete for taglike', async t => {
         data = D[0]
         rawdata = Object.assign({}, data)
         // create Taglike
-        for (let index=0; index<=N; index++) {
+        for (let index=0; index<=TN; index++) {
           T.push({
             name: `${each}-${name}-${index}`,
             comment: `comment for index ${index}`
@@ -1263,9 +1264,12 @@ test.skip('reverse delete for taglike', async t => {
           let id = result.modelID
           each.id = id
         }
+        tt = T[0]
       }
+      // test
+      if('test reverse delete') {
 
-
+      }
       if('clean up') {
         // delete N articles
         for (let d of D) {
@@ -1297,6 +1301,8 @@ test.skip('reverse delete for taglike', async t => {
     }
   }
   t.pass()
+})
+test.skip('reverse delete for taglike', async t => {
 })
 
 test.skip('test', async t => {
