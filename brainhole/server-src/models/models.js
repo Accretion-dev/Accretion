@@ -1103,6 +1103,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         // fullquery delete the query_key, only have query_key_id
         let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, test:true, getEntry: true, session, entry_model})
 
+        let changeTaglike = false
         let relationChangeOtherFlag = false
         let oldTag, newTag
         if (name === 'relations') { // relationsModifyHookBeforeWiths
@@ -1139,6 +1140,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             await oldTag.save()
 
             relationChangeOtherFlag = true
+            changeTaglike = true
           }
           full_tag_query = Object.assign(full_tag_query, new_sub_relation)
         }
@@ -1165,10 +1167,21 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             await oldTag.save()
             await newTag.save()
           }
+          changeTaglike = true
         }
 
         simple = full_tag_query
         this_sub_entry.set(simple)
+        if (changeTaglike) { // test if it is duplicated with another taglike
+          let {simple: newsimple} = extractWiths({data:this_sub_entry._doc, model: name, sub: true})
+          newsimple = Object.assign({}, newsimple)
+          delete newsimple.id
+          let this_new_sub_entrys = await querySub({entry, data: {__query__: newsimple}, field: name, session, test: true, entry_model})
+          if (this_new_sub_entrys.length>1) {
+            let errorData = {entry_model, id:entry.id, eachdata, [name]: this_new_sub_entrys}
+            throw Error(`modification cause duplicated ${name} for ${errorData}`)
+          }
+        }
         simple.id = this_sub_entry.id
         raw_tag_query.id = simple.id
         simple[query_key] = this_sub_entry[query_key]

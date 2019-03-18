@@ -412,7 +412,7 @@ test('test all taglike api', async t => {
       let data, refetch, refetch_, result, id, ids, updated
       let taglike, newtaglike, deltaglike, rawdata, toDelete, tname
       let getNewTaglike, getDelTaglike, modifyMap, getOtherData, input
-      let __
+      let __, getBadNewTaglike
       let testFunctions = {}
       let testDatas = {}
       let omitnames = [name]
@@ -516,6 +516,13 @@ test('test all taglike api', async t => {
             { // _Q_: relation; M: to (0->6 => 10->0)
               __query__:{ relation: { id: T[6].id, } },
               from_id: D[10].id, comment: 'comment update 6', flags: { debug: 'true to false', add_new_flag: true} } ]} }
+          getBadNewTaglike = (U) => { return {relations: [
+            {
+              __query__: { relation: { name: T[0].name }, from: {id: D[1].id}},
+              relation: { name: T[1].name },
+              to: { id: D[9].id },
+            }
+          ]} }
           getDelTaglike = (U) => { return {relations: [
             { id: U[0].id },
             { __query__: { relation: { id: T[8].id } } },
@@ -626,6 +633,12 @@ test('test all taglike api', async t => {
               __query__: { metadata_id: U[2].metadata_id, },
               value: 'test rate string 2 modified', comment: 'new comment', flags: { debug: 'change to false', add_new_flag: true }, },
           ]}}
+          getBadNewTaglike = (U) => { return {metadatas:[
+            { // _Q_: metadata_id; M: value...
+              __query__: { metadata: {name: T[1].name}, },
+              metadata: { name: T[0].name }
+            }
+          ]}}
           modifyMap = {
             0:1, 1:3, 2:2
           }
@@ -694,7 +707,11 @@ test('test all taglike api', async t => {
               comment: 'update comment 3', flags: {debug: false, add_new_flag: true}
             },
           ]}}
-
+          getBadNewTaglike = (U) => { return {[name]:[
+            { __query__: { [n]: { name: T[1].name }, },
+              [n]: { name: T[0].name },
+            },
+          ]}}
           getDelTaglike = (U) => { return {[name]:[
             { id: updated[0].id, },
             { __query__: { [n]: { name: T[4].name }, }, },
@@ -1022,6 +1039,16 @@ test('test all taglike api', async t => {
           refetch = __.refetch
           await doTest({refetch, result})
           if (pstep) console.log(`  ${tname} done`) }
+        if((tname='1-2-1') && name !== 'family') { // modify cause duplicated
+          updated = refetch[name]
+          newtaglike = getBadNewTaglike(updated)
+          let fn = async () => {
+            input = {query:{id: result.result.id}, newtaglike, model:each}
+            await modifyWithField(input)
+          }
+          let error = await t.throwsAsync(fn, Error)
+          t.true(error.message.startsWith('modification cause duplicated'))
+          if (pstep) console.log(`  ${tname} done`) }
         if((tname='1-3') && name !== 'family') { // delete some taglike with field
           updated = refetch[name]
           deltaglike = getDelTaglike(updated)
@@ -1267,8 +1294,17 @@ test.skip('tag origin system', async t => {
         tt = T[0]
       }
       // test
-      if('test reverse delete') {
+      if('start test') {
+        if('add 1 without origin(id=manual)'){
 
+        }
+        if('add 3, one is the same as last one, the others are the same'){
+          // after that we should have two subentry with the origin id=manual
+
+        }
+        if('add 2 with origin.id = auto'){
+
+        }
       }
       if('clean up') {
         // delete N articles
