@@ -342,6 +342,15 @@ let SubWiths = {
   'catalogues': ['flags'],
   'relations': ['flags'],
 }
+async function saveHistory(returnData, session) {
+  let history = new globals.Models.History(returnData);
+  history.$session(session);
+  // console.log('saveing:', _.pick(returnData, ['operation', 'modelID', 'data', 'query']))
+  await history.save();
+  // console.log('saved:', _.pick(returnData, ['operation', 'modelID', 'data', 'query']))
+  return history
+}
+// all APIs
 async function queryTaglikeID ({field, query, test, getEntry, session, entry_model}) {
   let Models = globals.Models
   // fullquery delete the query_key, only have query_key_id
@@ -394,6 +403,7 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
       let to_model = fullquery.to_model
       if (!to_model) to_model = entry_model
       let to = fullquery.to
+      if (!Models[to_model]) debugger
       let r = await Models[to_model].find(to).session(session)
       if (r.length !== 1) throw Error(`not single result when query ${to_model} with ${to}, r:${r}`)
       to = r[0]
@@ -413,18 +423,7 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
   }
   return {tag_query_id: query_id, raw_tag_query: rawquery, full_tag_query: fullquery, tag_query_entry: query_entry}
 }
-
-async function saveHistory(returnData, session) {
-  let history = new globals.Models.History(returnData);
-  history.$session(session);
-  // console.log('saveing:', _.pick(returnData, ['operation', 'modelID', 'data', 'query']))
-  await history.save();
-  // console.log('saved:', _.pick(returnData, ['operation', 'modelID', 'data', 'query']))
-  return history
-}
-
-// all APIs
-async function querySub({entry, data, field, session}) {
+async function querySub({entry, data, field, session, test, entry_model}) {
   // query subdocument in a subdocument array (like tags, metadatas)
   let result, rawquery, fullquery
   let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
@@ -438,10 +437,22 @@ async function querySub({entry, data, field, session}) {
     let query = data.__query__
     delete fullquery.__query__
 
-    let {tag_query_id} = await queryTaglikeID({field, query, session})
-    // search for xxxxs
-    result = entry[field].filter(_ => _[query_key+'_id'] === tag_query_id )
-    if (result.length !== 1) {
+    let {tag_query_id, full_tag_query} = await queryTaglikeID({field, query, session, entry_model})
+    // search for subtaglike, must have unique result if not test
+    if (field === 'relations') {
+      if (full_tag_query.to_id) {
+        result = entry[field].filter(_ => _[query_key+'_id'] === tag_query_id && _.to_id === full_tag_query.to_id )
+      } else if (full_tag_query.from_id) {
+        result = entry[field].filter(_ => _[query_key+'_id'] === tag_query_id && _.from_id === full_tag_query.from_id )
+      } else {
+        result = entry[field].filter(_ => _[query_key+'_id'] === tag_query_id)
+      }
+    } else {
+      result = entry[field].filter(_ => _[query_key+'_id'] === tag_query_id )
+    }
+    if (test) {
+      return result
+    } else if (result.length !== 1) {
       if (!(result.length)) {
         let currentData = entry[field].map(__ => (_.pick(__, ['id', query_key+"_id"])))
         throw Error(`query:${JSON.stringify(query)} not found in ${field}, current data:${JSON.stringify(currentData, null, 2)}`)
@@ -867,7 +878,6 @@ async function testFamilyLoop({model, entry, session}) {
   if (cycle) return cycle.join("<=")
   return false
 }
-
 async function familyAPI ({operation, prefield, field, entry, data, type, session, origin}) {
   // field should always be '' or undefined
   // prefield could be any
@@ -967,6 +977,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
   let entry_model = entry.schema.options.collection
   let entry_id = entry.id
   let other_entry
+  let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
   let auto_actions = {
     add: [],
     del: [],
@@ -975,7 +986,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
   if (field) { // e.g. metadatas.flags, tags.flags
     let result = []
     for (let eachdata of data) {
-      let this_sub_entry = await querySub({entry, data: eachdata, field: name, session})
+      let this_sub_entry = await querySub({entry, data: eachdata, field: name, session, entry_model})
       let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({
         model: name,
         field,
@@ -1010,62 +1021,68 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
     if (operation === '+') { // data should be array
       for (let eachdata of data) {
         let {simple, withs} = extractWiths({data: eachdata, model: name, sub: true})
-        simple.id = await getNextSequenceValue(prefield) // not use session
-        // fullquery delete the query_key, only have query_key_id
-        // query_entry is the entry for the 'Tag'
-        // let {query_id, rawquery, fullquery, query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true})
-        let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true, session, entry_model})
-        if (name === 'relations') { // relationsCreateHookBeforeWiths
-          let relationInfo = extractRelationInfo({full_tag_query, entry_model, entry_id})
-          let {
-            other_model, other_id,
-            aorb, other_aorb,
-            from_id, from_model,
-            to_id, to_model,
-          } = relationInfo
-          if (raw_tag_query.to) raw_tag_query.to_id = to_id
-          if (raw_tag_query.from) raw_tag_query.from_id = from_id
-          other_entry = await Models[other_model].find({id: other_id}).session(session)
-          if (other_entry.length !== 1) {
-            throw Error(`can not get unique entry for ${other_model} by id:${other_id}, ${JSON.stringify(full_tag_query,null,2)}, ${JSON.stringify(relationInfo,null,2)}`)
+        let this_sub_entry = await querySub({entry, data: {__query__: simple}, field: name, session, test: true, entry_model})
+        let origin_flags = {}
+        if (this_sub_entry.length) { // only add the origin of this subtaglike
+          throw Error('shoud not be here')
+        } else { // create new subtaglike
+          simple.id = await getNextSequenceValue(prefield) // not use session
+          // fullquery delete the query_key, only have query_key_id
+          // query_entry is the entry for the 'Tag'
+          // let {query_id, rawquery, fullquery, query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true})
+          let {tag_query_id, raw_tag_query, full_tag_query, tag_query_entry} = await queryTaglikeID({field: name, query: simple, getEntry:true, session, entry_model})
+          if (name === 'relations') { // get full relation subentry, get other_entry
+            let relationInfo = extractRelationInfo({full_tag_query, entry_model, entry_id})
+            let {
+              other_model, other_id,
+              aorb, other_aorb,
+              from_id, from_model,
+              to_id, to_model,
+            } = relationInfo
+            if (raw_tag_query.to) raw_tag_query.to_id = to_id
+            if (raw_tag_query.from) raw_tag_query.from_id = from_id
+            other_entry = await Models[other_model].find({id: other_id}).session(session)
+            if (other_entry.length !== 1) {
+              throw Error(`can not get unique entry for ${other_model} by id:${other_id}, ${JSON.stringify(full_tag_query,null,2)}, ${JSON.stringify(relationInfo,null,2)}`)
+            }
+            other_entry = other_entry[0]
+            full_tag_query = Object.assign(full_tag_query, {
+              from_id, from_model, to_id, to_model,
+              other_id,
+              other_model,
+              aorb,
+            })
           }
-          other_entry = other_entry[0]
-          full_tag_query = Object.assign(full_tag_query, {
-            from_id, from_model, to_id, to_model,
-            other_id,
-            other_model,
-            aorb,
-          })
-        }
-        let index = entry[name].push(full_tag_query)
-        let this_sub_entry = entry[name][index - 1]
+          let index = entry[name].push(full_tag_query)
+          this_sub_entry = entry[name][index - 1]
 
-        withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
-        let thisresult = Object.assign({}, raw_tag_query, withs)
-        result.push(thisresult)
-        // update reverse
-        tag_query_entry.r[entry_model].push(`${entry.id}-${this_sub_entry.id}`)
-        await tag_query_entry.save()
-        // special taglikes
-        if (name === 'relations') { // relationsCreateHookAfterWiths
-          let that_sub_entry = Object.assign({}, this_sub_entry._doc)
-          if (this_sub_entry.aorb==='a') {
-            that_sub_entry.other_id = this_sub_entry.from_id
-            that_sub_entry.other_model = this_sub_entry.from_model
-            that_sub_entry.aorb = 'b'
-          } else if (this_sub_entry.aorb==='b') {
-            that_sub_entry.other_id = this_sub_entry.to_id
-            that_sub_entry.other_model = this_sub_entry.to_model
-            that_sub_entry.aorb = 'a'
-          } else {
-            throw Error(`aorb is not a or b, ${JSON.stringify(this_sub_entry)}`)
-          }
-          other_entry[name].push(that_sub_entry)
-          await other_entry.save()
-          tag_query_entry.r[entry_model].push(`${other_entry.id}-${this_sub_entry.id}`)
+          withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
+          let thisresult = Object.assign({}, raw_tag_query, withs)
+          result.push(thisresult)
+
+          // update reverse
+          tag_query_entry.r[entry_model].push(`${entry.id}-${this_sub_entry.id}`)
           await tag_query_entry.save()
+          // modify and save other_entry if relations
+          if (name === 'relations') {
+            let that_sub_entry = Object.assign({}, this_sub_entry._doc)
+            if (this_sub_entry.aorb==='a') {
+              that_sub_entry.other_id = this_sub_entry.from_id
+              that_sub_entry.other_model = this_sub_entry.from_model
+              that_sub_entry.aorb = 'b'
+            } else if (this_sub_entry.aorb==='b') {
+              that_sub_entry.other_id = this_sub_entry.to_id
+              that_sub_entry.other_model = this_sub_entry.to_model
+              that_sub_entry.aorb = 'a'
+            } else {
+              throw Error(`aorb is not a or b, ${JSON.stringify(this_sub_entry)}`)
+            }
+            other_entry[name].push(that_sub_entry)
+            await other_entry.save()
+            tag_query_entry.r[entry_model].push(`${other_entry.id}-${this_sub_entry.id}`)
+            await tag_query_entry.save()
+          }
         }
-
         for (let thishook of hooks) {
           if (thishook.test && !thishook.test({operation, entry, new_sub_entry: this_sub_entry._doc})) continue
           let {add, del} = await thishook({operation, entry, new_sub_entry: this_sub_entry._doc})
@@ -1076,12 +1093,11 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
       auto_actions = await processAutoActions(auto_actions)
       return result
     } else if (operation === '*') {
-      let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
       for (let eachdata of data) {
         eachdata = Object.assign({}, eachdata)
         let eachdataraw = Object.assign({}, eachdata)
         // eachdata delete __query__
-        let this_sub_entry = await querySub({entry, data: eachdata, field: name, session})
+        let this_sub_entry = await querySub({entry, data: eachdata, field: name, session, entry_model})
         let old_sub_entry = Object.assign({}, this_sub_entry._doc)
         let {simple, withs} = extractWiths({data:eachdata, model: name, sub: true})
         // fullquery delete the query_key, only have query_key_id
