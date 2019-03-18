@@ -280,7 +280,7 @@ function initModels () {
     Model.add(extras)
   })
   extras = { // about autoadd and hooks
-    origin: [{ type: String }],
+    origin: [{ type: Schema.Types.Mixed }],
   }
   Object.keys(subSchema).forEach(key => {
     let Model = subSchema[key]
@@ -403,7 +403,6 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
       let to_model = fullquery.to_model
       if (!to_model) to_model = entry_model
       let to = fullquery.to
-      if (!Models[to_model]) debugger
       let r = await Models[to_model].find(to).session(session)
       if (r.length !== 1) throw Error(`not single result when query ${to_model} with ${to}, r:${r}`)
       to = r[0]
@@ -457,7 +456,7 @@ async function querySub({entry, data, field, session, test, entry_model}) {
         let currentData = entry[field].map(__ => (_.pick(__, ['id', query_key+"_id"])))
         throw Error(`query:${JSON.stringify(query)} not found in ${field}, current data:${JSON.stringify(currentData, null, 2)}`)
       } else {
-        throw Error(`query:${query} more than one in ${field}`)
+        throw Error(`inconsistant database, have duplicated subtaglike:${J(result)}, delete them with ids!\nquery:${J({query, field})}`)
       }
     }
     return result[0]
@@ -593,7 +592,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
   let Models = globals.Models
   let Model = mongoose.models[model]
   if (!Model) throw Error(`unknown model ${model}`)
-  if (origin === undefined) origin = {id: 'manual', time:new Date()}
+  if (origin === undefined) origin = {id: 'manual'}
   let flags = {}
 
   if (operation === 'aggregate') { // search
@@ -617,17 +616,16 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         if (!origin) throw Error('should have origin if query is not null in +')
         if (!Array.isArray(origin)) origin = [origin]
         if (!origin.length) throw Error('origin should not be none when add entry')
+        for (let eachorigin of origin) {
+          eachorigin.time = new Date()
+        }
         let originIDs = origin.map(_ => _.id)
         let oldOriginIDs = entry.origin.map(_ => _.id)
         let addOrigin = []
         for (let eachorigin of origin) {
           if (!oldOriginIDs.includes(eachorigin.id)) {
-            let toAdd = Object.assign({},
-              eachorigin,
-              {time: new Date()}
-            )
-            entry.origin.push(toAdd)
-            addOrigin.push(toAdd)
+            entry.origin.push(eachorigin)
+            addOrigin.push(eachorigin)
           }
         }
         flags.origin = addOrigin
@@ -647,12 +645,18 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         flags.entry = true
         if (!Array.isArray(origin)) origin = [origin]
         if (!origin.length) throw Error('origin should not be none when add entry')
+        for (let eachorigin of origin) {
+          eachorigin.time = new Date()
+        }
         flags.origin = origin
       }
     } else {
       flags.entry = true
       if (!Array.isArray(origin)) origin = [origin]
       if (!origin.length) throw Error('origin should not be none when add entry')
+      for (let eachorigin of origin) {
+        eachorigin.time = new Date()
+      }
       flags.origin = origin
     }
     if (!field) { // e.g, create new Article, with some initial Tag, Cataloge...
@@ -727,7 +731,6 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       // but if origin is not null, only delete the origins
       if (!Array.isArray(origin)) origin = [origin]
       if (origin.length) {
-        if (!Array.isArray(origin)) origin = [origin]
         let originIDs = origin.map(_ => _.id)
         let oldOrigin = entry.origin
         let originDeleted = oldOrigin.filter(_ => originIDs.includes(_.id))
@@ -756,7 +759,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
 
       // delete this entry
       let withs = {}
-      let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session, origin: null}) // origin be null to delete all tags
+      let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session, origin: []}) // origin be null to delete all tags
       withs = thisresult
 
       let simple = await entry.remove()
@@ -1024,8 +1027,40 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         let this_sub_entry = await querySub({entry, data: {__query__: simple}, field: name, session, test: true, entry_model})
         let origin_flags = {}
         if (this_sub_entry.length) { // only add the origin of this subtaglike
-          throw Error('shoud not be here')
+          if (this_sub_entry.lenth > 1) {
+            throw Error(`inconsistant database, have duplicated subtaglike:${J(this_sub_entry)}, delete them with ids!`)
+          }
+          this_sub_entry = this_sub_entry[0]
+          let originIDs = origin.map(_ => _.id)
+          let oldOriginIDs = this_sub_entry.origin.map(_ => _.id)
+          let addOrigin = []
+          for (let eachorigin of origin) {
+            if (!oldOriginIDs.includes(eachorigin.id)) {
+              this_sub_entry.origin.push(eachorigin)
+              addOrigin.push(eachorigin)
+            }
+          }
+          origin_flags.entry = false
+          origin_flags.origin = addOrigin
+          let thisresult = Object.assign({}, this_sub_entry._doc)
+          thisresult.origin_flags = origin_flags
+          result.push(thisresult)
+
+          if (name === 'relations') {
+            let {other_id, other_model, id} = thisresult
+            let other_entry = await Models[other_model].findOne({id: other_id})
+            if (!other_entry) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} not exists`)
+            let that_sub_entry = other_entry[name].filter(_ => _.id = id)
+            if (that_sub_entry.lenth !== 1 ) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} do not have single corresponding relation:${J(other_entry[name]._doc)}`)
+            that_sub_entry = that_sub_entry[0]
+            that_sub_entry.origin = this_sub_entry.origin
+            other_entry.markModified(name)
+            await other_entry.save()
+          }
         } else { // create new subtaglike
+          origin_flags.entry = true
+          origin_flags.origin = origin
+
           simple.id = await getNextSequenceValue(prefield) // not use session
           // fullquery delete the query_key, only have query_key_id
           // query_entry is the entry for the 'Tag'
@@ -1053,11 +1088,14 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
               aorb,
             })
           }
+
+          full_tag_query.origin = origin
           let index = entry[name].push(full_tag_query)
           this_sub_entry = entry[name][index - 1]
 
           withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
           let thisresult = Object.assign({}, raw_tag_query, withs)
+          thisresult.origin_flags = origin_flags
           result.push(thisresult)
 
           // update reverse
@@ -1298,7 +1336,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 async function metadatasAPI ({operation, prefield, field, data, entry, session, origin}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "metadatas"
-  return await taglikeAPI({name, operation, prefield, field, data, entry, session})
+  return await taglikeAPI({name, operation, prefield, field, data, entry, session, origin})
 }
 
 function extractRelationInfo ({full_tag_query, entry_model, entry_id, old}) {
@@ -1355,16 +1393,16 @@ function extractRelationInfo ({full_tag_query, entry_model, entry_id, old}) {
 async function relationsAPI ({operation, prefield, field, data, entry, session, origin}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "relations"
-  return await taglikeAPI({ name, operation, prefield, field, data, entry, session})
+  return await taglikeAPI({ name, operation, prefield, field, data, entry, session, origin})
 }
 
 async function cataloguesAPI ({operation, prefield, field, data, entry, session, origin}) {
   const name = "catalogues"
-  return await taglikeAPI({name, operation, prefield, field, data, entry, session})
+  return await taglikeAPI({name, operation, prefield, field, data, entry, session, origin})
 }
 async function tagsAPI ({operation, prefield, field, data, entry, session, origin}) {
   const name = "tags"
-  return await taglikeAPI({name, operation, prefield, field, data, entry, session})
+  return await taglikeAPI({name, operation, prefield, field, data, entry, session, origin})
 }
 let APIs = {
   flagsAPI,
