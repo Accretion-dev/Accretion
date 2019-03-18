@@ -605,6 +605,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       if (entry) {
         if (!origin) throw Error('should have origin if query is not null in +')
         if (!Array.isArray(origin)) origin = [origin]
+        if (!origin.length) throw Error('origin should not be none when add entry')
         let originIDs = origin.map(_ => _.id)
         let oldOriginIDs = entry.origin.map(_ => _.id)
         let addOrigin = []
@@ -633,11 +634,14 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         return returnData
       } else {
         flags.entry = true
+        if (!Array.isArray(origin)) origin = [origin]
+        if (!origin.length) throw Error('origin should not be none when add entry')
         flags.origin = origin
       }
     } else {
       flags.entry = true
       if (!Array.isArray(origin)) origin = [origin]
+      if (!origin.length) throw Error('origin should not be none when add entry')
       flags.origin = origin
     }
     if (!field) { // e.g, create new Article, with some initial Tag, Cataloge...

@@ -92,14 +92,14 @@ test('transaction-base', async t => {
   t.pass()
 })
 
-test('basic', async t => { // create, modify and delete for All model
+test.only('basic', async t => { // create, modify and delete for All model
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
   for (let each of All) {
     let Model = Models[each]
     let pks = getRequire(Model)
-    let data, refetch, refetch_, result, id, rawdata
+    let data, refetch, refetch_, result, id, rawdata, newdata
     data = {
       comment: `${each} basic test`,
     }
@@ -109,6 +109,14 @@ test('basic', async t => { // create, modify and delete for All model
       }
     }
     rawdata = Object.assign({}, data)
+    newdata = {
+      comment: `new ${each} basic test`,
+    }
+    if (pks.length) {
+      for (let pk of pks) {
+        newdata[pk] = `new ${each} basic test`
+      }
+    }
     // create
     result = await api({
       operation: '+',
@@ -160,6 +168,17 @@ test('basic', async t => { // create, modify and delete for All model
     })
     t.is(result.flags.entry, false)
     t.is(result.flags.origin.length, 1)
+    // create newdata with origin auto3
+    result = await api({
+      operation: '+',
+      query:{id: id+1},
+      data: newdata,
+      model: each,
+      origin: {id: 'auto3'}
+    })
+    t.is(result.flags.entry, true)
+    t.is(result.flags.origin.length, 1)
+    newdata.id = result.modelID
     // modify
     data = {
       comment: `${each} basic modified`
@@ -226,6 +245,25 @@ test('basic', async t => { // create, modify and delete for All model
     t.is(result.flags.entry, true)
     t.is(result.flags.origin.length, 4)
     refetch = await Model.findOne({id})
+    t.true(refetch === null)
+    // delete new data
+    result = await api({
+      operation: '-',
+      model: each,
+      query: {id: newdata.id},
+      origin: {id: 'auto4'}, // force delete it, no matter how many origins it has
+    })
+    t.is(result.flags.entry, false)
+    t.is(result.flags.origin.length, 0)
+    result = await api({
+      operation: '-',
+      model: each,
+      query: {id: newdata.id},
+      origin: {id: 'auto3'}, // force delete it, no matter how many origins it has
+    })
+    t.is(result.flags.entry, true)
+    t.is(result.flags.origin.length, 1)
+    refetch = await Model.findOne({id: newdata.id})
     t.true(refetch === null)
   }
   t.pass()
