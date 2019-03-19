@@ -201,6 +201,7 @@ function initModels () {
     other_model: { type: String },
     other_id: { type: Number },
     aorb: { type: String },
+    other_aorb: { type: String },
   }
   subSchema.relation = new Schema(schemaData)
   WithRelation.forEach(key => {
@@ -351,7 +352,7 @@ async function saveHistory(returnData, session) {
   return history
 }
 // all APIs
-async function queryTaglikeID ({field, query, test, getEntry, session, entry_model}) {
+async function queryTaglikeID ({field, query, test, getEntry, session, entry_model, inSubquery}) {
   let Models = globals.Models
   // fullquery delete the query_key, only have query_key_id
   // query for foreignField if do not know id, else just include id
@@ -360,7 +361,8 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
   if (!(query_key in query || query_key+"_id" in query)) {
     // do not change taglike, no need to query for the new one
     if (test) {
-      return {full_tag_query: query, raw_tag_query: Object.assign({}, query)}
+      rawquery = Object.assign({}, query)
+      fullquery = Object.assign({}, query)
     } else {
       throw Error(`should have ${query_key} or ${query_key}_id, data:${JSON.stringify(query,null,2)}`)
     }
@@ -396,8 +398,9 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
     }
     fullquery[query_key+"_id"] = query_id
     rawquery = Object.assign({}, fullquery)
-    delete fullquery[query_key]
+    if (!inSubquery) delete fullquery[query_key]
   }
+
   if (field === 'relations') {
     if (!fullquery.to_id && fullquery.to) {
       let to_model = fullquery.to_model
@@ -407,7 +410,7 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
       if (r.length !== 1) throw Error(`not single result when query ${to_model} with ${to}, r:${r}`)
       to = r[0]
       fullquery.to_id = to.id
-      delete fullquery.to
+      if (!inSubquery) delete fullquery.to
     }
     if (!fullquery.from_id && fullquery.from) {
       let from_model = fullquery.from_model
@@ -417,7 +420,7 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
       if (r.length !== 1) throw Error(`not single result when query ${from_model} with ${JSON.stringify(from,null,2)}, fullquery:${JSON.stringify(fullquery,null,2)}, r:${r}`)
       from = r[0]
       fullquery.from_id = from.id
-      delete fullquery.from
+      if (!inSubquery) delete fullquery.from
     }
   }
   return {tag_query_id: query_id, raw_tag_query: rawquery, full_tag_query: fullquery, tag_query_entry: query_entry}
@@ -436,7 +439,7 @@ async function querySub({entry, data, field, session, test, entry_model}) {
     let query = data.__query__
     delete fullquery.__query__
 
-    let {tag_query_id, full_tag_query} = await queryTaglikeID({field, query, session, entry_model})
+    let {tag_query_id, full_tag_query} = await queryTaglikeID({field, query, session, entry_model, inSubquery: true})
     // search for subtaglike, must have unique result if not test
     if (field === 'relations') {
       if (full_tag_query.to_id) {
@@ -1211,6 +1214,9 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         simple = full_tag_query
         this_sub_entry.set(simple)
         if (changeTaglike) { // test if it is duplicated with another taglike
+          if (this_sub_entry.origin.filter(_ => _.id !== 'manual').length) {
+            throw Error(`can change key paramerters of a ${name} if its origins are larger than manual`)
+          }
           let {simple: newsimple} = extractWiths({data:this_sub_entry._doc, model: name, sub: true})
           newsimple = Object.assign({}, newsimple)
           delete newsimple.id
@@ -1225,6 +1231,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         simple[query_key] = this_sub_entry[query_key]
         withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
         let thisresult = Object.assign({}, raw_tag_query, withs)
+        thisresult.modify_flags = {changeTaglike}
         result.push(thisresult)
 
         if (name === 'relations') { // relationsModifyHookAfterWiths

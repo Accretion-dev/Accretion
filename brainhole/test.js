@@ -497,24 +497,24 @@ test('test all taglike api', async t => {
           ]}
           getNewTaglike = (U) => { return {relations: [
             { id: U[0].id, // M: comment and flags
-              comment: 'test comment updated 0', flags: { debug: 'change to false', add_new_flag: true }, },
+              modify_flags: {changeTaglike: false}, comment: 'test comment updated 0', flags: { debug: 'change to false', add_new_flag: true }, },
             { id: U[1].id, // M: to(0->2 => 0->9)
-              to_id: D[9].id, comment: 'test comment updated 1', flags: { debug: 'change to false', add_new_flag: true }, },
+              to_id: D[9].id, modify_flags: {changeTaglike: true}, comment: 'test comment updated 1', flags: { debug: 'change to false', add_new_flag: true }, },
             { // _Q_: relation_id
               __query__: { relation_id: U[2].relation_id, },
-              comment: 'new comment 2', flags: {debug: 'change to false', add_new_flag: true} },
+              modify_flags: {changeTaglike: false}, comment: 'new comment 2', flags: {debug: 'change to false', add_new_flag: true} },
             { // _Q_: relation; Q: relation, to; M relation(3 => 2), to(0->3 => 0->10)
               __query__: { relation: { name: T[3].name }, },
-              relation: { name: T[2].name },
+              relation: { name: T[2].name }, modify_flags: {changeTaglike: true},
               to: {id:D[10].id}, comment: 'update comment 3', flags: {debug: 'change to false', debug: 'change to false'}, },
             { // _Q_: relation; M: relation(4 => 1)
-              __query__: { relation: { name: T[4].name, } },
+              __query__: { relation: { name: T[4].name, } }, modify_flags: {changeTaglike: true},
               relation_id: T[0].id, comment: 'new new comment 4', flags: {debug: 'change to false', add_new_flag: true} },
             { // _Q_: relation; Q: from; M: to (0->5 => 9->0)
-              __query__: { relation: { name: T[5].name, }, },
+              __query__: { relation: { name: T[5].name, }, }, modify_flags: {changeTaglike: true},
               from: {id:D[9].id}, comment: 'new comment 5', flags: {debug: 'change to false', add_new_flag: true} },
             { // _Q_: relation; M: to (0->6 => 10->0)
-              __query__:{ relation: { id: T[6].id, } },
+              __query__:{ relation: { id: T[6].id, } }, modify_flags: {changeTaglike: true},
               from_id: D[10].id, comment: 'comment update 6', flags: { debug: 'true to false', add_new_flag: true} } ]} }
           getBadNewTaglike = (U) => { return {relations: [
             {
@@ -625,12 +625,12 @@ test('test all taglike api', async t => {
           ]}
           getNewTaglike = (U) => { return {metadatas:[
             { id: U[1].id, // M: value, comment and flags
-              value: 'test color string updated', comment: 'test comment updated', flags: { debug: 'change to false', add_new_flag: true }, },
+              value: 'test color string updated', modify_flags: {changeTaglike: false}, comment: 'test comment updated', flags: { debug: 'change to false', add_new_flag: true }, },
             { // _Q_: metadata; Q: metadata; M: metadata(3 => 4)
-              __query__: { metadata: { name: T[3].name }, },
+              __query__: { metadata: { name: T[3].name }, }, modify_flags: {changeTaglike: true},
               metadata: { name: T[6].name }, value: {msg: 'mixed_value modify', mixed_value_add: true}, comment: 'update comment', flags: { debug: 'change to false', add_new_flag: true }, },
             { // _Q_: metadata_id; M: value...
-              __query__: { metadata_id: U[2].metadata_id, },
+              __query__: { metadata_id: U[2].metadata_id, }, modify_flags: {changeTaglike: false},
               value: 'test rate string 2 modified', comment: 'new comment', flags: { debug: 'change to false', add_new_flag: true }, },
           ]}}
           getBadNewTaglike = (U) => { return {metadatas:[
@@ -695,15 +695,15 @@ test('test all taglike api', async t => {
               comment: 'test comment', flags: { debug: true }, },
           ]}
           getNewTaglike = (U) => { return {[name]:[
-            { id: U[0].id,
+            { id: U[0].id, modify_flags: {changeTaglike: false},
               comment: 'test comment updated 0', flags: { debug: false, add_new_flag: true }, },
-            { __query__: { [n_id]: T[1].id, },
+            { __query__: { [n_id]: T[1].id, }, modify_flags: {changeTaglike: false},
               comment: 'test comment updated 1', flags: { debug: false, add_new_flag: true }, },
-            { __query__: { [n]: { id: T[2].id, } },
+            { __query__: { [n]: { id: T[2].id, } }, modify_flags: {changeTaglike: false},
               comment: 'new comment 2', flags: {debug: false, add_new_flag: true}
             },
             { __query__: { [n]: { name: T[3].name }, },
-              [n]: { id: T[4].id },
+              [n]: { id: T[4].id }, modify_flags: {changeTaglike: true},
               comment: 'update comment 3', flags: {debug: false, add_new_flag: true}
             },
           ]}}
@@ -863,7 +863,7 @@ test('test all taglike api', async t => {
         data.id = id
         let refetch = clone((await Model.findOne({id}))._doc)
         let refetch_ = clone(refetch)
-        for (let name in Object.keys(taglike)) {
+        for (let name of Object.keys(taglike)) {
           for (let index in taglike[name]) { // repleace all withs data
             assignExists(refetch_[name][index], taglike[name][index])
           }
@@ -886,7 +886,7 @@ test('test all taglike api', async t => {
         let refetch = clone((await Model.findOne(query))._doc)
         let refetch_ = clone(refetch)
         Object.assign(refetch_, _.omit(data, omitnames)) // replace simple
-        for (let name in Object.keys(newtaglike)) {
+        for (let name of Object.keys(newtaglike)) {
           for (let index in newtaglike[name]) { // repleace all withs data
             if (modifyMap) {
               assignExists(refetch_[name][modifyMap[index]], newtaglike[name][index])
@@ -895,6 +895,15 @@ test('test all taglike api', async t => {
             }
           }
         }
+        for (let name of Object.keys(newtaglike)) {
+          let withs = result.withs[name]
+          for (let index in newtaglike[name]) { // repleace all withs data
+            if (newtaglike[name][index].modify_flags) {
+              t.deepEqual(newtaglike[name][index].modify_flags, withs[index].modify_flags, J(withs[index]))
+            }
+          }
+        }
+
         t.deepEqual(refetch, refetch_)
         return {result, refetch}
       }
