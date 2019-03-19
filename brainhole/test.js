@@ -1248,11 +1248,11 @@ test.only('tag origin system', async t => {
     {name: 'fathers', withname: 'WithFather'},
     {name: 'children', withname: 'WithChild'},
   ]
-  const pstep = true
+  const pstep = false
   for (let apiname of apis) {
     let {name, withname, model: tagModel} = apiname
     console.log(`test ${name}`)
-    let todos = WithsDict[withname].slice(0,1)
+    let todos = WithsDict[withname]
     for (let model of todos) {
       if (pstep) console.log(`... ${model}`)
       let Model = Models[model]
@@ -1404,7 +1404,7 @@ test.only('tag origin system', async t => {
             {[n]: {id: T[6].id}},
             {[n]: {id: T[7].id}},
           ]
-          deltaglike = taglike.map(_ => {__query__:_})
+          deltaglike = taglike.map(_ => ({__query__:_}))
           doTest = async ({result, refetch}) => {
             statusTest({result, refetch, status, changes})
           }
@@ -1621,7 +1621,7 @@ test.only('tag origin system', async t => {
         if (pstep) console.log(`  ${tname} done`)
       }
       if(tname='add 1,3,5,6 with origin [auto2, auto3, auto5]'){
-        // after: 0:m; 6:m,a2,a5; 7:m; 1:m,a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
+        // after: 0:m; 6:m,a2,a3,a5; 7:m; 1:m,a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
         result = await api({
           operation: '+',
           data: {[name]: [
@@ -1660,9 +1660,8 @@ test.only('tag origin system', async t => {
       // test delete
       if(tname='delete 0~7 with origin: auto4'){
         // delete nothing for all
-        // before: 0:m; 6:m,a2,a5; 7:m; 1:m,a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
-        // after:  0:m; 6:m,a2,a5; 7:m; 1:m,a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
-        debugger
+        // before: 0:m; 6:m,a2,a3,a5; 7:m; 1:m,a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
+        // after:  0:m; 6:m,a2,a3,a5; 7:m; 1:m,a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
         result = await api({
           operation: '-',
           data: {[name]: [
@@ -1710,17 +1709,125 @@ test.only('tag origin system', async t => {
       if(tname='delete 0~6 without origin(id=manula)'){
         // delete the first entry
         // delete the origin of the second entry
-        // after: 1:a2,a3; 2:a1,a2; 3:a1,a2,a3; 4:a2; 5:a2,a3; 7:m;
+        // before: 0:m; 6:m,a2,a3,a5; 7:m; 1:m,a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
+        // after:  6:a2,a3,a5; 7:m; 1:a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
+        result = await api({
+          operation: '-',
+          data: {[name]: [
+            deltaglike[0],
+            deltaglike[1],
+            deltaglike[2],
+            deltaglike[3],
+            deltaglike[4],
+            deltaglike[5],
+            deltaglike[6],
+          ]},
+          model,
+          query: {id: data.id},
+          field: name,
+        })
+        let id = result.modelID
+        refetch = clone((await Model.findOne({id}))._doc)
+        status = [
+          [6,['auto2','auto3','auto5']],
+          [7,['manual']],
+          [1,['auto2','auto3','auto5']],
+          [2,['auto1','auto2']],
+          [3,['auto1','auto2','auto3','auto5']],
+          [4,['auto2']],
+          [5,['auto2','auto3','auto5']],
+        ]
+        changes = [
+          [true,['manual']],
+          [false,['manual']],
+          [false,[]],
+          [false,[]],
+          [false,[]],
+          [false,[]],
+          [false,['manual']],
+        ]
+        await doTest({refetch, result})
+        updated = result.withs[name]
         if (pstep) console.log(`  ${tname} done`)
       }
-      if(tname='delete 0~7 with origin 2,3,4'){
-        // before: 1:a2,a3; 2:a1,a2; 3:a1,a2,a3; 4:a2; 5:a2,a3; 7:m;
-        // after:  2:a1; 3:a1; 7:m;
+      if(tname='delete 0~7 with origin 2,3,4,5'){
+        // before: 6:a2,a3,a5; 7:m; 1:a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
+        // after:           7:m;           ; 2:a1   ; 3:a1,        ;
+        result = await api({
+          operation: '-',
+          data: {[name]: [
+            deltaglike[0],
+            deltaglike[1],
+            deltaglike[2],
+            deltaglike[3],
+            deltaglike[4],
+            deltaglike[5],
+            deltaglike[6],
+            deltaglike[7],
+          ]},
+          model,
+          query: {id: data.id},
+          field: name,
+          origin:[{id:'auto2'},{id:'auto3'},{id:'auto4'},{id:'auto5'}]
+        })
+        let id = result.modelID
+        refetch = clone((await Model.findOne({id}))._doc)
+        status = [
+          [7,['manual']],
+          [2,['auto1']],
+          [3,['auto1']],
+        ]
+        changes = [
+          [false,[]],
+          [true,['auto2','auto3','auto5']],
+          [false,['auto2']],
+          [false,['auto2','auto3','auto5']],
+          [true,['auto2']],
+          [true,['auto2','auto3','auto5']],
+          [true,['auto2','auto3','auto5']],
+          [false,[]],
+        ]
+        await doTest({refetch, result})
+        updated = result.withs[name]
         if (pstep) console.log(`  ${tname} done`)
       }
       if(tname='delete with origin[]'){
         // delete all
+        // before:           7:m;           ; 2:a1   ; 3:a1,        ;
         // after:
+        result = await api({
+          operation: '-',
+          data: {[name]: [
+            deltaglike[0],
+            deltaglike[1],
+            deltaglike[2],
+            deltaglike[3],
+            deltaglike[4],
+            deltaglike[5],
+            deltaglike[6],
+            deltaglike[7],
+          ]},
+          model,
+          query: {id: data.id},
+          field: name,
+          origin:[]
+        })
+        let id = result.modelID
+        refetch = clone((await Model.findOne({id}))._doc)
+        status = [
+        ]
+        changes = [
+          [false,[]],
+          [false,[]],
+          [true,['auto1']],
+          [true,['auto1']],
+          [false,[]],
+          [false,[]],
+          [false,[]],
+          [true,['manual']],
+        ]
+        await doTest({refetch, result})
+        updated = result.withs[name]
         if (pstep) console.log(`  ${tname} done`)
       }
       // clean up
