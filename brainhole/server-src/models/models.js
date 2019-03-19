@@ -432,13 +432,18 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
 }
 async function querySub({entry, data, field, session, test, entry_model}) {
   // query subdocument in a subdocument array (like tags, metadatas)
+  // if test is true, return an array
   let result, rawquery, fullquery
   let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
   if ('id' in data) {
     result = entry[field].find(_ => _.id === data.id )
     if (!result)
       throw Error(`id ${data.id} not exists in ${field}\nentry:${JSON.stringify(entry,null,2)}\ndata:${JSON.stringify(entry,null,2)}\nfield:${field}`)
-    return result
+    if (test) {
+      return [result]
+    } else {
+      return result
+    }
   } else if ('__query__' in data) {
     fullquery = Object.assign({}, data)
     let query = data.__query__
@@ -462,7 +467,7 @@ async function querySub({entry, data, field, session, test, entry_model}) {
     } else if (result.length !== 1) {
       if (!(result.length)) {
         let currentData = entry[field].map(__ => (_.pick(__, ['id', query_key+"_id"])))
-        throw Error(`query:${JSON.stringify(query)} not found in ${field}, current data:${JSON.stringify(currentData, null, 2)}`)
+        throw Error(`query:${JSON.stringify(query)} not found in ${field}, current data:${J(currentData)}`)
       } else {
         throw Error(`inconsistant database, have duplicated subtaglike:${J(result)}, delete them with ids!\nquery:${J({query, field})}`)
       }
@@ -730,6 +735,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       return result
     }
   } else if (operation === '-') {
+    if (!Array.isArray(origin)) origin = [origin]
     let entry = await Model.find(query).session(session)
     if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${JSON.stringify(query,null,2)} not unique: ${entry}`)
     entry = entry[0]
@@ -737,7 +743,6 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
     if (!field) {
       // if origin is null, delete it without doubt
       // but if origin is not null, only delete the origins
-      if (!Array.isArray(origin)) origin = [origin]
       if (origin.length) { // try to delete origin
         let originIDs = origin.map(_ => _.id)
         let oldOrigin = entry.origin
@@ -965,6 +970,12 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
       let origin_flags = {}
       let {anotherEntry} = eachdata
       let subentry = entry[type].find(_ => _.id === anotherEntry.id)
+      if (!subentry) {
+        origin_flags.entry = false
+        origin_flags.origin = []
+        result.push({id: null, origin_flags})
+        continue
+      }
       let other_subentry = anotherEntry[revType].find(_ => _.id === entry.id)
       if (!other_subentry) {
         let M = entry.schema.options.collection
@@ -975,7 +986,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
         let oldOrigin = subentry.origin
         let originDeleted = oldOrigin.filter(_ => originIDs.includes(_.id))
         let originLeft = oldOrigin.filter(_ => !originIDs.includes(_.id))
-        flags.origin = originDeleted
+        origin_flags.origin = originDeleted
         if (originLeft.length) { // only delete these origin
           origin_flags.entry = false
           subentry.origin = originLeft
@@ -1325,17 +1336,27 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
       let entries = []
       if (data) {
         for (let eachdata of data) {
-          let this_sub_entry = await querySub({entry, data: eachdata, field: name, session, entry_model})
+          let this_sub_entry = await querySub({entry, data: eachdata, field: name, session, entry_model, test:true})
+          if (this_sub_entry.length > 1) {
+            throw Error(`inconsistant database, have duplicated subtaglike:${J(this_sub_entry)}, delete them with ids!`)
+          }
+          this_sub_entry = this_sub_entry[0]
           entries.push(this_sub_entry)
         }
       } else {
+        // must write with .map(_ => _), or will cause bug... don't know why
         entries = entry[name].map(_ => _)
       }
       for (let this_sub_entry of entries) {
         let origin_flags = {}
+        if (!this_sub_entry) {
+          origin_flags.entry = false
+          origin_flags.origin = []
+          result.push({id: null, origin_flags})
+          continue
+        }
         let old_sub_entry = Object.assign({}, this_sub_entry._doc)
         let {simple, withs} = extractWiths({data: this_sub_entry._doc, model: name, sub: true})
-        debugger
         if (origin.length) {// try to delete origin
           let originIDs = origin.map(_ => _.id)
           let oldOrigin = this_sub_entry.origin
@@ -1345,7 +1366,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           if (originLeft.length) { // only delete this origin
             this_sub_entry.origin = originLeft
             origin_flags.entry = false
-            let toReturn = Object.assign({}, this_sub_entry)
+            let toReturn = Object.assign({}, this_sub_entry._doc)
             toReturn.origin_flags = origin_flags
             result.push(toReturn)
 
@@ -1353,7 +1374,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
               let {other_model, other_id} = this_sub_entry
               let other_entry = await Models[other_model].findOne({id: other_id}).session(session)
               if (!other_entry) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} not exists`)
-              let that_sub_entry = other_entry[name].filter(_ => _.id === id)
+              let that_sub_entry = other_entry[name].filter(_ => _.id === this_sub_entry.id)
               if (that_sub_entry.length !== 1 ) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} do not have single corresponding relation:${J(other_entry[name]._doc)}`)
               that_sub_entry = that_sub_entry[0]
               that_sub_entry.origin = this_sub_entry.origin
@@ -1366,7 +1387,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           }
         } else { // force delete subentry
           origin_flags.entry = true
-          origin_flags.origin = entry.origin
+          origin_flags.origin = this_sub_entry.origin
         }
 
         //simple = {}

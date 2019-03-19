@@ -394,11 +394,11 @@ test('test all taglike api', async t => {
   let WithsDict = globals.WithsDict
   let All = globals.All
   let apis = [
-    {name: 'family', withname: 'WithFather'},
-    {name: 'relations', withname: 'WithRelation', model:'Relation'},
     {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
     {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
     {name: 'tags', withname: 'WithTag', model:'Tag'},
+    {name: 'family', withname: 'WithFather'},
+    {name: 'relations', withname: 'WithRelation', model:'Relation'},
   ]
   const pstep = false
   for (let apiname of apis) {
@@ -1236,7 +1236,7 @@ test('test all taglike api', async t => {
   }
   t.pass()
 })
-test.only('tag origin system', async t => {
+test('tag origin system', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -1679,7 +1679,6 @@ test.only('tag origin system', async t => {
           field: name,
           origin: {id: 'auto4'},
         })
-        debugger
         let id = result.modelID
         refetch = clone((await Model.findOne({id}))._doc)
         status = [
