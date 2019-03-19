@@ -733,7 +733,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       // if origin is null, delete it without doubt
       // but if origin is not null, only delete the origins
       if (!Array.isArray(origin)) origin = [origin]
-      if (origin.length) {
+      if (origin.length) { // try to delete origin
         let originIDs = origin.map(_ => _.id)
         let oldOrigin = entry.origin
         let originDeleted = oldOrigin.filter(_ => originIDs.includes(_.id))
@@ -755,7 +755,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         } else {
           flags.entry = true
         }
-      } else {
+      } else { // force delete entry
         flags.entry = true
         flags.origin = entry.origin
       }
@@ -1051,7 +1051,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 
           if (name === 'relations') {
             let {other_id, other_model, id} = thisresult
-            let other_entry = await Models[other_model].findOne({id: other_id})
+            let other_entry = await Models[other_model].findOne({id: other_id}).session(session)
             if (!other_entry) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} not exists`)
             let that_sub_entry = other_entry[name].filter(_ => _.id = id)
             if (that_sub_entry.lenth !== 1 ) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} do not have single corresponding relation:${J(other_entry[name]._doc)}`)
@@ -1278,8 +1278,43 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         entries = entry[name].map(_ => _)
       }
       for (let this_sub_entry of entries) {
+        let origin_flags = {}
         let old_sub_entry = Object.assign({}, this_sub_entry._doc)
         let {simple, withs} = extractWiths({data: this_sub_entry._doc, model: name, sub: true})
+
+        if (origin.length) {// try to delete origin
+          let originIDs = origin.map(_ => _.id)
+          let oldOrigin = this_sub_entry.origin
+          let originDeleted = oldOrigin.filter(_ => originIDs.includes(_.id))
+          let originLeft = oldOrigin.filter(_ => !originIDs.includes(_.id))
+          origin_flags.origin = originDeleted
+          if (originLeft.length) { // only delete this origin
+            this_sub_entry.origin = originLeft
+            origin_flags.entry = false
+            let toReturn = Object.assign({}, this_sub_entry)
+            toReturn.origin_flags = origin_flags
+            result.push(toReturn)
+
+            if (name === 'relations') { // modify origin of other entry
+              let {other_model, other_id} = this_sub_entry
+              let other_entry = await Models[other_model].findOne({id: other_id}).session(session)
+              if (!other_entry) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} not exists`)
+              let that_sub_entry = other_entry[name].filter(_ => _.id = id)
+              if (that_sub_entry.lenth !== 1 ) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} do not have single corresponding relation:${J(other_entry[name]._doc)}`)
+              that_sub_entry = that_sub_entry[0]
+              that_sub_entry.origin = this_sub_entry.origin
+              other_entry.markModified(name)
+              await other_entry.save()
+            }
+            continue
+          } else {
+            origin_flags.entry = true
+          }
+        } else { // force delete subentry
+          origin_flags.entry = true
+          origin_flags.origin = entry.origin
+        }
+
         //simple = {}
         withs = {}
         withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
@@ -1287,7 +1322,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         simple.id = this_sub_entry.id
         simple[query_key] = this_sub_entry[query_key]
         this_sub_entry.remove()
-        let thisresult = Object.assign({}, simple, withs)
+        let thisresult = Object.assign({}, simple, withs, {origin_flags})
         result.push(thisresult)
 
         let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]}).session(session)
