@@ -394,11 +394,11 @@ test('test all taglike api', async t => {
   let WithsDict = globals.WithsDict
   let All = globals.All
   let apis = [
+    {name: 'family', withname: 'WithFather'},
     {name: 'relations', withname: 'WithRelation', model:'Relation'},
     {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
     {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
     {name: 'tags', withname: 'WithTag', model:'Tag'},
-    {name: 'family', withname: 'WithFather'},
   ]
   const pstep = false
   for (let apiname of apis) {
@@ -808,8 +808,11 @@ test('test all taglike api', async t => {
                 for (let item of result[type]) {
                   let other_entry = (await Models[each].findOne({id: item.id}))._doc
                   let other_type = type === 'fathers' ? 'children' : 'fathers'
-                  let find = other_entry[other_type].find(_ => _.id === result.id)
-                  t.true(!!find, `result:${JSON.stringify(result)}\nother_entry:${JSON.stringify(other_entry,null,2)}\nfind:${JSON.stringify(find)}`)
+                  let other_sub_entry = other_entry[other_type].find(_ => _.id === result.id)
+                  t.truthy(other_sub_entry, `result:${J(result)}\nother_entry:${J(other_entry)}\nfind:${J(other_sub_entry)}`)
+                  other_sub_entry = clone(other_sub_entry._doc)
+                  item = clone(item._doc)
+                  t.deepEqual(other_sub_entry.origin, item.origin)
                 }
               }
             }

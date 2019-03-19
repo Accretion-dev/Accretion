@@ -899,7 +899,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
   let model = entry.schema.options.collection
   if (field) throw Error('field should always be blank or undefined, debug it!')
   // direct query models
-  let fullquerys = []
+  let fulldata = []
   if (operation !== 'o') {
     if (operation === '-' && !data) {
       data = entry[type]
@@ -914,41 +914,85 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
       let r = await globals.Models[model].find(queryData).session(session)
       if (r.length !== 1) throw Error(`not single result when query ${model} with ${JSON.stringify(each,null,2)}\n${JSON.stringify(r),null,2}`)
       let anotherEntry = r[0]
-      fullquerys.push({id: anotherEntry.id, anotherEntry})
+      fulldata.push({anotherEntry})
     }
   }
   const reverseMap = {fathers: 'children', children: 'fathers'}
   let revType = reverseMap[type]
   if (operation === '+') {
-    let reverseRelations = []
-    for (let fullquery of fullquerys) {
-      let anotherEntry = fullquery.anotherEntry
-      delete fullquery.anotherEntry
-      let index = entry[type].push(fullquery)
-      result.push(fullquery)
-      reverseRelations.push({anotherEntry, toPush: {id: entry.id}})
+    for (let eachdata of fulldata) {
+      let origin_flags = {}
+      let {anotherEntry} = eachdata
+
+      let subentry = entry[type].find(_ => _.id === anotherEntry.id)
+      if (subentry) { // only add origin
+        let originIDs = origin.map(_ => _.id)
+        let oldOriginIDs = subentry.origin.map(_ => _.id)
+        for (let eachorigin of origin) {
+          if (!oldOriginIDs.includes(eachorigin.id)) {
+            subentry.origin.push(eachorigin)
+            addOrigin.push(eachorigin)
+          }
+        }
+        origin_flags.origin = addOrigin
+        origin_flags.entry = false
+        let other_subentry = anotherEntry[revType].find(_ => _.id === entry.id)
+        if (!other_subentry) {
+          let M = entry.schema.options.collection
+          throw Error(`inconsistant database, ${M}(id=${entry.id})[${type}]=${anotherEntry.id}, but ${M}(id=${anotherEntry.id})[${type}] do not have reverse`)
+        }
+        other_subentry.origin = subentry.origin
+        anotherEntry.markModified(revType)
+        await anotherEntry.save()
+        result.push({id: anotherEntry.id, origin, origin_flags})
+      } else { // add entry
+        origin_flags.origin = origin
+        origin_flags.entry = true
+        let index = entry[type].push({id: anotherEntry.id, origin})
+        anotherEntry[revType].push({id: entry.id, origin})
+        await anotherEntry.save()
+        result.push({id: anotherEntry.id, origin, origin_flags})
+      }
     }
     let loop = await testFamilyLoop({model, entry, session})
     if (loop) throw Error(`detect family loop for model ${model}, ${JSON.stringify(entry,null,2)}\nloop:${loop}`)
-    // after test loop, add reverse family relation
-    for (let eachJob of reverseRelations) {
-      let {anotherEntry, toPush} = eachJob
-      anotherEntry[revType].push(toPush)
-      await anotherEntry.save()
-    }
     return result
   } else if (operation === '*') {
     throw Error(`can not modify family`)
   } else if (operation === '-') {
-    let reverseRelations = []
-    for (let fullquery of fullquerys) {
-      let anotherEntry = fullquery.anotherEntry
-      delete fullquery.anotherEntry
-      if (!entry[type].find(_ => _.id === fullquery.id)) throw Error(`id: ${entry.id} ${type}:${fullquery.id} not found, can not delete!`)
-      entry[type] = entry[type].filter(_ => _.id != fullquery.id) // need proper API here
+    for (let eachdata of fulldata) {
+      let origin_flags = {}
+      let {anotherEntry} = eachdata
+      let subentry = entry[type].find(_ => _.id === anotherEntry.id)
+      let other_subentry = anotherEntry[revType].find(_ => _.id === entry.id)
+      if (!other_subentry) {
+        let M = entry.schema.options.collection
+        throw Error(`inconsistant database, ${M}(id=${subentry.id})[${type}]=${anotherEntry.id}, but ${M}(id=${subentry.id})[${type}] do not have reverse`)
+      }
+      if (origin.length) { // try to delete origin
+        let originIDs = origin.map(_ => _.id)
+        let oldOrigin = subentry.origin
+        let originDeleted = oldOrigin.filter(_ => originIDs.includes(_.id))
+        let originLeft = oldOrigin.filter(_ => !originIDs.includes(_.id))
+        flags.origin = originDeleted
+        if (originLeft.length) { // only delete these origin
+          origin_flags.entry = false
+          subentry.origin = originLeft
+          other_subentry.origin = originLeft
+          anotherEntry.markModified(revType)
+          await anotherEntry.save()
+          result.push({id: anotherEntry.id, origin: subentry.origin, origin_flags})
+          continue
+        }
+      } else { // force delete subentry
+        origin_flags.origin = subentry.origin
+      }
+      origin_flags.entry = true
+      entry[type] = entry[type].filter(_ => _.id !== anotherEntry.id) // need proper API here
       anotherEntry[revType] = anotherEntry[revType].filter(_ => _.id !== entry.id)
+      anotherEntry.markModified(revType)
       await anotherEntry.save()
-      result.push(fullquery)
+      result.push({id: anotherEntry.id, origin: subentry.origin, origin_flags})
     }
     return result
   } else if (operation === 'o') {
@@ -968,10 +1012,10 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
   }
 }
 async function fathersAPI ({operation, prefield, field, entry, data, session, origin}) {
-  return await familyAPI({operation, prefield, field, entry, data, type:'fathers', session})
+  return await familyAPI({operation, prefield, field, entry, data, type:'fathers', session, origin})
 }
 async function childrenAPI ({operation, prefield, field, entry, data, session, origin}) {
-  return await familyAPI({operation, prefield, field, entry, data, type:'children', session})
+  return await familyAPI({operation, prefield, field, entry, data, type:'children', session, origin})
 }
 async function processAutoActions (auto_actions) {
   // make unique
