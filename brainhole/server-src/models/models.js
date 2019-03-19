@@ -912,7 +912,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
         queryData = each
       }
       let r = await globals.Models[model].find(queryData).session(session)
-      if (r.length !== 1) throw Error(`not single result when query ${model} with ${JSON.stringify(each,null,2)}\n${JSON.stringify(r),null,2}`)
+      if (r.length !== 1) throw Error(`not single result when query ${model} with ${J(queryData)}\n${J(r)}`)
       let anotherEntry = r[0]
       fulldata.push({anotherEntry})
     }
@@ -928,6 +928,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
       if (subentry) { // only add origin
         let originIDs = origin.map(_ => _.id)
         let oldOriginIDs = subentry.origin.map(_ => _.id)
+        let addOrigin = []
         for (let eachorigin of origin) {
           if (!oldOriginIDs.includes(eachorigin.id)) {
             subentry.origin.push(eachorigin)
@@ -1268,7 +1269,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         this_sub_entry.set(simple)
         if (changeTaglike) { // test if it is duplicated with another taglike
           if (this_sub_entry.origin.filter(_ => _.id !== 'manual').length) {
-            throw Error(`can not change key paramerters of a ${name} if its origins are larger than manual`)
+            throw Error(`can not change key paramerters of a ${name}, its origin is not only manual`)
           }
           let {simple: newsimple} = extractWiths({data:this_sub_entry._doc, model: name, sub: true})
           newsimple = Object.assign({}, newsimple)
@@ -1276,7 +1277,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           let this_new_sub_entrys = await querySub({entry, data: {__query__: newsimple}, field: name, session, test: true, entry_model})
           if (this_new_sub_entrys.length>1) {
             let errorData = {entry_model, id:entry.id, eachdata, [name]: this_new_sub_entrys}
-            throw Error(`modification cause duplicated ${name} for ${errorData}`)
+            throw Error(`modification cause duplicated ${name} for ${J(errorData)}`)
           }
         }
         simple.id = this_sub_entry.id
@@ -1324,7 +1325,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
       let entries = []
       if (data) {
         for (let eachdata of data) {
-          let this_sub_entry = await querySub({entry, data: eachdata, field: name, session})
+          let this_sub_entry = await querySub({entry, data: eachdata, field: name, session, entry_model})
           entries.push(this_sub_entry)
         }
       } else {
@@ -1334,7 +1335,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         let origin_flags = {}
         let old_sub_entry = Object.assign({}, this_sub_entry._doc)
         let {simple, withs} = extractWiths({data: this_sub_entry._doc, model: name, sub: true})
-
+        debugger
         if (origin.length) {// try to delete origin
           let originIDs = origin.map(_ => _.id)
           let oldOrigin = this_sub_entry.origin

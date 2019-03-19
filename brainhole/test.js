@@ -1236,7 +1236,7 @@ test('test all taglike api', async t => {
   }
   t.pass()
 })
-test('tag origin system', async t => {
+test.only('tag origin system', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -1245,19 +1245,22 @@ test('tag origin system', async t => {
     {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
     {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
     {name: 'tags', withname: 'WithTag', model:'Tag'},
+    {name: 'fathers', withname: 'WithFather'},
+    {name: 'children', withname: 'WithChild'},
   ]
   const pstep = true
   for (let apiname of apis) {
     let {name, withname, model: tagModel} = apiname
     console.log(`test ${name}`)
-    let todos = WithsDict[withname]
-    for (let each of todos) {
-      if (pstep) console.log(`... ${each}`)
-      let Model = Models[each]
+    let todos = WithsDict[withname].slice(0,1)
+    for (let model of todos) {
+      if (pstep) console.log(`... ${model}`)
+      let Model = Models[model]
       let pks = getRequire(Model)
       let data, refetch, refetch_, result, id, ids, updated, tt
       let taglike, newtaglike, deltaglike, rawdata, toDelete, tname
-      let getNewTaglike, getDelTaglike, modifyMap, getOtherData, input
+      let doTest, status, changes
+      let isFamily = ['fathers', 'children'].includes(name)
       let __
       let testFunctions = {}
       let testDatas = {}
@@ -1266,16 +1269,39 @@ test('tag origin system', async t => {
       let T = []
       let N = 15
       let TN = 10
+
+      function filterOther (origin_flags) {
+        let result = []
+        for (let origin_flag of origin_flags) {
+          result.push([origin_flag.entry, origin_flag.origin.map(_ => _.id)])
+        }
+        return result
+      }
+      function statusTest ({result, refetch, status, changes}) {
+        // status = [[index, [origins]], ...]
+        let ss = status.map(_ => {
+          let [index, origins] = _
+          return origins
+        })
+        let real = refetch[name].map(_ => {
+          return _.origin.map(_ => _.id)
+        })
+        t.deepEqual(ss, real, J({ss, real}))
+        // changes = [[index, [entry, [origins]]], ...]
+        let origin_flags = result.withs[name].map(_ => _.origin_flags)
+        origin_flags = filterOther(origin_flags)
+        t.deepEqual(origin_flags, changes)
+      }
       if('setup') {
         // create N+1 articles, only create N-1 of them, D[0] is created later
         for (let i=0; i<=N; i++) {
           data = {
-            comment: `${i} ${each} ${name} test ${t.title}`,
+            comment: `${i} ${model} ${name} test ${t.title}`,
             flags: { debug: true }
           }
           if (pks.length) {
             for (let pk of pks) {
-              data[pk] = `${i} ${each} ${name} test ${t.title}`
+              data[pk] = `${i} ${model} ${name} test ${t.title}`
             }
           }
           rawdata = Object.assign({}, data)
@@ -1285,7 +1311,7 @@ test('tag origin system', async t => {
           result = await api({
             operation: '+',
             data: D[i],
-            model: each
+            model
           })
           id = result.modelID
           D[i].id = id
@@ -1293,62 +1319,439 @@ test('tag origin system', async t => {
         data = D[0]
         rawdata = Object.assign({}, data)
         // create Taglike
-        for (let index=0; index<=TN; index++) {
-          T.push({
-            name: `${each}-${name}-${index} ${t.title}`,
-            comment: `comment for index ${index} ${t.title}`
+        if (!isFamily) {
+          for (let index=0; index<=TN; index++) {
+            T.push({
+              name: `${model}-${name}-${index} ${t.title}`,
+              comment: `comment for index ${index} ${t.title}`
+            })
+          }
+          for (let each of T) {
+            let result = await api({
+              operation: '+',
+              data: each,
+              model: tagModel
+            })
+            let id = result.modelID
+            each.id = id
+          }
+          tt = T[0]
+        }
+        if (name === 'relations') {
+          taglike = [
+            {relation: {id: T[0].id}, to:{id: D[1].id}},
+            {relation: {id: T[1].id}, to:{id: D[1].id}},
+            {relation: {id: T[2].id}, to:{id: D[1].id}},
+            {relation: {id: T[3].id}, to:{id: D[1].id}},
+            {relation: {id: T[4].id}, to:{id: D[1].id}},
+            {relation: {id: T[5].id}, to:{id: D[1].id}},
+            {relation: {id: T[6].id}, to:{id: D[1].id}},
+            {relation: {id: T[0].id}, from:{id: D[1].id}},
+          ]
+          deltaglike = taglike.map(_ => ({__query__:_}))
+          doTest = async ({result, refetch}) => {
+            statusTest({result, refetch, status, changes})
+            // test Relation Consistence
+            result = refetch
+            for (let relation of result.relations) {
+              let this_sub_entry = relation._doc
+              let that_sub_entry = clone(relation._doc)
+              if (this_sub_entry.aorb==='a') {
+                that_sub_entry.other_id = this_sub_entry.from_id
+                that_sub_entry.other_model = this_sub_entry.from_model
+                that_sub_entry.aorb = 'b'
+              } else if (this_sub_entry.aorb==='b') {
+                that_sub_entry.other_id = this_sub_entry.to_id
+                that_sub_entry.other_model = this_sub_entry.to_model
+                that_sub_entry.aorb = 'a'
+              } else {
+                throw Error(`aorb is not a or b, ${JSON.stringify(this_sub_entry)}`)
+              }
+              let other_entry = await Models[relation.other_model].find({id: relation.other_id})
+              t.is(other_entry.length, 1)
+              other_entry = other_entry[0]
+              let other_that_sub_entry = other_entry.relations.find(_ => _.id===that_sub_entry.id)
+              t.true(!!other_that_sub_entry, JSON.stringify({this_sub_entry, that_sub_entry, other_that_sub_entry},null,2))
+              other_that_sub_entry = clone(other_that_sub_entry._doc) // if not clone, will get stuck here...
+              t.deepEqual(other_that_sub_entry, that_sub_entry, JSON.stringify({this_sub_entry, that_sub_entry, other_that_sub_entry},null,2))
+            }
+          }
+        } else if (name === 'metadatas') {
+          taglike = [
+            {metadata: {id: T[0].id}},
+            {metadata: {id: T[1].id}},
+            {metadata: {id: T[2].id}},
+            {metadata: {id: T[3].id}},
+            {metadata: {id: T[4].id}},
+            {metadata: {id: T[5].id}},
+            {metadata: {id: T[6].id}},
+            {metadata: {id: T[7].id}},
+          ]
+          deltaglike = taglike.map(_ => ({__query__:_}))
+          doTest = async ({result, refetch}) => {
+            statusTest({result, refetch, status, changes})
+          }
+        } else if (name === 'catalogues' || name === 'tags') {
+          let n = name.slice(0, -1)
+          let n_id = n + "_id"
+          taglike = [
+            {[n]: {id: T[0].id}},
+            {[n]: {id: T[1].id}},
+            {[n]: {id: T[2].id}},
+            {[n]: {id: T[3].id}},
+            {[n]: {id: T[4].id}},
+            {[n]: {id: T[5].id}},
+            {[n]: {id: T[6].id}},
+            {[n]: {id: T[7].id}},
+          ]
+          deltaglike = taglike.map(_ => {__query__:_})
+          doTest = async ({result, refetch}) => {
+            statusTest({result, refetch, status, changes})
+          }
+        } else if (name === 'fathers' || name === 'children') {
+          taglike = [
+            {comment: D[1].comment},
+            {comment: D[2].comment},
+            {comment: D[3].comment},
+            {comment: D[4].comment},
+            {id: D[5].id},
+            {id: D[6].id},
+            {id: D[7].id},
+            {id: D[8].id},
+          ]
+          deltaglike = taglike
+          doTest = async ({result, refetch}) => {
+            statusTest({result, refetch, status, changes})
+            result = refetch
+            for (let type of ['fathers', 'children']) {
+              for (let item of result[type]) {
+                let other_entry = (await Models[model].findOne({id: item.id}))._doc
+                let other_type = type === 'fathers' ? 'children' : 'fathers'
+                let other_sub_entry = other_entry[other_type].find(_ => _.id === result.id)
+                t.truthy(other_sub_entry, `result:${J(result)}\nother_entry:${J(other_entry)}\nfind:${J(other_sub_entry)}`)
+                other_sub_entry = clone(other_sub_entry._doc)
+                item = clone(item._doc)
+                t.deepEqual(other_sub_entry.origin, item.origin)
+              }
+            }
+          }
+        }
+      }
+      // test add
+      if(tname='add 1 without origin(id=manual)'){
+        // after: 0:m
+        result = await api({
+          operation: '+',
+          data: {[name]: [
+            taglike[0]
+          ]},
+          model,
+          query: {id: data.id},
+          field: name
+        })
+        let id = result.modelID
+        refetch = clone((await Model.findOne({id}))._doc)
+        status = [
+          [0,['manual']]
+        ]
+        changes = [
+          [true,['manual']]
+        ]
+        await doTest({refetch, result})
+        if (pstep) console.log(`  ${tname} done`)
+      }
+      if(tname='add 6,7,0,1'){
+        // after: 0:m; 6:m; 7:m; 1:m;
+        // notice add duplicated subentry in one api call actually add nothing
+        result = await api({
+          operation: '+',
+          data: {[name]: [
+            taglike[6],
+            taglike[7],
+            taglike[0],
+            taglike[1],
+          ]},
+          model,
+          query: {id: data.id},
+          field: name
+        })
+        let id = result.modelID
+        refetch = clone((await Model.findOne({id}))._doc)
+        status = [
+          [0,['manual']],
+          [6,['manual']],
+          [7,['manual']],
+          [1,['manual']],
+        ]
+        changes = [
+          [true,['manual']],
+          [true,['manual']],
+          [false,[]],
+          [true,['manual']],
+        ]
+        await doTest({refetch, result})
+        updated = result.withs[name]
+        if (pstep) console.log(`  ${tname} done`)
+      }
+      if((tname='modify 6 to 0, should throw error(modification cause duplicated)')&&!isFamily){
+        // after: 0:m; 6:m; 7:m; 1:m;
+        let fn = async () => {
+          let toUpdate = {
+            id: updated[0].id,
+            ...taglike[0]
+          }
+          await api({
+            operation: '*',
+            data: {[name]: [toUpdate]},
+            model,
+            query: {id: data.id},
+            field: name
           })
         }
-        for (let each of T) {
-          let result = await api({
-            operation: '+',
-            data: each,
-            model: tagModel
+        let error = await t.throwsAsync(fn, Error)
+        t.true(error.message.includes('modification cause duplicated'))
+        if (pstep) console.log(`  ${tname} done`)
+      }
+      if((tname='modify 7 to 0, should throw error(modification cause duplicated)')&&!isFamily){
+        // after: 0:m; 6:m; 7:m; 1:m;
+        let fn = async () => {
+          let toUpdate = {
+            id: updated[3].id,
+            ...taglike[0]
+          }
+          await api({
+            operation: '*',
+            data: {[name]: [toUpdate]},
+            model,
+            query: {id: data.id},
+            field: name
           })
-          let id = result.modelID
-          each.id = id
         }
-        tt = T[0]
+        let error = await t.throwsAsync(fn, Error)
+        t.true(error.message.includes('modification cause duplicated'))
+        if (pstep) console.log(`  ${tname} done`)
       }
-      // test
-      if('start test') {
-        if('add 1 without origin(id=manual)'){
-
-        }
-        if('add 3, one is the same as last one, the others are the same'){
-          // after that we should have two subentry with the origin id=manual
-
-        }
-        if('add 2 with origin.id = auto'){
-
-        }
+      if(tname='add 2 with origin.id = auto1'){
+        // after: 0:m; 6:m; 7:m; 1:m; 2:a1; 3:a1;
+        result = await api({
+          operation: '+',
+          data: {[name]: [
+            taglike[2],
+            taglike[3],
+          ]},
+          model,
+          query: {id: data.id},
+          field: name,
+          origin: {id: 'auto1'}
+        })
+        let id = result.modelID
+        refetch = clone((await Model.findOne({id}))._doc)
+        status = [
+          [0,['manual']],
+          [6,['manual']],
+          [7,['manual']],
+          [1,['manual']],
+          [2,['auto1']],
+          [3,['auto1']],
+        ]
+        changes = [
+          [true,['auto1']],
+          [true,['auto1']],
+        ]
+        await doTest({refetch, result})
+        updated = result.withs[name]
+        if (pstep) console.log(`  ${tname} done`)
       }
+      if((tname='modify 2 to 7, should throw error(its origin is not only manual)')&&!isFamily){
+        // after: 0:m; 1:m; 6:m; 7:m; 2:a1; 3:a1;
+        let fn = async () => {
+          let toUpdate = {
+            id: updated[0].id,
+            ...taglike[7]
+          }
+          await api({
+            operation: '*',
+            data: {[name]: [toUpdate]},
+            model,
+            query: {id: data.id},
+            field: name
+          })
+        }
+        let error = await t.throwsAsync(fn, Error)
+        t.true(error.message.includes('its origin is not only manual'))
+        if (pstep) console.log(`  ${tname} done`)
+      }
+      if(tname='add 1~5 with origin.id = [auto2]'){
+        // after: 0:m; 6:m; 7:m; 1:m,a2; 2:a1,a2; 3:a1,a2; 4:a2; 5:a2;
+        result = await api({
+          operation: '+',
+          data: {[name]: [
+            taglike[1],
+            taglike[2],
+            taglike[3],
+            taglike[4],
+            taglike[5],
+          ]},
+          model,
+          query: {id: data.id},
+          field: name,
+          origin: [{id: 'auto2'}]
+        })
+        let id = result.modelID
+        refetch = clone((await Model.findOne({id}))._doc)
+        status = [
+          [0,['manual']],
+          [6,['manual']],
+          [7,['manual']],
+          [1,['manual','auto2']],
+          [2,['auto1','auto2']],
+          [3,['auto1','auto2']],
+          [4,['auto2']],
+          [5,['auto2']],
+        ]
+        changes = [
+          [false,['auto2']],
+          [false,['auto2']],
+          [false,['auto2']],
+          [true,['auto2']],
+          [true,['auto2']],
+        ]
+        await doTest({refetch, result})
+        updated = result.withs[name]
+        if (pstep) console.log(`  ${tname} done`)
+      }
+      if(tname='add 1,3,5,6 with origin [auto2, auto3, auto5]'){
+        // after: 0:m; 6:m,a2,a5; 7:m; 1:m,a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
+        result = await api({
+          operation: '+',
+          data: {[name]: [
+            taglike[1],
+            taglike[3],
+            taglike[5],
+            taglike[6],
+          ]},
+          model,
+          query: {id: data.id},
+          field: name,
+          origin: [{id: 'auto2'},{id: 'auto3'},{id: 'auto5'}]
+        })
+        let id = result.modelID
+        refetch = clone((await Model.findOne({id}))._doc)
+        status = [
+          [0,['manual']],
+          [6,['manual','auto2','auto3','auto5']],
+          [7,['manual']],
+          [1,['manual','auto2','auto3','auto5']],
+          [2,['auto1','auto2']],
+          [3,['auto1','auto2','auto3','auto5']],
+          [4,['auto2']],
+          [5,['auto2','auto3','auto5']],
+        ]
+        changes = [
+          [false,['auto3','auto5']],
+          [false,['auto3','auto5']],
+          [false,['auto3','auto5']],
+          [false,['auto2','auto3','auto5']],
+        ]
+        await doTest({refetch, result})
+        updated = result.withs[name]
+        if (pstep) console.log(`  ${tname} done`)
+      }
+      // test delete
+      if(tname='delete 0~7 with origin: auto4'){
+        // delete nothing for all
+        // before: 0:m; 6:m,a2,a5; 7:m; 1:m,a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
+        // after:  0:m; 6:m,a2,a5; 7:m; 1:m,a2,a3,a5; 2:a1,a2; 3:a1,a2,a3,a5; 4:a2; 5:a2,a3,a5;
+        debugger
+        result = await api({
+          operation: '-',
+          data: {[name]: [
+            deltaglike[0],
+            deltaglike[1],
+            deltaglike[2],
+            deltaglike[3],
+            deltaglike[4],
+            deltaglike[5],
+            deltaglike[6],
+            deltaglike[7],
+          ]},
+          model,
+          query: {id: data.id},
+          field: name,
+          origin: {id: 'auto4'},
+        })
+        debugger
+        let id = result.modelID
+        refetch = clone((await Model.findOne({id}))._doc)
+        status = [
+          [0,['manual']],
+          [6,['manual','auto2','auto3','auto5']],
+          [7,['manual']],
+          [1,['manual','auto2','auto3','auto5']],
+          [2,['auto1','auto2']],
+          [3,['auto1','auto2','auto3','auto5']],
+          [4,['auto2']],
+          [5,['auto2','auto3','auto5']],
+        ]
+        changes = [
+          [false,[]],
+          [false,[]],
+          [false,[]],
+          [false,[]],
+          [false,[]],
+          [false,[]],
+          [false,[]],
+          [false,[]],
+        ]
+        await doTest({refetch, result})
+        updated = result.withs[name]
+        if (pstep) console.log(`  ${tname} done`)
+      }
+      if(tname='delete 0~6 without origin(id=manula)'){
+        // delete the first entry
+        // delete the origin of the second entry
+        // after: 1:a2,a3; 2:a1,a2; 3:a1,a2,a3; 4:a2; 5:a2,a3; 7:m;
+        if (pstep) console.log(`  ${tname} done`)
+      }
+      if(tname='delete 0~7 with origin 2,3,4'){
+        // before: 1:a2,a3; 2:a1,a2; 3:a1,a2,a3; 4:a2; 5:a2,a3; 7:m;
+        // after:  2:a1; 3:a1; 7:m;
+        if (pstep) console.log(`  ${tname} done`)
+      }
+      if(tname='delete with origin[]'){
+        // delete all
+        // after:
+        if (pstep) console.log(`  ${tname} done`)
+      }
+      // clean up
       if('clean up') {
         // delete N articles
         for (let d of D) {
           let entry = await api({
             operation: 'findOne',
             query: {id: d.id},
-            model: each
+            model
           })
           if (!entry) continue
           let result = await api({
             operation: '-',
             query: {id: d.id},
-            model: each
+            model
           })
-          let refetch = await Models[each].findOne({id: d.id})
+          let refetch = await Models[model].findOne({id: d.id})
           t.true(refetch === null)
         }
         // delete all taglike
-        for (let tt of T) {
-          let result = await api({
-            operation: '-',
-            query: {id: tt.id},
-            model: tagModel
-          })
-          let refetch = await Models[tagModel].findOne({id: tt.id})
-          t.true(refetch === null)
+        if (!isFamily) {
+          for (let tt of T) {
+            let result = await api({
+              operation: '-',
+              query: {id: tt.id},
+              model: tagModel
+            })
+            let refetch = await Models[tagModel].findOne({id: tt.id})
+            t.true(refetch === null)
+          }
         }
       }
     }
