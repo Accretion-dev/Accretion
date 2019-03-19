@@ -18,7 +18,7 @@ brainhole-dev:
 brainhole-test:
 	cd brainhole; npm run test
 brainhole-test-inspect:
-	cd brainhole; npx nodemon --inspect --watch test-final.js -- node_modules/ava/profile.js test-final.js
+	cd brainhole; npx nodemon --inspect --watch test-final.js --watch server -- node_modules/ava/profile.js test-final.js
 brainhole-test-profile:
 	cd brainhole; npm run test-profile
 tmux:

@@ -14,10 +14,10 @@ import globals from './server/globals'
 import fs from 'fs'
 import path from 'path'
 import delay from 'delay'
+import equal from 'deep-equal'
+import cloneDeep from 'clone-deep'
 
-function clone(obj) {
-  return JSON.parse(JSON.stringify(obj))
-}
+let clone = cloneDeep
 function assignExists (a, b) {
   let exists = Object.keys(a)
   exists = exists.filter(_ => _ in b)
@@ -432,12 +432,12 @@ test('test all taglike api', async t => {
         // create N+1 articles, only create N-1 of them, D[0] is created later
         for (let i=0; i<=N; i++) {
           data = {
-            comment: `${i} ${each} ${name} test`,
+            comment: `${i} ${each} ${name} test ${t.title}`,
             flags: { debug: true }
           }
           if (pks.length) {
             for (let pk of pks) {
-              data[pk] = `${i} ${each} ${name} test`
+              data[pk] = `${i} ${each} ${name} test ${t.title}`
             }
           }
           rawdata = Object.assign({}, data)
@@ -458,8 +458,8 @@ test('test all taglike api', async t => {
           // should create taglikes for this apis
           for (let index=0; index<=N; index++) {
             T.push({
-              name: `${each}-${name}-${index}`,
-              comment: `comment for index ${index}`
+              name: `${each}-${name}-${index} ${t.title}`,
+              comment: `comment for index ${index} ${t.title}`
             })
           }
           for (let each of T) {
@@ -545,8 +545,8 @@ test('test all taglike api', async t => {
             testFunctions.testRelationConsistent = async ({refetch}) => {
               let result = refetch
               for (let relation of result.relations) {
-                let this_sub_entry = relation
-                let that_sub_entry = clone(relation)
+                let this_sub_entry = relation._doc
+                let that_sub_entry = clone(relation._doc)
                 if (this_sub_entry.aorb==='a') {
                   that_sub_entry.other_id = this_sub_entry.from_id
                   that_sub_entry.other_model = this_sub_entry.from_model
@@ -606,6 +606,8 @@ test('test all taglike api', async t => {
                 testRelationConsistent: true, },
               '2-0': {
                 testRelationCount: [...Array(NN).keys()].map(_ => 0), },
+              'about-flag': {
+                testRelationConsistent: true, },
             }
           }
         } else if (name === 'metadatas') {
@@ -1115,7 +1117,7 @@ test('test all taglike api', async t => {
       if("add, modify and delete taglike.flags with field" && name!=='family') {
         // add flag with field
         id = data.id
-        tname = 'modify flag'
+        tname = 'about-flag'
         refetch = refetch_
         let oldData = [
           {id: refetch[0].id, flags: refetch[0].flags},
@@ -1134,14 +1136,15 @@ test('test all taglike api', async t => {
           query: {id},
           field: `${name}.flags`
         })
-        refetch = clone((await Model.findOne({id}))._doc)[name]
+        refetch = clone((await Model.findOne({id}))._doc)
+        await doTest({refetch})
+        refetch = refetch[name]
         refetch = refetch.map(__ => _.pick(__, ["id", "flags"])).slice(0,2) // old metadatas
         // console.log(J({refetch, oldData}))
         t.deepEqual(refetch, oldData)
         if (pstep) console.log(`  ${tname} done`)
 
         // modify flags with field
-        tname = 'modify flag'
         let toModify = refetch.map(__ => _.pick(__, ["id", "flags"])) // old metadatas
         toModify[0].flags.debug = 'hahaha'
         toModify[1].flags.debug = 'lalala'
@@ -1155,15 +1158,15 @@ test('test all taglike api', async t => {
           query: {id},
           field: `${name}.flags`
         })
-        refetch = await Model.findOne({id})
-        refetch = refetch._doc[name]
+        refetch = (await Model.findOne({id}))._doc
+        await doTest({refetch})
+        refetch = refetch[name]
         t.is( refetch[0].flags.debug, toModify[0].flags.debug )
         t.is( refetch[1].flags.debug, toModify[1].flags.debug )
         t.is( refetch[1].flags.new_added, toModify[1].flags.new_added )
         if (pstep) console.log(`  ${tname} done`)
 
         // delete flags in metadata
-        tname = 'delete flag'
         refetch = clone((await Model.findOne({id}))._doc)[name]
         let toDeleteRaw = refetch.map(__ => _.pick(__, ["id", "flags"]))
         toDelete = toDeleteRaw.slice(0,2)
@@ -1175,7 +1178,9 @@ test('test all taglike api', async t => {
           query: {id},
           field: `${name}.flags`
         })
-        refetch = clone((await Model.findOne({id}))._doc)[name]
+        refetch = clone((await Model.findOne({id}))._doc)
+        await doTest({refetch})
+        refetch = refetch[name]
         for (let index=0;index<refetch.lenth;index++) {
           let subentry = refetch[index]
           if (toDeleteIDs.includes(subentry.id)) {
@@ -1228,7 +1233,7 @@ test('test all taglike api', async t => {
   }
   t.pass()
 })
-test.skip('tag origin system', async t => {
+test('tag origin system', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -1238,7 +1243,7 @@ test.skip('tag origin system', async t => {
     {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
     {name: 'tags', withname: 'WithTag', model:'Tag'},
   ]
-  const pstep = false
+  const pstep = true
   for (let apiname of apis) {
     let {name, withname, model: tagModel} = apiname
     console.log(`test ${name}`)
@@ -1262,12 +1267,12 @@ test.skip('tag origin system', async t => {
         // create N+1 articles, only create N-1 of them, D[0] is created later
         for (let i=0; i<=N; i++) {
           data = {
-            comment: `${i} ${each} ${name} test`,
+            comment: `${i} ${each} ${name} test ${t.title}`,
             flags: { debug: true }
           }
           if (pks.length) {
             for (let pk of pks) {
-              data[pk] = `${i} ${each} ${name} test`
+              data[pk] = `${i} ${each} ${name} test ${t.title}`
             }
           }
           rawdata = Object.assign({}, data)
@@ -1287,8 +1292,8 @@ test.skip('tag origin system', async t => {
         // create Taglike
         for (let index=0; index<=TN; index++) {
           T.push({
-            name: `${each}-${name}-${index}`,
-            comment: `comment for index ${index}`
+            name: `${each}-${name}-${index} ${t.title}`,
+            comment: `comment for index ${index} ${t.title}`
           })
         }
         for (let each of T) {

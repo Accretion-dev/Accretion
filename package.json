@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {},
   "dependencies": {
+    "clone-deep": "^4.0.1",
     "require-glob": "^3.2.0",
     "webpack-concat-plugin": "^3.0.0"
   },

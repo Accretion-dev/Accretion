@@ -77,6 +77,11 @@ let metadataFormats = {
   'bool': { type: Boolean },
 }
 
+// utils functions
+function J(obj) {
+  return JSON.stringify(obj,null,2)
+}
+
 // stringify structTree
 function stringifyStructTree (input) {
   let result = {}
@@ -867,7 +872,7 @@ async function DFSSearch({model, id, entry, path, type, session}) {
     if (r.length !== 1) throw Error(`not single result when query ${model} with ${id}\nmodel:${model} id:${id} entry:${entry}, path:${path}, type:${type}`)
     entry = r[0]
   }
-  if (!entry[type] || entry[type].lenth === 0) return null // successfully terminate here
+  if (!entry[type] || entry[type].length === 0) return null // successfully terminate here
   let items = entry[type].map(_ => _.id)
   for (let id of items) {
     let next = [...path, id]
@@ -1005,19 +1010,23 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         field: fieldSuffix,
         entry: this_sub_entry,
         data: newdata,
-        session
+        session,
+        origin
       })
       let this_result = {[fieldPrefix]: thisresult, id: this_sub_entry.id}
       result.push(this_result)
       if (name === 'relations') { // relationsFieldHook
-        let {other_model, other_id} = this_sub_entry
-        let other_entry = await Models[other_model].find({id: other_id}).session(session) // process this later, so use the global name
-        if (other_entry.length !== 1) {
-          throw Error(`can not get unique entry for ${other_model} by id:${other_id}`)
-        }
-        other_entry = other_entry[0]
-        let that_sub_entry = other_entry[name].find(_ => _.id === this_sub_entry.id)
-        that_sub_entry[fieldSuffix] = this_result[fieldSuffix]
+        let {other_model, other_id, id} = this_sub_entry
+        let other_entry = await Models[other_model].findOne({id: other_id}).session(session) // process this later, so use the global name
+        if (!other_entry) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} not exists`)
+        let that_sub_entry = other_entry[name].filter(_ => _.id === id)
+        if (that_sub_entry.length !== 1 ) throw Error(`inconsistant database:
+          subrelation:${J(thisresult)},
+          but ${J({other_id, other_model})}
+          do not have single corresponding relation:
+          ${J(other_entry[name]._doc)}`)
+        that_sub_entry = that_sub_entry[0]
+        that_sub_entry[fieldPrefix] = this_sub_entry[fieldPrefix]
         other_entry.markModified(name)
         await other_entry.save()
       }
@@ -1030,7 +1039,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         let this_sub_entry = await querySub({entry, data: {__query__: simple}, field: name, session, test: true, entry_model})
         let origin_flags = {}
         if (this_sub_entry.length) { // only add the origin of this subtaglike
-          if (this_sub_entry.lenth > 1) {
+          if (this_sub_entry.length > 1) {
             throw Error(`inconsistant database, have duplicated subtaglike:${J(this_sub_entry)}, delete them with ids!`)
           }
           this_sub_entry = this_sub_entry[0]
@@ -1053,8 +1062,8 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             let {other_id, other_model, id} = thisresult
             let other_entry = await Models[other_model].findOne({id: other_id}).session(session)
             if (!other_entry) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} not exists`)
-            let that_sub_entry = other_entry[name].filter(_ => _.id = id)
-            if (that_sub_entry.lenth !== 1 ) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} do not have single corresponding relation:${J(other_entry[name]._doc)}`)
+            let that_sub_entry = other_entry[name].filter(_ => _.id === id)
+            if (that_sub_entry.length !== 1 ) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} do not have single corresponding relation:${J(other_entry[name]._doc)}`)
             that_sub_entry = that_sub_entry[0]
             that_sub_entry.origin = this_sub_entry.origin
             other_entry.markModified(name)
@@ -1215,7 +1224,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         this_sub_entry.set(simple)
         if (changeTaglike) { // test if it is duplicated with another taglike
           if (this_sub_entry.origin.filter(_ => _.id !== 'manual').length) {
-            throw Error(`can change key paramerters of a ${name} if its origins are larger than manual`)
+            throw Error(`can not change key paramerters of a ${name} if its origins are larger than manual`)
           }
           let {simple: newsimple} = extractWiths({data:this_sub_entry._doc, model: name, sub: true})
           newsimple = Object.assign({}, newsimple)
@@ -1299,8 +1308,8 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
               let {other_model, other_id} = this_sub_entry
               let other_entry = await Models[other_model].findOne({id: other_id}).session(session)
               if (!other_entry) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} not exists`)
-              let that_sub_entry = other_entry[name].filter(_ => _.id = id)
-              if (that_sub_entry.lenth !== 1 ) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} do not have single corresponding relation:${J(other_entry[name]._doc)}`)
+              let that_sub_entry = other_entry[name].filter(_ => _.id === id)
+              if (that_sub_entry.length !== 1 ) throw Error(`inconsistant database, subrelation:${J(thisresult)}, but ${{other_id, other_model}} do not have single corresponding relation:${J(other_entry[name]._doc)}`)
               that_sub_entry = that_sub_entry[0]
               that_sub_entry.origin = this_sub_entry.origin
               other_entry.markModified(name)
