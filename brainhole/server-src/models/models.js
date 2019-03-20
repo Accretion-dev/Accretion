@@ -511,18 +511,11 @@ async function apiSingleField ({operation, model, field, data, entry, query, met
   result = simple
   let modelID = simple.id
 
-  // hooks
-  let hooks = globals.pluginsData.hook[model]
-  if (hooks && hooks.length) {
-    for (let hook of hooks) {
-      if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
-      await hook({operation, entry:result._doc})
-    }
-  }
-
   let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
-  // let history = new globals.Models.History(returnData); history.$session(session); await history.save();
   let history = await saveHistory(returnData, session)
+
+  await processEntryHooks({hookActions, history, result, meta, origin, model, session, withs})
+
   return returnData
 }
 
@@ -608,6 +601,45 @@ async function api({ operation, data, query, model, meta, field, session, origin
     throw error
   }
 }
+async function processEntryHooks({hookActions, history, result, meta, origin, model, session, operation, withs}) {
+  for (let key of Object.keys(withs)) {
+    if (key === 'flags' || key === 'r') continue
+    for (let each of withs[key]) {
+      if (each.hookActions) {
+        hookActions = [...hookActions, ...each.hookActions]
+      }
+    }
+  }
+
+  for (let hookAction of hookActions) {
+    hookAction.meta.hooks.parent_history = history._id
+  }
+  let hooks = globals.pluginsData.hook[model]
+  if (hooks && hooks.length) {
+    for (let hook of hooks) {
+      if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
+      if (meta&&meta.hook&&(!hook.metaTest||!hook.metaTest(meta))) continue
+      let thisHookActions = await hook({operation, entry:result._doc, meta, origin})
+      hookActions = [...hookActions, ...thisHookActions]
+    }
+  }
+  for (let hookAction of hookActions) {
+    let thisHookAction = Object.assign({}, hookAction, {session})
+    await apiSessionWrapper(thisHookAction)
+  }
+}
+async function processSubEntryHooks({hooks, name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry}) {
+  let hookActions = []
+  for (let hook of hooks) {
+    if (hook.test && !hook.test({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry})) continue
+    let newHookActions = await thishook({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry})
+    if (newHookActions.length) {
+      hookActions = [...hookActions, ...newHookActions]
+    }
+  }
+  return hookActions
+}
+
 async function apiSessionWrapper ({ operation, data, query, model, meta, field, session, origin }) {
   let Models = globals.Models
   let Model = mongoose.models[model]
@@ -693,14 +725,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
       let history = await saveHistory(returnData, session)
 
-      // hooks
-      let hooks = globals.pluginsData.hook[model]
-      if (hooks && hooks.length) {
-        for (let hook of hooks) {
-          if (hook.test && !hook.test({operation, entry: result._doc, field})) continue
-          await hook({operation, entry:result._doc})
-        }
-      }
+      await processEntryHooks({hookActions, history, result, meta, origin, model, session, withs})
 
       return returnData
     } else { // e.g. add new tag, add new catalogues
@@ -729,14 +754,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
       let history = await saveHistory(returnData, session)
 
-      // hooks
-      let hooks = globals.pluginsData.hook[model]
-      if (hooks && hooks.length) {
-        for (let hook of hooks) {
-          if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
-          await hook({operation, entry:result._doc})
-        }
-      }
+      await processEntryHooks({hookActions, history, result, meta, origin, model, session, withs})
 
       return returnData
     } else {
@@ -815,24 +833,8 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
       let history = await saveHistory(returnData, session)
 
-      for (let hookAction of hookActions) {
-        hookAction.meta.hooks.parent_history = history._id
-      }
+      await processEntryHooks({hookActions, history, result, meta, origin, model, session, withs})
 
-      // hooks
-      let hooks = globals.pluginsData.hook[model]
-      if (hooks && hooks.length) {
-        for (let hook of hooks) {
-          if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
-          if (meta&&meta.hook&&(!hook.metaTest||!hook.metaTest(meta))) continue
-          let thisHookActions = await hook({operation, entry:result._doc, meta, origin})
-          hookActions = [...hookActions, ...thisHookActions]
-        }
-      }
-      for (let hookAction of hookActions) {
-        let thisHookAction = Object.assign({}, hookAction, {session})
-        await apiSessionWrapper(thisHookAction)
-      }
       return returnData
     } else {
       let result = await apiSingleField({operation, model, field, data, entry, query, meta, session, origin})
@@ -945,12 +947,14 @@ async function testFamilyLoop({model, entry, session}) {
   if (cycle) return cycle.join("<=")
   return false
 }
-async function familyAPI ({operation, prefield, field, entry, data, type, session, origin}) {
+async function familyAPI ({operation, prefield, field, entry, data, type, session, origin, meta}) {
   // field should always be '' or undefined
   // prefield could be any
   // type must be fathers or chindren
   // returns:
   //  [{id: ...}, ...], add, deleted or reorderd family
+  let hooks = globals.pluginsData.hook[type]
+  let hookActions
   let result = []
   let model = entry.schema.options.collection
   if (field) throw Error('field should always be blank or undefined, debug it!')
@@ -1001,14 +1005,30 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
         other_subentry.origin = subentry.origin
         anotherEntry.markModified(revType)
         await anotherEntry.save()
-        result.push({id: anotherEntry.id, origin, origin_flags})
+        let thisresult = {id: anotherEntry.id, origin, origin_flags}
+
+        hookActions = await processSubEntryHooks({
+          hooks, name:type, operation, meta, origin, entry, origin_flags,
+          new_sub_entry: thisresult,
+        })
+        if (hookActions.length) thisresult.hookActions = hookActions
+
+        result.push(thisresult)
       } else { // add entry
         origin_flags.origin = origin
         origin_flags.entry = true
         let index = entry[type].push({id: anotherEntry.id, origin})
         anotherEntry[revType].push({id: entry.id, origin})
         await anotherEntry.save()
-        result.push({id: anotherEntry.id, origin, origin_flags})
+        let thisresult = {id: anotherEntry.id, origin, origin_flags}
+
+        hookActions = await processSubEntryHooks({
+          hooks, name:type, operation, meta, origin, entry, origin_flags,
+          new_sub_entry: thisresult,
+        })
+        if (hookActions.length) thisresult.hookActions = hookActions
+
+        result.push(thisresult)
       }
     }
     let loop = await testFamilyLoop({model, entry, session})
@@ -1044,7 +1064,15 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
           other_subentry.origin = originLeft
           anotherEntry.markModified(revType)
           await anotherEntry.save()
-          result.push({id: anotherEntry.id, origin: subentry.origin, origin_flags})
+          let thisresult = {id: anotherEntry.id, origin: subentry.origin, origin_flags}
+
+          hookActions = await processSubEntryHooks({
+            hooks, name:type, operation, meta, origin, entry, origin_flags,
+            old_sub_entry: thisresult,
+          })
+          if (hookActions.length) thisresult.hookActions = hookActions
+
+          result.push(thisresult)
           continue
         }
       } else { // force delete subentry
@@ -1055,7 +1083,15 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
       anotherEntry[revType] = anotherEntry[revType].filter(_ => _.id !== entry.id)
       anotherEntry.markModified(revType)
       await anotherEntry.save()
-      result.push({id: anotherEntry.id, origin: subentry.origin, origin_flags})
+      let thisresult = {id: anotherEntry.id, origin: subentry.origin, origin_flags}
+
+      hookActions = await processSubEntryHooks({
+        hooks, name:type, operation, meta, origin, entry, origin_flags,
+        old_sub_entry: thisresult,
+      })
+      if (hookActions.length) thisresult.hookActions = hookActions
+
+      result.push(thisresult)
     }
     return result
   } else if (operation === 'o') {
@@ -1074,11 +1110,11 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
     return newIDs.map(_ => ({id: _}))
   }
 }
-async function fathersAPI ({operation, prefield, field, entry, data, session, origin}) {
-  return await familyAPI({operation, prefield, field, entry, data, type:'fathers', session, origin})
+async function fathersAPI ({operation, prefield, field, entry, data, session, origin, meta}) {
+  return await familyAPI({operation, prefield, field, entry, data, type:'fathers', session, origin, meta})
 }
-async function childrenAPI ({operation, prefield, field, entry, data, session, origin}) {
-  return await familyAPI({operation, prefield, field, entry, data, type:'children', session, origin})
+async function childrenAPI ({operation, prefield, field, entry, data, session, origin, meta}) {
+  return await familyAPI({operation, prefield, field, entry, data, type:'children', session, origin, meta})
 }
 async function processAutoActions (auto_actions) {
   // make unique
@@ -1096,10 +1132,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
   let entry_id = entry.id
   let other_entry
   let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
-  let auto_actions = {
-    add: [],
-    del: [],
-  }
+  let hookActions
 
   if (field) { // e.g. metadatas.flags, tags.flags
     let result = []
@@ -1163,6 +1196,12 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           origin_flags.origin = addOrigin
           let thisresult = Object.assign({}, this_sub_entry._doc)
           thisresult.origin_flags = origin_flags
+
+          hookActions = await processSubEntryHooks({
+            hooks, name, operation, meta, origin, entry, origin_flags,
+          })
+          if (hookActions.length) thisresult.hookActions = hookActions
+
           result.push(thisresult)
 
           if (name === 'relations') {
@@ -1215,6 +1254,13 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
           let thisresult = Object.assign({}, raw_tag_query, withs)
           thisresult.origin_flags = origin_flags
+
+          hookActions = await processSubEntryHooks({
+            hooks, name, operation, meta, origin, entry, origin_flags,
+            new_sub_entry: this_sub_entry._doc
+          })
+          if (hookActions.length) thisresult.hookActions = hookActions
+
           result.push(thisresult)
 
           // update reverse
@@ -1240,14 +1286,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             await tag_query_entry.save()
           }
         }
-        for (let thishook of hooks) {
-          if (thishook.test && !thishook.test({operation, entry, new_sub_entry: this_sub_entry._doc})) continue
-          let {add, del} = await thishook({operation, entry, new_sub_entry: this_sub_entry._doc})
-          auto_actions.add = auto_actions.add.concat(add)
-          auto_actions.del = auto_actions.add.concat(del)
-        }
       }
-      auto_actions = await processAutoActions(auto_actions)
       return result
     } else if (operation === '*') {
       for (let eachdata of data) {
@@ -1348,6 +1387,13 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         withs = await processWiths({operation, prefield, field: null, entry: this_sub_entry, withs, sub: name, session})
         let thisresult = Object.assign({}, raw_tag_query, withs)
         thisresult.modify_flags = {changeTaglike}
+
+        hookActions = await processSubEntryHooks({
+          hooks, name, operation, meta, origin, entry,
+          old_sub_entry, new_sub_entry: this_sub_entry._doc
+        })
+        if (hookActions.length) thisresult.hookActions = hookActions
+
         result.push(thisresult)
 
         if (name === 'relations') { // relationsModifyHookAfterWiths
@@ -1372,15 +1418,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           other_entry.markModified(name)
           await other_entry.save()
         }
-
-        for (let thishook of hooks) {
-          if (thishook.test && !thishook.test({operation, entry, old_sub_entry, new_sub_entry: this_sub_entry._doc})) continue
-          let {add, del} = await thishook({operation, entry, old_sub_entry, new_sub_entry: this_sub_entry._doc})
-          auto_actions.add = auto_actions.add.concat(add)
-          auto_actions.del = auto_actions.add.concat(del)
-        }
       }
-      auto_actions = await processAutoActions(auto_actions)
       return result
     } else if (operation === '-') {
       let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
@@ -1419,6 +1457,13 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             origin_flags.entry = false
             let toReturn = Object.assign({}, this_sub_entry._doc)
             toReturn.origin_flags = origin_flags
+
+            hookActions = await processSubEntryHooks({
+              hooks, name, operation, meta, origin, entry, origin_flags,
+              old_sub_entry: this_sub_entry
+            })
+            if (hookActions.length) toReturn.hookActions = hookActions
+
             result.push(toReturn)
 
             if (name === 'relations') { // modify origin of other entry
@@ -1449,6 +1494,13 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         simple[query_key] = this_sub_entry[query_key]
         this_sub_entry.remove()
         let thisresult = Object.assign({}, simple, withs, {origin_flags})
+
+        hookActions = await processSubEntryHooks({
+          hooks, name, operation, meta, origin, entry, origin_flags,
+          old_sub_entry
+        })
+        if (hookActions.length) thisresult.hookActions = hookActions
+
         result.push(thisresult)
 
         let taglike
@@ -1477,14 +1529,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             await taglike.save()
           }
         }
-        for (let thishook of hooks) {
-          if (thishook.test && !thishook.test({operation, entry, old_sub_entry})) continue
-          let {add, del} = await thishook({operation, entry, old_sub_entry})
-          auto_actions.add = auto_actions.add.concat(add)
-          auto_actions.del = auto_actions.add.concat(del)
-        }
       }
-      auto_actions = await processAutoActions(auto_actions)
       return result
     } else if (operation === 'o') {
       let newIDs = data.map(_ => _.id).sort()

@@ -4,7 +4,7 @@ async function gen(parameters) {
   async function init ({operation, entry}) {
   }
   // this function will be injected into the taglikeAPI
-  async function addAncestorTags({operation, entry, old_sub_entry, new_sub_entry}) {
+  async function addAncestorTags({operation, entry, old_sub_entry, new_sub_entry, meta, origin}) {
     let {uuid} = parameters
     if (operation === "+") {
 
@@ -13,14 +13,7 @@ async function gen(parameters) {
     } else if (operation === '-') {
 
     }
-    return {
-      add: {
-
-      },
-      del: {
-
-      }
-    }
+    return []
   }
   return {
     tags: addAncestorTags
