@@ -32,11 +32,10 @@ const History = {
     field: { type: String },
     query: { type: Schema.Types.Mixed },
     data: { type: Schema.Types.Mixed },
-    result: { type: Schema.Types.Mixed },
     simple:  { type: Schema.Types.Mixed },
     withs:  { type: Schema.Types.Mixed },
     meta: { type: Schema.Types.Mixed },
-    other_result: { type: Schema.Types.Mixed },
+    hookActions: { type: Schema.Types.Mixed },
     origin: { type: Schema.Types.Mixed },
     flags: { type: Schema.Types.Mixed },
   }
