@@ -645,7 +645,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
   let Model = mongoose.models[model]
   if (!Model) throw Error(`unknown model ${model}`)
   if (origin === undefined) origin = {id: 'manual'}
-  let flags = {}
+  let origin_flags = {}
   let hookActions = []
 
   if (operation === 'aggregate') { // search
@@ -681,8 +681,8 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
             addOrigin.push(eachorigin)
           }
         }
-        flags.origin = addOrigin
-        flags.entry = false
+        origin_flags.origin = addOrigin
+        origin_flags.entry = false
         if (addOrigin.length) {
           await entry.save()
         }
@@ -690,27 +690,27 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         let withs = null
         let result = entry
 
-        let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
+        let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags, hookActions}
         // let history = new globals.Models.History(returnData); history.$session(session); await history.save();
         let history = await saveHistory(returnData, session)
         return returnData
       } else {
-        flags.entry = true
+        origin_flags.entry = true
         if (!Array.isArray(origin)) origin = [origin]
         if (!origin.length) throw Error('origin should not be none when add entry')
         for (let eachorigin of origin) {
           eachorigin.time = new Date()
         }
-        flags.origin = origin
+        origin_flags.origin = origin
       }
     } else {
-      flags.entry = true
+      origin_flags.entry = true
       if (!Array.isArray(origin)) origin = [origin]
       if (!origin.length) throw Error('origin should not be none when add entry')
       for (let eachorigin of origin) {
         eachorigin.time = new Date()
       }
-      flags.origin = origin
+      origin_flags.origin = origin
     }
     if (!field) { // e.g, create new Article, with some initial Tag, Cataloge...
       let {simple, withs} = extractWiths({data, model})
@@ -722,7 +722,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let result = await entry.save()
       let modelID = result.id
 
-      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
+      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags, hookActions}
       let history = await saveHistory(returnData, session)
 
       await processEntryHooks({hookActions, history, result, meta, origin, model, session, withs})
@@ -751,7 +751,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let result = simple
       let modelID = result.id
 
-      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
+      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags, hookActions}
       let history = await saveHistory(returnData, session)
 
       await processEntryHooks({hookActions, history, result, meta, origin, model, session, withs})
@@ -777,7 +777,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         let oldOrigin = entry.origin
         let originDeleted = oldOrigin.filter(_ => originIDs.includes(_.id))
         let originLeft = oldOrigin.filter(_ => !originIDs.includes(_.id))
-        flags.origin = originDeleted
+        origin_flags.origin = originDeleted
         if (originLeft.length) { // only delete this origin
           entry.origin = originLeft
           entry.markModified('origin')
@@ -785,18 +785,18 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
 
           let result = entry
           let withs = null
-          flags.entry = false
+          origin_flags.entry = false
 
-          let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags}
+          let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags}
           let history = await saveHistory(returnData, session)
 
           return returnData
         } else {
-          flags.entry = true
+          origin_flags.entry = true
         }
       } else { // force delete entry
-        flags.entry = true
-        flags.origin = entry.origin
+        origin_flags.entry = true
+        origin_flags.origin = entry.origin
       }
 
       // delete this entry
@@ -830,7 +830,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         }
       }
 
-      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
+      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags, hookActions}
       let history = await saveHistory(returnData, session)
 
       await processEntryHooks({hookActions, history, result, meta, origin, model, session, withs})

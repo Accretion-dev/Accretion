@@ -37,7 +37,7 @@ const History = {
     meta: { type: Schema.Types.Mixed },
     hookActions: { type: Schema.Types.Mixed },
     origin: { type: Schema.Types.Mixed },
-    flags: { type: Schema.Types.Mixed },
+    origin_flags: { type: Schema.Types.Mixed },
   }
 }
 const Plugins = {
