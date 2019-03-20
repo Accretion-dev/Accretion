@@ -1,3 +1,1 @@
-* origin feature and its unittest
-* taglike delete all r models and its unittest
 * all hooks features and their unittest

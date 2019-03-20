@@ -389,7 +389,7 @@ test('flags', async t => {
   }
   t.pass()
 })
-test('test all taglike api', async t => {
+test.serial('test all taglike api', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -1236,7 +1236,7 @@ test('test all taglike api', async t => {
   }
   t.pass()
 })
-test('tag origin system', async t => {
+test.serial('tag origin system', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -1864,7 +1864,210 @@ test('tag origin system', async t => {
   }
   t.pass()
 })
-test.skip('reverse delete for taglike', async t => {
+test.serial('reverse delete for taglike', async t => {
+  let Models = globals.Models
+  let WithsDict = globals.WithsDict
+  let All = globals.All
+  let apis = [
+    {name: 'relations', withname: 'WithRelation', model:'Relation'},
+    {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
+    {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
+    {name: 'tags', withname: 'WithTag', model:'Tag'},
+  ]
+  const pstep = false
+  for (let apiname of apis) {
+    let {name, withname, model: tagModel} = apiname
+    let id_name = name.slice(0,-1) + '_id'
+    console.log(`test ${name}`)
+    let todos = WithsDict[withname]
+    for (let model of todos) {
+      if (pstep) console.log(`... ${model}`)
+      let Model = Models[model]
+      let pks = getRequire(Model)
+      let data, refetch, refetch_, result, id, ids, updated, tt
+      let taglike, newtaglike, deltaglike, rawdata, toDelete, tname
+      let doTest, status, changes
+      let isFamily = ['fathers', 'children'].includes(name)
+      let __
+      let testFunctions = {}
+      let testDatas = {}
+      let omitnames = [name]
+      let D = []
+      let T = []
+      let N = 5
+      let TN = 6
+
+      if('setup') {
+        // create N+1 articles, only create N-1 of them, D[0] is created later
+        for (let i=0; i<=N; i++) {
+          data = {
+            comment: `${i} ${model} ${name} test ${t.title}`,
+            flags: { debug: true }
+          }
+          if (pks.length) {
+            for (let pk of pks) {
+              data[pk] = `${i} ${model} ${name} test ${t.title}`
+            }
+          }
+          rawdata = Object.assign({}, data)
+          D.push(rawdata)
+        }
+        for (let i=0; i<=N; i++) {
+          result = await api({
+            operation: '+',
+            data: D[i],
+            model
+          })
+          id = result.modelID
+          D[i].id = id
+        }
+        data = D[0]
+        rawdata = Object.assign({}, data)
+        // create Taglike
+        for (let index=0; index<=TN; index++) {
+          T.push({
+            name: `${model}-${name}-${index} ${t.title}`,
+            comment: `comment for index ${index} ${t.title}`
+          })
+        }
+        for (let each of T) {
+          let result = await api({
+            operation: '+',
+            data: each,
+            model: tagModel
+          })
+          let id = result.modelID
+          each.id = id
+        }
+        tt = T[0]
+        if (name === 'relations') {
+          taglike = {}
+          for (let n of [...Array(N).keys()]) {
+            taglike[n] = []
+            for (let tn of [...Array(TN).keys()]) {
+              if (n!==tn) {
+                taglike[n].push(
+                  {relation: {id: T[n].id}, to:{id: D[tn].id}},
+                )
+              }
+            }
+          }
+          doTest = async ({result, refetch}) => {
+            // test Relation Consistence
+            for (let subentry of refetch[name]) {
+              let taglike = await Models[tagModel].findOne({id: subentry[id_name]})
+              t.truthy(taglike)
+              let this_sub_entry = subentry._doc
+              let that_sub_entry = clone(subentry._doc)
+              if (this_sub_entry.aorb==='a') {
+                that_sub_entry.other_id = this_sub_entry.from_id
+                that_sub_entry.other_model = this_sub_entry.from_model
+                that_sub_entry.aorb = 'b'
+              } else if (this_sub_entry.aorb==='b') {
+                that_sub_entry.other_id = this_sub_entry.to_id
+                that_sub_entry.other_model = this_sub_entry.to_model
+                that_sub_entry.aorb = 'a'
+              } else {
+                throw Error(`aorb is not a or b, ${JSON.stringify(this_sub_entry)}`)
+              }
+              let other_entry = await Models[subentry.other_model].find({id: subentry.other_id})
+              t.is(other_entry.length, 1)
+              other_entry = other_entry[0]
+              let other_that_sub_entry = other_entry.relations.find(_ => _.id===that_sub_entry.id)
+              t.true(!!other_that_sub_entry, JSON.stringify({this_sub_entry, that_sub_entry, other_that_sub_entry},null,2))
+              other_that_sub_entry = clone(other_that_sub_entry._doc) // if not clone, will get stuck here...
+              t.deepEqual(other_that_sub_entry, that_sub_entry, JSON.stringify({this_sub_entry, that_sub_entry, other_that_sub_entry},null,2))
+            }
+          }
+        } else if (name === 'metadatas') {
+          taglike = {}
+          for (let n of [...Array(N).keys()]) {
+            taglike[n] = []
+            for (let tn of [...Array(TN).keys()]) {
+              taglike[n].push(
+                {metadata: {id: T[tn].id}},
+              )
+            }
+          }
+
+          doTest = async ({result, refetch}) => {
+            for (let subentry of refetch[name]) {
+              let taglike = await Models[tagModel].findOne({id: subentry[id_name]})
+              t.truthy(taglike)
+            }
+          }
+        } else if (name === 'catalogues' || name === 'tags') {
+          let n = name.slice(0, -1)
+          let n_id = n + "_id"
+          taglike = {}
+          for (let nn of [...Array(N).keys()]) {
+            taglike[nn] = []
+            for (let tn of [...Array(TN).keys()]) {
+              taglike[nn].push(
+                {[n]: {id: T[tn].id}},
+              )
+            }
+          }
+          doTest = async ({result, refetch}) => {
+            for (let subentry of refetch[name]) {
+              let taglike = await Models[tagModel].findOne({id: subentry[id_name]})
+              t.truthy(taglike)
+            }
+          }
+        }
+      }
+      // test add
+      if(tname='add all subtaglike into all articlelike') {
+        for (let nn of Object.keys(taglike)) {
+          result = await api({
+            operation: '+',
+            data: {[name]: taglike[nn]},
+            model,
+            query: {id: D[nn].id},
+            field: name,
+            origin:[{id:'manual'},{id:nn}]
+          })
+          id = result.modelID
+          refetch = clone((await Model.findOne({id}))._doc)
+          await doTest({refetch})
+        }
+      }
+      if(tname='delete all taglike') {
+        for (let t of T) {
+          result = await api({
+            operation: '-',
+            model: tagModel,
+            query: {id: t.id}
+          })
+          for (let d of D) {
+            refetch = clone((await Model.findOne({id: d.id}))._doc)
+            await doTest({refetch})
+          }
+        }
+      }
+
+      // clean up
+      if('clean up') {
+        // delete N articles
+        for (let d of D) {
+          let entry = await api({
+            operation: 'findOne',
+            query: {id: d.id},
+            model
+          })
+          if (!entry) continue
+          let result = await api({
+            operation: '-',
+            query: {id: d.id},
+            model
+          })
+          let refetch = await Models[model].findOne({id: d.id})
+          t.true(refetch === null)
+        }
+      }
+    }
+  }
+  t.pass()
 })
 
 test.skip('test', async t => {

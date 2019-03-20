@@ -56,6 +56,13 @@ formatMap.set(Boolean, 'boolean')
 formatMap.set(Date, 'date')
 formatMap.set(Schema.Types.Mixed, 'object')
 formatMap.set(Number, 'id')
+const fieldMap = {
+  Tag: 'tags',
+  Catalogue: 'catalogues',
+  Metadata: 'metadatas',
+  Relation: 'relations',
+}
+
 // TODO: supported format
 let metadataFormats = {
   'id': { type: String },
@@ -351,10 +358,7 @@ let SubWiths = {
 async function saveHistory(returnData, session) {
   let history = new globals.Models.History(returnData);
   history.$session(session);
-  // console.log('saveing:', _.pick(returnData, ['operation', 'modelID', 'data', 'query']))
-  await history.save();
-  // console.log('saved:', _.pick(returnData, ['operation', 'modelID', 'data', 'query']))
-  return history
+  return await history.save();
 }
 // all APIs
 async function queryTaglikeID ({field, query, test, getEntry, session, entry_model, inSubquery}) {
@@ -437,8 +441,9 @@ async function querySub({entry, data, field, session, test, entry_model}) {
   let query_key = field.slice(0, -1) // tags, catalogues, relations, metadatas
   if ('id' in data) {
     result = entry[field].find(_ => _.id === data.id )
-    if (!result)
+    if (!result) {
       throw Error(`id ${data.id} not exists in ${field}\nentry:${JSON.stringify(entry,null,2)}\ndata:${JSON.stringify(entry,null,2)}\nfield:${field}`)
+    }
     if (test) {
       return [result]
     } else {
@@ -496,9 +501,10 @@ function extractSingleField ({model, field, data, sub}) {
 async function apiSingleField ({operation, model, field, data, entry, query, meta, session, origin}) {
   let withs, simple, result
   let flags = {}
+  let hookActions = []
 
   let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({model, field, data})
-  let thisresult = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata, session, origin})
+  let thisresult = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata, session, origin, meta})
 
   withs = {[fieldPrefix]: thisresult}
   simple = await entry.save()
@@ -514,7 +520,7 @@ async function apiSingleField ({operation, model, field, data, entry, query, met
     }
   }
 
-  let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags}
+  let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
   // let history = new globals.Models.History(returnData); history.$session(session); await history.save();
   let history = await saveHistory(returnData, session)
   return returnData
@@ -551,7 +557,7 @@ function extractWiths ({ data, model, sub }) {
   })
   return result
 }
-async function processWiths ({ operation, prefield, field, entry, withs, sub, session, origin}) {
+async function processWiths ({ operation, prefield, field, entry, withs, sub, session, origin, meta}) {
   // modify subdocument(or subsubdocument) for each model
   let thisWiths // what field to process
   if (operation === '-') { // delete all withs before delete the main entry
@@ -579,7 +585,8 @@ async function processWiths ({ operation, prefield, field, entry, withs, sub, se
       entry,
       data: withs[key],
       session,
-      origin
+      origin,
+      meta,
     })
     result[key] = thisresult
   }
@@ -607,6 +614,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
   if (!Model) throw Error(`unknown model ${model}`)
   if (origin === undefined) origin = {id: 'manual'}
   let flags = {}
+  let hookActions = []
 
   if (operation === 'aggregate') { // search
     let result = await Model.aggregate(query).session(session)
@@ -650,7 +658,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         let withs = null
         let result = entry
 
-        let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags}
+        let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
         // let history = new globals.Models.History(returnData); history.$session(session); await history.save();
         let history = await saveHistory(returnData, session)
         return returnData
@@ -677,10 +685,14 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       simple.id = await getNextSequenceValue(model) // do not use session for this function
       simple.origin = origin // setup origin
       let entry = new Model(simple); entry.$session(session)
-      withs = await processWiths({operation, prefield: model, field, entry, withs, session, origin})
+      withs = await processWiths({operation, prefield: model, field, entry, withs, session, origin, meta})
 
       let result = await entry.save()
       let modelID = result.id
+
+      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
+      let history = await saveHistory(returnData, session)
+
       // hooks
       let hooks = globals.pluginsData.hook[model]
       if (hooks && hooks.length) {
@@ -690,9 +702,6 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         }
       }
 
-      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags}
-      // let history = new globals.Models.History(returnData); history.$session(session); await history.save();
-      let history = await saveHistory(returnData, session)
       return returnData
     } else { // e.g. add new tag, add new catalogues
       let entry = await Model.find(query).session(session)
@@ -710,12 +719,15 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
     if (!field) {
       let {simple, withs} = extractWiths({data, model})
       entry.set(simple)
-      let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session, origin})
+      let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session, origin, meta})
       withs = thisresult
 
       simple = await entry.save()
       let result = simple
       let modelID = result.id
+
+      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
+      let history = await saveHistory(returnData, session)
 
       // hooks
       let hooks = globals.pluginsData.hook[model]
@@ -726,9 +738,6 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         }
       }
 
-      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags}
-      // let history = new globals.Models.History(returnData); history.$session(session); await history.save();
-      let history = await saveHistory(returnData, session)
       return returnData
     } else {
       let result = await apiSingleField({operation, model, field, data, entry, query, meta, session, origin})
@@ -737,7 +746,9 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
   } else if (operation === '-') {
     if (!Array.isArray(origin)) origin = [origin]
     let entry = await Model.find(query).session(session)
-    if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${JSON.stringify(query,null,2)} not unique: ${entry}`)
+    if (entry.length != 1) {
+      throw Error(`Can not delete: (${operation}, ${model}) entry with query: ${J(query)} not unique: ${entry}`)
+    }
     entry = entry[0]
 
     if (!field) {
@@ -759,8 +770,8 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
           flags.entry = false
 
           let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags}
-          // let history = new globals.Models.History(returnData); history.$session(session); await history.save();
           let history = await saveHistory(returnData, session)
+
           return returnData
         } else {
           flags.entry = true
@@ -772,25 +783,56 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
 
       // delete this entry
       let withs = {}
-      let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session, origin: []}) // origin be null to delete all tags
+      let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session, origin: [], meta}) // origin be null to delete all tags
       withs = thisresult
 
       let simple = await entry.remove()
       let result = simple
       let modelID = result.id
 
+      if (withs.r) { // delete
+        for (let amodel of Object.keys(withs.r)) {
+          for (let id of Object.keys(withs.r[amodel])) {
+            let field = fieldMap[model]
+            hookActions.push({
+              operation: '-',
+              model: amodel,
+              data: withs.r[amodel][id],
+              query: {id},
+              origin:[],
+              field,
+              meta: {
+                noReverse: true,
+                hooks: {
+                  level: 1,
+                },
+              }
+            })
+          }
+        }
+      }
+
+      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
+      let history = await saveHistory(returnData, session)
+
+      for (let hookAction of hookActions) {
+        hookAction.meta.hooks.parent_history = history._id
+      }
+
       // hooks
       let hooks = globals.pluginsData.hook[model]
       if (hooks && hooks.length) {
         for (let hook of hooks) {
           if (hook.test && !hook.test({operation, entry: entry._doc, field})) continue
-          await hook({operation, entry:result._doc})
+          if (meta&&meta.hook&&(!hook.metaTest||!hook.metaTest(meta))) continue
+          let thisHookActions = await hook({operation, entry:result._doc, meta, origin})
+          hookActions = [...hookActions, ...thisHookActions]
         }
       }
-
-      let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags}
-      // let history = new globals.Models.History(returnData); history.$session(session); await history.save();
-      let history = await saveHistory(returnData, session)
+      for (let hookAction of hookActions) {
+        let thisHookAction = Object.assign({}, hookAction, {session})
+        await apiSessionWrapper(thisHookAction)
+      }
       return returnData
     } else {
       let result = await apiSingleField({operation, model, field, data, entry, query, meta, session, origin})
@@ -855,19 +897,28 @@ async function rAPI ({operation, prefield, field, entry, data}) {
   if (field) throw Error('field should always be blank or undefined, debug it!')
   if (operation !== '-') throw Error('can only delete r')
   let keys = Object.keys(entry._doc.r)
-  let toDelete = []
-  let relations = []
+  let entry_model = entry.schema.options.collection
+  let name = fieldMap[entry_model]
+  let toDelete = {}
   for (let key of keys) {
+    let thisToDelete = toDelete[key] = {}
+    let done = []
     for (let each of entry.r[key]) {
-      if (key === relations) {
-        relations.push(each)
-        toDelete.push(each)
-      } else {
-        toDelete.push(each)
+      let [modelID, subentryID] = each.split('-')
+      if (!thisToDelete[modelID]) {
+        thisToDelete[modelID] = { [name]: [] }
+      }
+      if (done.includes(subentryID)) continue
+      thisToDelete[modelID][name].push({id: Number(subentryID)})
+      done.push(subentryID)
+    }
+    for (let key of Object.keys(thisToDelete)) {
+      if (!thisToDelete[key][name].length) {
+        delete thisToDelete[key]
       }
     }
   }
-  return entry.r
+  return toDelete
 }
 
 async function DFSSearch({model, id, entry, path, type, session}) {
@@ -1033,7 +1084,7 @@ async function processAutoActions (auto_actions) {
   // make unique
   return auto_actions
 }
-async function taglikeAPI ({name, operation, prefield, field, data, entry, session, origin}) {
+async function taglikeAPI ({name, operation, prefield, field, data, entry, session, origin, meta}) {
   let Models = globals.Models
   // tags, catalogues, metadatas, relations
   let hooks = globals.pluginsData.hook[name]
@@ -1400,12 +1451,15 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         let thisresult = Object.assign({}, simple, withs, {origin_flags})
         result.push(thisresult)
 
-        let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]}).session(session)
-        if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${this_tag_model}`)
-        let taglike = r[0]
-        let code = `${entry.id}-${this_sub_entry.id}`
-        taglike.r[entry_model] = taglike.r[entry_model].filter(_ => _ !== code)
-        await taglike.save()
+        let taglike
+        if (!(meta&&meta.noReverse)) {
+          let r = await Models[this_tag_model].find({id: this_sub_entry[query_key]}).session(session)
+          if (r.length !== 1) throw Error(`not single result when query ${{id: this_sub_entry[query_key]}} in ${this_tag_model}`)
+          taglike = r[0]
+          let code = `${entry.id}-${this_sub_entry.id}`
+          taglike.r[entry_model] = taglike.r[entry_model].filter(_ => _ !== code)
+          await taglike.save()
+        }
 
         if (name === 'relations') { // relationsDeleteHook
           let {other_model, other_id} = this_sub_entry
@@ -1417,9 +1471,11 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           other_entry[name] = other_entry[name].filter(_ => _.id !== this_sub_entry.id)
           other_entry.markModified(name)
           await other_entry.save()
-          let code = `${other_entry.id}-${this_sub_entry.id}`
-          taglike.r[entry_model] = taglike.r[entry_model].filter(_ => _ !== code)
-          await taglike.save()
+          if (!(meta&&meta.noReverse)) {
+            let code = `${other_entry.id}-${this_sub_entry.id}`
+            taglike.r[entry_model] = taglike.r[entry_model].filter(_ => _ !== code)
+            await taglike.save()
+          }
         }
         for (let thishook of hooks) {
           if (thishook.test && !thishook.test({operation, entry, old_sub_entry})) continue
@@ -1450,10 +1506,10 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
     }
   }
 }
-async function metadatasAPI ({operation, prefield, field, data, entry, session, origin}) {
+async function metadatasAPI ({operation, prefield, field, data, entry, session, origin, meta}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "metadatas"
-  return await taglikeAPI({name, operation, prefield, field, data, entry, session, origin})
+  return await taglikeAPI({name, operation, prefield, field, data, entry, session, origin, meta})
 }
 
 function extractRelationInfo ({full_tag_query, entry_model, entry_id, old}) {
@@ -1507,19 +1563,19 @@ function extractRelationInfo ({full_tag_query, entry_model, entry_id, old}) {
   }
   return {other_model, other_id, aorb, other_aorb, from_id, from_model, to_id, to_model}
 }
-async function relationsAPI ({operation, prefield, field, data, entry, session, origin}) {
+async function relationsAPI ({operation, prefield, field, data, entry, session, origin, meta}) {
   // field could be flags, that's to `operate` flags instead of metadata
   const name = "relations"
-  return await taglikeAPI({ name, operation, prefield, field, data, entry, session, origin})
+  return await taglikeAPI({ name, operation, prefield, field, data, entry, session, origin, meta})
 }
 
-async function cataloguesAPI ({operation, prefield, field, data, entry, session, origin}) {
+async function cataloguesAPI ({operation, prefield, field, data, entry, session, origin, meta}) {
   const name = "catalogues"
-  return await taglikeAPI({name, operation, prefield, field, data, entry, session, origin})
+  return await taglikeAPI({name, operation, prefield, field, data, entry, session, origin, meta})
 }
-async function tagsAPI ({operation, prefield, field, data, entry, session, origin}) {
+async function tagsAPI ({operation, prefield, field, data, entry, session, origin, meta}) {
   const name = "tags"
-  return await taglikeAPI({name, operation, prefield, field, data, entry, session, origin})
+  return await taglikeAPI({name, operation, prefield, field, data, entry, session, origin, meta})
 }
 let APIs = {
   flagsAPI,
