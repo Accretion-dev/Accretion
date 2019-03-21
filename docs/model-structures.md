@@ -1,4 +1,5 @@
 为了更好的使用Accretion, 用户需要深入了解它的储存结构.
+
 复杂的知识网络需要有复杂的体系来组织, 如果你不能够耐下心来阅读以下章节,证明你的知识体系复杂程度尚不需要由Accretion来组织(否则让你头大的应该是你尚未整理好的知识体系而不是这套管理系统),请移步其他笔记类软件.
 
 # 基本概念
@@ -217,6 +218,7 @@ Accretion中大致将数据分为以下两类
 tags数组中每个元素的tag_id为这个数据添加的`Tag`的id, 而数组中每个元素的id(称为tags_id)则表明这是系统中存在的第多少个Article-tag 关系对儿, catalogs数组同理
 
 在一个`Tag`中的r属性记录了tags数组的反向引用数据, `r:{Article:['2-3']}`的意思为,这个`Tag`在id为2的`Article`中被添加到了tags中, 那个tags_id为3(请参考上面的实例自行理解)
+
 * 一致性要求(由API自动确保): 在一个数据上添加(删除)某标签后,自动在对应标签的'r'属性下添加(删除)反向引用数据.
 ## metadatas
 * 所有`目标数据类`都有额外的metadatas元数据, 举例
@@ -253,6 +255,7 @@ tags数组中每个元素的tag_id为这个数据添加的`Tag`的id, 而数组�
 metadatas数组中每个元素的metadata_id为这个数据添加的`Metadata`的id, 而数组中每个元素的id(称为metadatas_id)则表明这是系统中存在的第多少个Article-metadata 关系对儿
 
 在一个`Metadata`中的r属性记录了metadatas数组的反向引用数据, `r:{Article:['2-3']}`的意思为,这个`Metadata`在id为2的`Article`中被添加到了metadatas中, 那个metadatas_id为3(请参考上面的实例自行理解)
+
 * 一致性要求(由API自动确保): 在一个数据上添加(删除)某Metadata后,自动在对应Metadata的'r'属性下添加(删除)反向引用数据.
 ## relations
 * 所有`目标数据类`和`Tag`都有额外的relations元数据, 举例
@@ -322,6 +325,7 @@ metadatas数组中每个元素的metadata_id为这个数据添加的`Metadata`�
 relations数组中每个元素的relation_id为这个数据添加的`Relation`的id, 而数组中每个元素的id(称为relations_id)则表明这是系统中存在的第多少个Article-relation 或者 Tag-relation 关系对儿, from_id,from_model 和 to_id,to_model定义了关系双方
 
 在一个`Relation`中的r属性记录了relations数组的反向引用数据, `r:{Tag:['2-3']}`的意思为,这个`Relation`在id为2的`Tag`中被添加到了relations中, 那个relations_id为3(请参考上面的实例自行理解)
+
 * 一致性要求(由API自动确保): 在一个数据上添加(删除)某Relation,自动在对应Metadata的'r'属性下添加(删除)反向引用数据, 同时关系双方的relations中这条信息也要保持一致.
 
 # hook 系统
