@@ -3,7 +3,9 @@
 
 # 基本概念
 * 元数据: 数据的数据. 举例:
+
     一篇文章:文章本体是数据,文章的标题, 标签, 分类目录, 添加时间, 作者等信息为元数据
+
     一张图片:图片二进制数据为数据, 图片拍摄信息,作者,标签等为元数据
 * 注释: 下文的代码块中, 每行//之后的内容为注释
 * 数组: 常见的数据结构, 表示一组数据, 数据的类型可以相同也可以不同
@@ -111,7 +113,7 @@ Accretion中大致将数据分为以下两类
 },
 {
   name: 'deadline', format: '时间',
-  description: '跟此内容需要在这个时间之前整理好'
+  description: '此内容需要在这个时间之前整理好'
 }
 ```
 * `Relation`: 关系, 基本结构为
@@ -213,6 +215,7 @@ Accretion中大致将数据分为以下两类
   tags: [ {tag_id: 1, id:10}, {tag_id: 6, id:11} ], },
 ```
 tags数组中每个元素的tag_id为这个数据添加的`Tag`的id, 而数组中每个元素的id(称为tags_id)则表明这是系统中存在的第多少个Article-tag 关系对儿, catalogs数组同理
+
 在一个`Tag`中的r属性记录了tags数组的反向引用数据, `r:{Article:['2-3']}`的意思为,这个`Tag`在id为2的`Article`中被添加到了tags中, 那个tags_id为3(请参考上面的实例自行理解)
 * 一致性要求(由API自动确保): 在一个数据上添加(删除)某标签后,自动在对应标签的'r'属性下添加(删除)反向引用数据.
 ## metadatas
@@ -248,6 +251,7 @@ tags数组中每个元素的tag_id为这个数据添加的`Tag`的id, 而数组�
 ]},
 ```
 metadatas数组中每个元素的metadata_id为这个数据添加的`Metadata`的id, 而数组中每个元素的id(称为metadatas_id)则表明这是系统中存在的第多少个Article-metadata 关系对儿
+
 在一个`Metadata`中的r属性记录了metadatas数组的反向引用数据, `r:{Article:['2-3']}`的意思为,这个`Metadata`在id为2的`Article`中被添加到了metadatas中, 那个metadatas_id为3(请参考上面的实例自行理解)
 * 一致性要求(由API自动确保): 在一个数据上添加(删除)某Metadata后,自动在对应Metadata的'r'属性下添加(删除)反向引用数据.
 ## relations
@@ -316,11 +320,13 @@ metadatas数组中每个元素的metadata_id为这个数据添加的`Metadata`�
   tags: [ {tag_id: 1, id:10}, {tag_id: 6, id:11} ], },
 ```
 relations数组中每个元素的relation_id为这个数据添加的`Relation`的id, 而数组中每个元素的id(称为relations_id)则表明这是系统中存在的第多少个Article-relation 或者 Tag-relation 关系对儿, from_id,from_model 和 to_id,to_model定义了关系双方
+
 在一个`Relation`中的r属性记录了relations数组的反向引用数据, `r:{Tag:['2-3']}`的意思为,这个`Relation`在id为2的`Tag`中被添加到了relations中, 那个relations_id为3(请参考上面的实例自行理解)
 * 一致性要求(由API自动确保): 在一个数据上添加(删除)某Relation,自动在对应Metadata的'r'属性下添加(删除)反向引用数据, 同时关系双方的relations中这条信息也要保持一致.
 
 # hook 系统
 * hook: 在满足一定条件下,程序自动触发的行为
+*
 通过Accretion的插件系统, 程序可以自动完成一些元数据的添加,减轻用户整理信息的负担
 我们以下面两个已经实现的hook为例:
 * hook[0] 互为翻译关系的连个Tag视为等效
