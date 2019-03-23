@@ -1,17 +1,37 @@
+async function turnOn () {
+  console.log(`turn on ${hook.uid}`)
+  // scan all tags with the relation pairs
+  // scan all topModel for the tags
+  // add another tag
+  // give a report
+}
+async function turnOff () {
+  console.log(`turn off ${hook.uid}`)
+  // scan all tags with the relation pairs
+  // scan all topModel for the tags
+  // delete both tag
+  // give a report
+}
+async function count () {
+  // scan all tags with the relation pairs
+  // scan all topModel for the tags
+  // give a report
+}
+let data = {
+  model: 'Relation',
+  data: [
+    {name: 'translation'}
+  ]
+}
 async function gen(parameters) {
   let hookData = {}
   // test if the similar relation exists
   // protect similar relation from bing delete if this hook function is active
   async function init () {
-    let result = globals.api({
-      operation: "+",
-      model: 'Relation',
-      data:{
-        name: 'translation'
-      },
-      origin:{ id:'translation-hook' }
-    })
-    hookData.translation = result.modelID
+    let translation = globals.models['Relation'].find({name: 'translation'})
+    if (translation.lenth !== 1) throw Error(`hook ${hook.uid} need extract one 'translation' Relation, we got:${translation}`)
+    translation = translation[0]
+    hookData.translation = translation.id
   }
   async function tagConstrain({operation, entry}) {
     console.log('this is just a wrapper, you should never see this')
@@ -54,5 +74,9 @@ let hook = {
   description: "When two tag have the 'translation' relation, they are the same tag, auto sync all tag addition and deletion",
   parameters: {},
   function: gen,
+  turnOn,
+  turnOff,
+  count,
+  data,
 }
 export default hook

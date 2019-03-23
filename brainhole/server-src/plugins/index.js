@@ -51,16 +51,6 @@ async function pluginAPI({operation, uid, component, componentUID}) {
     if (!thiscomponent) throw Error(`component entry uid:${componentUID} not exist in component ${component} in plugin ${uid}`)
     if (component === 'hook') {
       if (operation === 'on') {
-      } else if (operation === 'off') {
-      }
-    } else if (component === 'task') {
-      if (operation === 'on') {
-      } else if (operation === 'off') {
-      }
-    } else if (component === 'model') {
-      // finish this when we have UI
-      // need restart after model change
-      if (operation === 'on') {
         try {
           thiscomponent.active = true
           if (thiscomponent.data) {
@@ -86,15 +76,15 @@ async function pluginAPI({operation, uid, component, componentUID}) {
       } else if (operation === 'off') {
         try {
           thiscomponent.active = false
-          if (thiscomponent.data) {
-            await bulkDel({componentUID})
-          }
           let updateHookErrors = await updateHooks(global.plugins)
           if (updateHookErrors.length) {
             throw Error(`update hook function error: ${JSON.stringify(updateHookErrors,null,2)}`)
           }
           if (thiscomponent.turnOff) {
             await thiscomponent.turnOff()
+          }
+          if (thiscomponent.data) {
+            await bulkDel({componentUID})
           }
           await pluginModel.findOneAndUpdate(
             {uid},
@@ -105,6 +95,19 @@ async function pluginAPI({operation, uid, component, componentUID}) {
           globals.pluginsData.hook = hook
           throw e
         }
+      } else if (operation === 'count') {
+        let result = await thiscomponent.count()
+        return result
+      }
+    } else if (component === 'task') {
+      if (operation === 'on') {
+      } else if (operation === 'off') {
+      }
+    } else if (component === 'model') {
+      // finish this when we have UI
+      // need restart after model change
+      if (operation === 'on') {
+      } else if (operation === 'off') {
       }
     } else if (component === 'data') {
       if (operation === 'on') {
