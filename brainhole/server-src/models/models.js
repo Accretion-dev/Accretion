@@ -3,6 +3,9 @@ import models from './default'
 import _ from 'lodash'
 import passportLocalMongoose from 'passport-local-mongoose'
 import globals from "../globals"
+import cloneDeep from 'clone-deep'
+
+let clone = cloneDeep
 let Schema = mongoose.Schema
 let todo
 let modelsRaw = models
@@ -335,6 +338,7 @@ function initModels () {
   }
 
   globals.api = api
+  globals.apiSessionWrapper = apiSessionWrapper
   globals.mongoose = mongoose
 
   return {Models, Schemas, structTree, globals, All, Withs, WithsDict}
@@ -639,7 +643,6 @@ async function processSubEntryHooks({hooks, name, operation, meta, origin, origi
   }
   return hookActions
 }
-
 async function apiSessionWrapper ({ operation, data, query, model, meta, field, session, origin }) {
   let Models = globals.Models
   let Model = mongoose.models[model]
@@ -1640,46 +1643,77 @@ function getRequire (Model) {
   let good = fields.filter(_ => tree[_].required)
   return good
 }
-async function bulkAdd({model, data, session, meta, origin}) {
+
+function flattenData({model, data}) {
+  if (model) {
+    return data.map(_ => ({model, data:_}))
+  } else {
+    let result = []
+    for (let each of data) {
+      // each should be like {model, data}, with no model info in data
+      result = [...result, ...flattenData(each)]
+    }
+    return result
+  }
+}
+async function bulkAddWrapper({model, data, session, meta, origin, query, common}) {
+  let result = []
+  let withDatas = []
+  let flatdata = flattenData({model, data})
+  for (let eachdata of flatdata) {
+    let eachquery, eachmodel
+    eachdata = clone(eachdata)
+    eachmodel = eachdata.model
+    eachdata = eachdata.data
+    if (common) eachdata = common({data:eachdata, model:eachmodel})
+    if (query) eachquery = query({data:eachdata, model:eachmodel})
+
+    let {simple, withs} = extractWiths({ data: eachdata, model: eachmodel})
+    let r = await apiSessionWrapper({
+      operation: '+',
+      data: simple,
+      model: eachmodel,
+      session,
+      meta,
+      query: eachquery,
+      origin,
+    })
+    let id = r.modelID
+    result.push({model: eachmodel, id, withs: Object.keys(withs)})
+    for (let key of Object.keys(withs)) {
+      withDatas.push({
+        operation: '+',
+        data: {[key]:withs[key]},
+        model: eachmodel,
+        field: key,
+        session,
+        meta,
+        query: {id},
+        origin
+      })
+    }
+  }
+  for (let eachdata of withDatas) {
+    await apiSessionWrapper(eachdata)
+  }
+  return result
+}
+async function bulkAdd({model, data, session, meta, origin, query, common}) {
+  // bulkAdd will first add all simple data, and then add withs data in the second round
+  // query is a function eachquery = query(eachdata)
+  // common is a function, eachdata = common(eachdata)
+  // if model is not give, data must be like {model, data: [...]}
   if (!session) session = await mongoose.startSession()
-  if (!meta) meta = {bulk: true}
+  if (!meta) meta = {}
+  if ((!origin&&query)||(origin&&!query)) throw Error('origin and query must be both set or unset at the same time!')
   try {
     session.startTransaction()
-    console.log("start to add")
-    let result = []
-    let workingDatas = []
-    for (let eachdata of data) {
-      let {simple, withs} = extractWiths({ data: eachdata, model})
-      let workingData = {simple, withs}
-      let r = await apiSessionWrapper({
-        operation: '+',
-        data: simple,
-        model,
-        session,
-        meta,
-      })
-      let id = r.modelID
-      eachdata.id = id
-      workingData.id = id
-      workingDatas.push(workingData)
-    }
-    for (let eachdata of workingDatas) {
-      let {withs,id} = eachdata
-      let r = await apiSessionWrapper({
-        operation: '*',
-        data: withs,
-        model,
-        query:{id},
-        session,
-        meta,
-      })
-      result.push(r.result)
-    }
-    let history = new globals.Models.History({
-      operation:'++', data, meta,
-    }); history.$session(session); await history.save();
-
-    console.log("before commit")
+    let history = new globals.Models.History({ // history of bulk addition
+      operation:'++', data, meta, origin
+    }); history.$session(session);
+    history = await history.save();
+    meta.parent_history = history.id
+    let result = await bulkAddWrapper({model, data, session, meta, origin, query, common})
     await session.commitTransaction()
     return result
   } catch (error) {
