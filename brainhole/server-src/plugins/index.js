@@ -1,10 +1,11 @@
 import mongoose from 'mongoose'
 import fs from 'fs'
+import _ from 'lodash'
 import path from 'path'
 import globals from "../globals"
 globals.pluginsData = {}
 
-let components = ["hook", 'task', 'searchTemplate', 'model', 'data']
+let components = ["hook", 'task', 'model', 'data']
 let HookAction = {
   relations: [],
   metadatas: [],
@@ -14,6 +15,129 @@ let HookAction = {
   children: [],
 }
 
+async function bulkAdd({data, componentUID}) {
+  let query = ({model, data}) => {
+    let required = globals.getRequire(model)
+    data = _.pick(data, required)
+    data = data.filter(_ => !!_)
+    return data
+  }
+  await globals.bulkOP({operation: '+', data, query, origin:{id: componentUID}})
+}
+async function bulkDel({componentUID}) {
+  for (let Model of globals.models) {
+    let model = Model.modelName
+    let ids = await Model.aggregate([
+      {
+        $match: {
+          'origin.id': componentUID,
+        },
+      },
+      {
+        $project: {
+          id: 1
+        }
+      }
+    ])
+    await globals.bulkOP({operation: '-', model, data: ids, origin:{id: componentUID}})
+  }
+}
+async function pluginAPI({operation, uid, component, componentUID}) {
+  let plugin = globals.plugins.find(_ => _.uid === uid)
+  if (!plugin) throw Error(`can not find plugin of uid: ${uid}`)
+  if (component && componentUID) { // operation on plugin component
+    if (!plugin[component]) throw Error(`component ${component} not exist in plugin ${uid}`)
+    let thiscomponent = plugin[component].find(_ => _.uid === componentUID)
+    if (!thiscomponent) throw Error(`component entry uid:${componentUID} not exist in component ${component} in plugin ${uid}`)
+    if (component === 'hook') {
+      if (operation === 'on') {
+      } else if (operation === 'off') {
+      }
+    } else if (component === 'task') {
+      if (operation === 'on') {
+      } else if (operation === 'off') {
+      }
+    } else if (component === 'model') {
+      // finish this when we have UI
+      // need restart after model change
+      if (operation === 'on') {
+        try {
+          thiscomponent.active = true
+          if (thiscomponent.data) {
+            await bulkAdd({data: thiscomponent.data, componentUID})
+          }
+          let hook = globals.pluginsData.hook
+          let updateHookErrors = await updateHooks(global.plugins)
+          if (updateHookErrors.length) {
+            throw Error(`update hook function error: ${JSON.stringify(updateHookErrors,null,2)}`)
+          }
+          if (thiscomponent.turnOn) {
+            await thiscomponent.turnOn()
+          }
+          await pluginModel.findOneAndUpdate(
+            {uid},
+            {$set: plugin},
+          )
+        } catch (e) {
+          thiscomponent.active = false
+          globals.pluginsData.hook = hook
+          throw e
+        }
+      } else if (operation === 'off') {
+        try {
+          thiscomponent.active = false
+          if (thiscomponent.data) {
+            await bulkDel({componentUID})
+          }
+          let updateHookErrors = await updateHooks(global.plugins)
+          if (updateHookErrors.length) {
+            throw Error(`update hook function error: ${JSON.stringify(updateHookErrors,null,2)}`)
+          }
+          if (thiscomponent.turnOff) {
+            await thiscomponent.turnOff()
+          }
+          await pluginModel.findOneAndUpdate(
+            {uid},
+            {$set: plugin},
+          )
+        } catch (e) {
+          thiscomponent.active = true
+          globals.pluginsData.hook = hook
+          throw e
+        }
+      }
+    } else if (component === 'data') {
+      if (operation === 'on') {
+        await bulkAdd({data: thiscomponent.data, componentUID})
+      } else if (operation === 'off') {
+        await bulkDel({componentUID})
+      }
+    }
+  } else { // operation on plugin itself
+    if (operation === 'on') {
+      plugin.active = true
+      await pluginModel.findOneAndUpdate(
+        {uid},
+        {$set: plugin},
+      )
+    } else if (operation === 'off') {
+      // check if all its component is off
+      for (let key of components) {
+        for (let each of plugin[key]) {
+          if (each.active) {
+            throw Error(`Can not turn off plugin ${uid}, its ${key} component uid:${each.uid} is still open, close the components first!`)
+          }
+        }
+      }
+      plugin.active = false
+      await pluginModel.findOneAndUpdate(
+        {uid},
+        {$set: plugin},
+      )
+    }
+  }
+}
+globals.pluginAPI = pluginAPI
 function updateData (plugins) {
   let models = []
   let data = []
@@ -28,7 +152,6 @@ function updateData (plugins) {
     }
   }
   globals.pluginsData.model = models
-  globals.pluginsData.data = data
 }
 async function updateHooks (plugins) {
   let initHookErrors = []
@@ -102,9 +225,9 @@ async function initPlugins ({allActive}) {
         let componentDict = require(componentFile).default
         // console.log(component, componentFile, componentDict)
         componentDict.origin = pluginDict.name
-        if (!componentDict.uid) throw Error(`all component should have a uid! current is ${JSON.stringify(pluginDict,null,2)}`)
         if (component !== 'model') { // for models, the uid of component itself should be unique
-          componentDict.uid = `${uid}-${componentDict.uid}`
+          if (!componentDict.name) throw Error(`all component should have a name! current is ${JSON.stringify(componentDict,null,2)}`)
+          componentDict.uid = `${uid}-${componentDict.name}`
         }
         if (componentUIDs.includes(componentDict.uid)) throw Error(`Deplicated uid for component ${componentDict.uid} in plugin ${JSON.stringify(pluginDict,null,2)}`)
         componentUIDs.push(componentDict.uid)
@@ -173,6 +296,4 @@ async function initPlugins ({allActive}) {
   }
 */
 
-
-
-export default {initPlugins, components}
+export default {initPlugins, components, pluginAPI}

@@ -48,10 +48,11 @@ async function gen(parameters) {
   }
 }
 
-export default {
+let hook = {
   uid: "translation",
   name: "translation",
   description: "When two tag have the 'translation' relation, they are the same tag, auto sync all tag addition and deletion",
   parameters: {},
   function: gen,
 }
+export default hook

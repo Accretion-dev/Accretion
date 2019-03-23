@@ -7,7 +7,7 @@ let databaseConfig = yaml.readSync('../configs/mongod.yml')
 import _models from './server/models'
 const {init: database_init} = _models
 import __ from './server/models/models'
-const {api, getRequire, bulkAdd} = __
+const {api, getRequire, bulkOP} = __
 import mongoose from 'mongoose'
 import test from 'ava'
 import globals from './server/globals'

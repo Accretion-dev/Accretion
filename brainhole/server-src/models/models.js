@@ -339,7 +339,10 @@ function initModels () {
 
   globals.api = api
   globals.apiSessionWrapper = apiSessionWrapper
+  globals.bulkOP = bulkOP
+  globals.bulkOPWrapper = bulkOPWrapper
   globals.mongoose = mongoose
+  globals.getRequire = getRequire
 
   return {Models, Schemas, structTree, globals, All, Withs, WithsDict}
 }
@@ -1656,50 +1659,68 @@ function flattenData({model, data}) {
     return result
   }
 }
-async function bulkAddWrapper({model, data, session, meta, origin, query, common}) {
+async function bulkOPWrapper({operation, model, data, session, meta, origin, query, common}) {
   let result = []
   let withDatas = []
-  let flatdata = flattenData({model, data})
-  for (let eachdata of flatdata) {
-    let eachquery, eachmodel
-    eachdata = clone(eachdata)
-    eachmodel = eachdata.model
-    eachdata = eachdata.data
-    if (common) eachdata = common({data:eachdata, model:eachmodel})
-    if (query) eachquery = query({data:eachdata, model:eachmodel})
+  let flatdata = flattenData({model, data, operation})
+  let eachquery, eachmodel
 
-    let {simple, withs} = extractWiths({ data: eachdata, model: eachmodel})
-    let r = await apiSessionWrapper({
-      operation: '+',
-      data: simple,
-      model: eachmodel,
-      session,
-      meta,
-      query: eachquery,
-      origin,
-    })
-    let id = r.modelID
-    result.push({model: eachmodel, id, withs: Object.keys(withs)})
-    for (let key of Object.keys(withs)) {
-      withDatas.push({
+  if (operation === "+") {
+    for (let eachdata of flatdata) {
+      eachdata = clone(eachdata)
+      eachmodel = eachdata.model
+      eachdata = eachdata.data
+      if (common) eachdata = common({data:eachdata, model:eachmodel})
+      if (query) eachquery = query({data:eachdata, model:eachmodel})
+
+      let {simple, withs} = extractWiths({ data: eachdata, model: eachmodel})
+      let r = await apiSessionWrapper({
         operation: '+',
-        data: {[key]:withs[key]},
+        data: simple,
         model: eachmodel,
-        field: key,
         session,
         meta,
-        query: {id},
-        origin
+        query: eachquery,
+        origin,
       })
+      let id = r.modelID
+      result.push({model: eachmodel, id, withs: Object.keys(withs)})
+      for (let key of Object.keys(withs)) {
+        withDatas.push({
+          operation: '+',
+          data: {[key]:withs[key]},
+          model: eachmodel,
+          field: key,
+          session,
+          meta,
+          query: {id},
+          origin
+        })
+      }
     }
-  }
-  for (let eachdata of withDatas) {
-    await apiSessionWrapper(eachdata)
+    for (let eachdata of withDatas) {
+      await apiSessionWrapper(eachdata)
+    }
+  } else if (operation === '-') {
+    for (let eachdata of flatdata) {
+      eachmodel = eachdata.model
+      eachdata = eachdata.data
+      let r = await apiSessionWrapper({
+        operation: '-',
+        model: eachmodel,
+        session,
+        meta,
+        query: eachdata,
+        origin,
+      })
+      let id = r.modelID
+      result.push({model: eachmodel, id})
+    }
   }
   return result
 }
-async function bulkAdd({model, data, session, meta, origin, query, common}) {
-  // bulkAdd will first add all simple data, and then add withs data in the second round
+async function bulkOP({operation, model, data, session, meta, origin, query, common}) {
+  // bulkOP will first add all simple data, and then add withs data in the second round
   // query is a function eachquery = query(eachdata)
   // common is a function, eachdata = common(eachdata)
   // if model is not give, data must be like {model, data: [...]}
@@ -1713,7 +1734,7 @@ async function bulkAdd({model, data, session, meta, origin, query, common}) {
     }); history.$session(session);
     history = await history.save();
     meta.parent_history = history.id
-    let result = await bulkAddWrapper({model, data, session, meta, origin, query, common})
+    let result = await bulkOPWrapper({operation, model, data, session, meta, origin, query, common})
     await session.commitTransaction()
     return result
   } catch (error) {
@@ -1723,4 +1744,4 @@ async function bulkAdd({model, data, session, meta, origin, query, common}) {
 }
 
 // export
-export default {api, initModels, getRequire, bulkAdd}
+export default {api, initModels, getRequire, bulkOP}
