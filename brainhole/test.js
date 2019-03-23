@@ -389,7 +389,7 @@ test('flags', async t => {
   }
   t.pass()
 })
-test('test all taglike api', async t => {
+test.serial('test all taglike api', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -1236,7 +1236,7 @@ test('test all taglike api', async t => {
   }
   t.pass()
 })
-test('tag origin system', async t => {
+test.serial('tag origin system', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -1864,7 +1864,7 @@ test('tag origin system', async t => {
   }
   t.pass()
 })
-test('reverse delete for taglike', async t => {
+test.serial('reverse delete for taglike', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -2069,6 +2069,9 @@ test('reverse delete for taglike', async t => {
   }
   t.pass()
 })
+test.serial.only('bulkAdd without hooks', async t => {
+  t.pass()
+})
 
 test.skip('test', async t => {
   let Article = Models.Article
@@ -2101,60 +2104,9 @@ test.skip('test', async t => {
   console.log(b.tags[0])
   t.pass()
 })
-test.skip('bulkAdd without hooks', async t => {
-  let Relations, R, r, Tags, T
-  if("bulk add Relations") {
-    Relations = [
-      {name: t.title + '-larger',  symmetric: false},
-      {name: t.title + '-smaller', symmetric: false},
-      {name: t.title + '-simular', symmetric: true},
-      {name: t.title + '-different', symmetric: true},
-      {name: t.title + '-classmate', symmetric: true, type: 'group', hook: 'group'},
-      {name: t.title + '-same_author', symmetric: true, type: 'group', hook: 'group'},
-      {name: t.title + '-same', symmetric: true, hook: 'same', onlyFor: ['Tag']},
-      {name: t.title + '-same2', symmetric: true, hook: 'same', onlyFor: ['Tag']},
-      {name: t.title + '-CN2EN', symmetric: false, type: 'translation'},
-      {name: t.title + '-CN2JP', symmetric: false, type: 'translation'},
-    ]
-    R = {}
-    r = await bulkAdd({model: 'Relation', data: Relations})
-    for (let index in r) {
-      let id = r[index].id
-      let each = Relations[index]
-      each.id = id
-      let namesplits = each.name.split('-')
-      let name = namesplits[namesplits.length - 1]
-      R[name] = each
-    }
-  }
-  if('bulk add Tags, test complicated-tags'){
-    Tags = [
-      {
-        name: t.title + '-astronomy'
-      },
-      {
-        name: t.title + '-galaxy',
-        relations: [
-          {
-            relation: { name: R.CN2EN.name },
-            from: { name: t.title + '-xingxi' }
-          }
-        ],
-        fathers: [
-          { name: t.title + '-astronomy'}
-        ]
-      },
-      {
-        name: t.title + '-xingxi'
-        // should auto add {family, relations}
-      },
-    ]
-  }
-  t.pass()
-})
 
 // add test files in plugins
-test('all plugin have test file', async t => {
+test.serial('all plugin have test file', async t => {
   const pluginRoot = path.join(__dirname, 'server', 'plugins')
   let pluginNames = fs.readdirSync(pluginRoot)
   let testFiles = []
