@@ -1,3 +1,5 @@
+import globals from '../../globals'
+
 async function turnOn () {
   console.log('turn on official plugin')
 }

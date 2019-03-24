@@ -77,14 +77,15 @@ async function pluginAPI({operation, uid, component, componentUID}) {
     let thiscomponent = plugin[component].find(_ => _.uid === componentUID)
     if (!thiscomponent) throw Error(`component entry uid:${componentUID} not exist in component ${component} in plugin ${uid}`)
     if (component === 'hook') {
+      let hook
       if (operation === 'on') {
         try {
           thiscomponent.active = true
           if (thiscomponent.data) {
             await bulkAdd({data: thiscomponent.data, componentUID})
           }
-          let hook = globals.pluginsData.hook
-          let updateHookErrors = await updateHooks(global.plugins)
+          hook = globals.pluginsData.hook
+          let updateHookErrors = await updateHooks(globals.plugins)
           if (updateHookErrors.length) {
             throw Error(`update hook function error: ${JSON.stringify(updateHookErrors,null,2)}`)
           }
@@ -103,7 +104,8 @@ async function pluginAPI({operation, uid, component, componentUID}) {
       } else if (operation === 'off') {
         try {
           thiscomponent.active = false
-          let updateHookErrors = await updateHooks(global.plugins)
+          hook = globals.pluginsData.hook
+          let updateHookErrors = await updateHooks(globals.plugins)
           if (updateHookErrors.length) {
             throw Error(`update hook function error: ${JSON.stringify(updateHookErrors,null,2)}`)
           }
