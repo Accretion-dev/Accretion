@@ -1662,69 +1662,123 @@ function flattenData({model, data}) {
     return result
   }
 }
-async function bulkOPWrapper({operation, model, data, session, meta, origin, query, common}) {
+async function bulkOPWrapper({operation, model, data, session, meta, origin, query, common, field}) {
   let result = []
   let withDatas = []
   let flatdata = flattenData({model, data, operation})
   let eachquery, eachmodel
 
   if (operation === "+") {
-    for (let eachdata of flatdata) {
-      eachdata = clone(eachdata)
-      eachmodel = eachdata.model
-      eachdata = eachdata.data
-      if (common) eachdata = common({data:eachdata, model:eachmodel})
-      if (query) eachquery = query({data:eachdata, model:eachmodel})
+    if (!field) {
+      for (let eachdata of flatdata) {
+        eachdata = clone(eachdata)
+        eachmodel = eachdata.model
+        eachdata = eachdata.data
+        if (common) eachdata = common({data:eachdata, model:eachmodel})
+        if (query) eachquery = query({data:eachdata, model:eachmodel})
 
-      let {simple, withs} = extractWiths({ data: eachdata, model: eachmodel})
-      let r = await apiSessionWrapper({
-        operation: '+',
-        data: simple,
-        model: eachmodel,
-        session,
-        meta,
-        query: eachquery,
-        origin,
-      })
-      let id = r.modelID
-      let origin_flags = r.origin_flags
-      result.push({model: eachmodel, id, withs: Object.keys(withs), origin_flags})
-      for (let key of Object.keys(withs)) {
-        withDatas.push({
+        let {simple, withs} = extractWiths({ data: eachdata, model: eachmodel})
+        let r = await apiSessionWrapper({
           operation: '+',
-          data: {[key]:withs[key]},
+          data: simple,
           model: eachmodel,
-          field: key,
           session,
           meta,
-          query: {id},
-          origin
+          query: eachquery,
+          origin,
         })
+        let id = r.modelID
+        let origin_flags = r.origin_flags
+        result.push({model: eachmodel, id, withs: Object.keys(withs), origin_flags})
+        for (let key of Object.keys(withs)) {
+          withDatas.push({
+            operation: '+',
+            data: {[key]:withs[key]},
+            model: eachmodel,
+            field: key,
+            session,
+            meta,
+            query: {id},
+            origin
+          })
+        }
+      }
+      for (let eachdata of withDatas) {
+        await apiSessionWrapper(eachdata)
+      }
+    } else {
+      for (let eachdata of flatdata) {
+        eachdata = clone(eachdata)
+        eachmodel = eachdata.model
+        eachdata = eachdata.data
+
+        // if with field, the fields other than 'field' will be used as query
+        let data = _.pick(eachdata, [field])
+        let query = _.omit(eachdata, [field])
+
+        let r = await apiSessionWrapper({
+            operation: '+',
+            data,
+            query,
+            model: eachmodel,
+            field,
+            session,
+            meta,
+            origin
+          })
+        let id = r.modelID
+        let withs = r.withs
+        let origin_flags = r.origin_flags
+        result.push({model: eachmodel, id, withs, origin_flags})
       }
     }
-    for (let eachdata of withDatas) {
-      await apiSessionWrapper(eachdata)
-    }
   } else if (operation === '-') {
-    for (let eachdata of flatdata) {
-      eachmodel = eachdata.model
-      let query = eachdata.data
-      let r = await apiSessionWrapper({
-        operation: '-',
-        model: eachmodel,
-        session,
-        meta,
-        query,
-        origin,
-      })
-      let id = r.modelID
-      let origin_flags = r.origin_flags
-      result.push({model: eachmodel, id, origin_flags})
+    if (!field) {
+      for (let eachdata of flatdata) {
+        eachmodel = eachdata.model
+        let query = eachdata.data
+        let r = await apiSessionWrapper({
+          operation: '-',
+          model: eachmodel,
+          session,
+          meta,
+          query,
+          origin,
+        })
+        let id = r.modelID
+        let origin_flags = r.origin_flags
+        result.push({model: eachmodel, id, origin_flags})
+      }
+    } else {
+      for (let eachdata of flatdata) {
+        eachdata = clone(eachdata)
+        eachmodel = eachdata.model
+        eachdata = eachdata.data
+
+        // if with field, the fields other than 'field' will be used as query
+        let data = _.pick(eachdata, [field])
+        let query = _.omit(eachdata, [field])
+
+        let r = await apiSessionWrapper({
+            operation: '-',
+            data,
+            query,
+            model: eachmodel,
+            field,
+            session,
+            meta,
+            origin
+          })
+        let id = r.modelID
+        let withs = r.withs
+        let origin_flags = r.origin_flags
+        result.push({model: eachmodel, id, withs, origin_flags})
+      }
     }
   }
   return result
 }
-async function bulkOP({operation, model, data, session, meta, origin, query, common}) {
+async function bulkOP({operation, model, data, session, meta, origin, query, common, field}) {
   // bulkOP will first add all simple data, and then add withs data in the second round
   // query is a function eachquery = query(eachdata)
   // common is a function, eachdata = common(eachdata)
@@ -1741,7 +1795,7 @@ async function bulkOP({operation, model, data, session, meta, origin, query, com
     }
     session.startTransaction()
     let history = new globals.Models.History({ // history of bulk addition
-      operation:bulkOperation, data, meta, origin
+      operation:bulkOperation, data, meta, origin, field
     }); history.$session(session);
     history = await history.save();
     meta.parent_history = history._id
