@@ -16,6 +16,7 @@ import path from 'path'
 import delay from 'delay'
 import equal from 'deep-equal'
 import cloneDeep from 'clone-deep'
+var g = globals
 
 let clone = cloneDeep
 function assignExists (a, b) {
@@ -2070,6 +2071,198 @@ test.serial('reverse delete for taglike', async t => {
   t.pass()
 })
 test.serial.only('bulkAdd without hooks', async t => {
+  let result
+  async function testBulkAdd(result) {
+    for (let each of result) {
+      let {model, id, withs, origin_flags} = each
+      let obj = await globals.Models[model].findOne({id})
+      t.truthy(obj)
+      t.true(origin_flags.entry)
+      t.true(origin_flags.origin.length===1)
+      for (let key of withs) {
+        if (key!=='flags') {
+          t.true(obj[key].length > 0)
+        }
+      }
+    }
+  }
+  async function testBulkAddOrigin(result) {
+    for (let each of result) {
+      let {model, id, withs, origin_flags} = each
+      let obj = await globals.Models[model].findOne({id})
+      t.truthy(obj)
+      t.false(origin_flags.entry)
+      t.true(origin_flags.origin.length===2)
+      t.true(obj.origin.length===3)
+      for (let key of withs) {
+        if (key!=='flags') {
+          t.true(obj[key].length > 0)
+        }
+      }
+    }
+  }
+  async function testBulkDelManual(result) {
+    for (let each of result) {
+      let {model, id, withs, origin_flags} = each
+      let obj = await globals.Models[model].findOne({id})
+      t.truthy(obj)
+      t.false(origin_flags.entry)
+      t.true(origin_flags.origin.length===1)
+      t.true(obj.origin.length===2)
+    }
+  }
+  async function testBulkDel(result) {
+    for (let each of result) {
+      let {model, id, withs, origin_flags} = each
+      let obj = await globals.Models[model].findOne({id})
+      t.truthy(!obj)
+      t.true(origin_flags.entry)
+      t.true(origin_flags.origin.length===2)
+    }
+  }
+  let data = [
+    {model: "Relation", data: [
+      // a is xxx of b, a xxx b
+      {name: 'translation', symmetric: true},
+      {name: 'next', reverse_name: 'prev', symmetric: false},
+      {name: 'cite', reverse_name: 'cited', symmetric: false},
+      {name: 'related', symmetric: true},
+      {name: 'synonym', symmetric: true},
+      {name: 'clarify', reverse_name:'confuse', symmetric: false},
+      {name: 'abbr', reverse_name:'abbreviated', symmetric: false},
+      {name: 'agree', reverse_name:'agginst', symmetric: false},
+    ]},
+    {model: "Metadata", data: [
+      {name: 'rank'},
+      {name: 'url'},
+      {name: 'color'},
+    ]},
+    {model: "Catalogue", data: [
+      {name: 'working'},
+      {name: 'learning'},
+      {name: '1', children:[{name:'1.1'},{name:'1.2'},{name:'1.3'},{name:'1.4'}]},
+      {name: '1.1'},
+      {name: '1.1.1', fathers:[{name: '1.1'}]},
+      {name: '1.1.2', fathers:[{name: '1.1'}]},
+      {name: '1.2'},
+      {name: '1.3'},
+      {name: '1.4'},
+      {name: '2', children:[{name:'2.1'},{name:'2.2'}]},
+      {name: '2.1'},
+      {name: '2.2'},
+      {name: '3'},
+      {name: '4'},
+      {name: 'foo'},
+      {name: 'bar'},
+      {name: 'blabla'},
+    ]},
+    {model: "Tag", data: [
+      // test clarify hook
+      {name: 'cs', relations: [
+        {relation: {name: 'clarify'}, from:{name: 'cs(computer science)'}},
+        {relation: {name: 'clarify'}, from:{name: 'cs(game)'}},
+      ]},
+      {name: 'cs(computer science)'},
+      {name: 'cs(game)'},
+
+      {name: 'fishing', relations: [
+        {relation: {name: 'clarify'}, from:{name: 'fishing(sport)'}},
+        {relation: {name: 'clarify'}, from:{name: 'fishing(swindle)'}},
+      ]},
+      {name: 'fishing(sport)'},
+      {name: 'fishing(swindle)'},
+
+      {name: 'language', relations: [
+        {relation: {name: 'clarify'}, from:{name: 'language(cs)'}},
+        {relation: {name: 'clarify'}, from:{name: 'language(raw)'}},
+      ]},
+      {name: 'language(cs)',
+        children: [ {name: 'python'}, {name: 'c'}, {name: 'go'}, {name: 'javascript'}, ]},
+      {name: 'python'}, {name: 'c'}, {name: 'go'}, {name: 'javascript'},
+      {name: 'language(raw)',
+        children: [ {name: 'chinese'}, {name: 'english'}, {name: 'japanese'} ]},
+      {name: 'chinese'}, {name: 'english'}, {name: 'japanese'},
+      // test tag ancestor hook
+      {name:'1', children:[{name:'1.1'},{name:'1.2'}]},
+      {name:'1.1', children:[{name:'1.1.1'},{name:'1.1.2'}]}, {name:'1.1.1'}, {name:'1.1.2'},
+      {name:'1.2', children:[{name:'1.2.1'},{name:'1.2.2'}]}, {name:'1.2.1'}, {name:'1.2.2'},
+      {name:'2', children:[{name:'2.1'},{name:'2.2'}]},
+      {name:'2.1', children:[{name:'2.1.1'}, {name:'2.1.2'}]}, {name:'2.1.1'}, {name:'2.1.2'},
+      {name:'2.2', children:[{name:'2.2.1'}, {name:'2.2.2'}]}, {name:'2.2.1'}, {name:'2.2.2'},
+      {name:'3'}, {name:'3.1'}, {name:'3.2'},
+      // test translation hook
+      {name:'astronomy', relations:[{relation:{name:'translation'}, to:{name:'tianwen'}}],},
+      {name:'tianwen'},
+      {name:'math', relations:[{relation:{name:'translation'}, to:{name:'tianwen'}}],},
+      {name:'shuxue'},
+      {name:'physics', relations:[{relation:{name:'translation'}, to:{name:'tianwen'}}],},
+      {name:'wuli'},
+      // test synonym and abbr
+      {name:'tongyi1.1', relations:[{relation:{name:'synonym'}, to:{name:'tongyi1.2'}}],},
+      {name:'tongyi1.2'},
+      {name:'tongyi2.1', relations:[{relation:{name:'synonym'}, to:{name:'tongyi2.2'}}],},
+      {name:'tongyi2.2'},
+      {name:'tongyi3.1', relations:[{relation:{name:'synonym'}, to:{name:'tongyi3.2'}}],},
+      {name:'tongyi3.2'},
+      {name:'xx', relations:[{relation:{name:'abbr'}, to:{name:'x'}}],},
+      {name:'x'},
+      {name:'yy', relations:[{relation:{name:'abbr'}, to:{name:'y'}}],},
+      {name:'y'},
+      {name:'zz', relations:[{relation:{name:'abbr'}, to:{name:'z'}}],},
+      {name:'z'},
+      //
+      {name:'foo'},
+      {name:'bar'},
+      {name:'blabla'},
+    ]},
+    {model: "Article", data: [
+       // test the next hook
+      {title: 'test add all kind of things 1',
+       catalogues: [ {catalogue: {name:'foo'}}],
+       tags:[ {tag: {name: 'foo'}}],
+       fathers:[{title: 'test add all kind of things 0'}],
+       children:[{title: 'test add all kind of things 2'}],
+       relations: [
+         {relation:{name:'next'}, to:{title: 'test add all kind of things 2'}},
+         {relation:{reverse_name:'prev'}, to:{title: 'test add all kind of things 0'}},
+       ],
+       metadatas:[{metadata:{name:'url'}, value:'www.example.com'}],
+       flags: { test: true }, },
+      {title: 'test add all kind of things 0',
+       catalogues: [ {catalogue: {name:'bar'}}],
+       tags:[ {tag: {name: 'bar'}}] },
+      {title: 'test add all kind of things 2',
+       catalogues: [ {catalogue: {name:'blabla'}}],
+       tags:[ {tag: {name: 'blabla'}}] },
+     ]}
+  ]
+  // add with origin: manual
+  result = await globals.bulkOP({operation: '+', data})
+  await testBulkAdd(result)
+  let toDelete = result.map(_ => {
+    return {model: _.model, data: [{id: _.id}]}
+  })
+  // add with origin: auto
+  result = await globals.bulkOP({
+    operation: '+',
+    data,
+    query: ({model, data}) => {
+      let pks = globals.getRequire(model)
+      return _.pick(data, pks)
+    },
+    origin: [
+      {id: 'auto-test', plugin:'test', hook:'test', subid:'yingyingying'},
+      {id: 'auto-test2', plugin:'test2', hook:'test2', subid:'yingyingying2'},
+    ]
+  })
+  await testBulkAddOrigin(result)
+  // delete manual
+  result = await globals.bulkOP({operation: '-', data: toDelete})
+  await testBulkDelManual(result)
+  // delete entry
+  result = await globals.bulkOP({operation: '-', data: toDelete, origin:[]})
+  await testBulkDel(result)
+  // await globals.bulkOP({data, origin:{id: 'bulkOP', plugins: 'none', subid: '123'}})
   t.pass()
 })
 

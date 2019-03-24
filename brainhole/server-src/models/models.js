@@ -792,6 +792,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
           let result = entry
           let withs = null
           origin_flags.entry = false
+          modelID = result.id
 
           let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags}
           let history = await saveHistory(returnData, session)
@@ -1641,6 +1642,7 @@ let APIs = {
 
 // manage functions
 function getRequire (Model) {
+  if (typeof(Model) === 'string') Model = globals.Models[Model]
   let tree = Model.schema.tree
   let fields = Object.keys(tree)
   let good = fields.filter(_ => tree[_].required)
@@ -1684,7 +1686,8 @@ async function bulkOPWrapper({operation, model, data, session, meta, origin, que
         origin,
       })
       let id = r.modelID
-      result.push({model: eachmodel, id, withs: Object.keys(withs)})
+      let origin_flags = r.origin_flags
+      result.push({model: eachmodel, id, withs: Object.keys(withs), origin_flags})
       for (let key of Object.keys(withs)) {
         withDatas.push({
           operation: '+',
@@ -1704,17 +1707,18 @@ async function bulkOPWrapper({operation, model, data, session, meta, origin, que
   } else if (operation === '-') {
     for (let eachdata of flatdata) {
       eachmodel = eachdata.model
-      eachdata = eachdata.data
+      let query = eachdata.data
       let r = await apiSessionWrapper({
         operation: '-',
         model: eachmodel,
         session,
         meta,
-        query: eachdata,
+        query,
         origin,
       })
       let id = r.modelID
-      result.push({model: eachmodel, id})
+      let origin_flags = r.origin_flags
+      result.push({model: eachmodel, id, origin_flags})
     }
   }
   return result
@@ -1724,16 +1728,16 @@ async function bulkOP({operation, model, data, session, meta, origin, query, com
   // query is a function eachquery = query(eachdata)
   // common is a function, eachdata = common(eachdata)
   // if model is not give, data must be like {model, data: [...]}
+  if (!operation) throw Error('should give operation')
   if (!session) session = await mongoose.startSession()
   if (!meta) meta = {}
-  if ((!origin&&query)||(origin&&!query)) throw Error('origin and query must be both set or unset at the same time!')
   try {
     session.startTransaction()
     let history = new globals.Models.History({ // history of bulk addition
       operation:'++', data, meta, origin
     }); history.$session(session);
     history = await history.save();
-    meta.parent_history = history.id
+    meta.parent_history = history._id
     let result = await bulkOPWrapper({operation, model, data, session, meta, origin, query, common})
     await session.commitTransaction()
     return result
