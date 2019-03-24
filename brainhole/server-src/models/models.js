@@ -340,7 +340,7 @@ function initModels () {
   globals.api = api
   globals.apiSessionWrapper = apiSessionWrapper
   globals.bulkOP = bulkOP
-  globals.bulkOPWrapper = bulkOPWrapper
+  globals.bulkOPSessionWrapper = bulkOPSessionWrapper
   globals.mongoose = mongoose
   globals.getRequire = getRequire
   globals.topModels = top
@@ -1650,22 +1650,20 @@ function getRequire (Model) {
   return good
 }
 
-function flattenData({model, data}) {
-  if (model) {
-    return data.map(_ => ({model, data:_}))
-  } else {
-    let result = []
-    for (let each of data) {
-      // each should be like {model, data}, with no model info in data
-      result = [...result, ...flattenData(each)]
-    }
-    return result
+function flattenData(data) {
+  let result = []
+  for (let each of data) {
+    // each should be like {model, data}, with no model info in data
+    let same = _.omit(each, ['data'])
+    let thisGroup = each.data.map(_ => Object.assign({}, {data:_}, same))
+    result = [...result, ...thisGroup]
   }
+  return result
 }
-async function bulkOPWrapper({operation, model, data, session, meta, origin, query, common, field}) {
+async function bulkOPSessionWrapper({operation, model, data, session, meta, origin, query, common, field}) {
   let result = []
   let withDatas = []
-  let flatdata = flattenData({model, data, operation})
+  let flatdata = flattenData(data)
   let eachquery, eachmodel
 
   if (operation === "+") {
@@ -1799,7 +1797,7 @@ async function bulkOP({operation, model, data, session, meta, origin, query, com
     }); history.$session(session);
     history = await history.save();
     meta.parent_history = history._id
-    let result = await bulkOPWrapper({operation, model, data, session, meta, origin, query, common})
+    let result = await bulkOPSessionWrapper({operation, model, data, session, meta, origin, query, common})
     await session.commitTransaction()
     return result
   } catch (error) {
