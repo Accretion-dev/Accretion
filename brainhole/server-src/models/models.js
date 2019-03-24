@@ -125,7 +125,7 @@ function initModels () {
 
   let modelFromPlugins = globals.pluginsData.model.map(_ => _.uid)
   for (let model of globals.pluginsData.model) {
-    models[model.uid] = model
+    models[model.uid] = clone(model)
   }
 
   let top = [
@@ -343,6 +343,7 @@ function initModels () {
   globals.bulkOPWrapper = bulkOPWrapper
   globals.mongoose = mongoose
   globals.getRequire = getRequire
+  globals.topModels = top
 
   return {Models, Schemas, structTree, globals, All, Withs, WithsDict}
 }
@@ -1732,9 +1733,15 @@ async function bulkOP({operation, model, data, session, meta, origin, query, com
   if (!session) session = await mongoose.startSession()
   if (!meta) meta = {}
   try {
+    let bulkOperation
+    if (operation === '+') {
+      bulkOperation = '++'
+    } else if (operation === '-') {
+      bulkOperation = '--'
+    }
     session.startTransaction()
     let history = new globals.Models.History({ // history of bulk addition
-      operation:'++', data, meta, origin
+      operation:bulkOperation, data, meta, origin
     }); history.$session(session);
     history = await history.save();
     meta.parent_history = history._id

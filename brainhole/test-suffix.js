@@ -4,7 +4,7 @@ test.after(async t => {
 })
 test.after.always(async t => {
   console.log('Tear down complete')
-  if (!allgood) {
-    debugger
-  }
+  //if (!allgood) {
+  //  debugger
+  //}
 })
