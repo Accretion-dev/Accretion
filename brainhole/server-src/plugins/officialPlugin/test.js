@@ -1,7 +1,7 @@
 // because the ava test package DO NOT have a global 'before' and 'after' hook
 // i had to concat all test scripts into test-final.js
 // see test-final.js for all the imports
-test.serial.only('Plugin: officialPlugin', async t => {
+test.serial('Plugin: officialPlugin', async t => {
   let tname
   async function testData({r, componentUID, op}) {
     for (let each of r.result) {
@@ -20,6 +20,15 @@ test.serial.only('Plugin: officialPlugin', async t => {
         }
       }
     }
+  }
+  async function testTagRelationCount(datas) {
+    let datacal = []
+    for (let data of datas) {
+      let obj = await globals.Models.Tag.findOne({name: data[0]})
+      if (!obj) t.fail(`tag name ${data[0]} not exists`)
+      datacal.push([data[0], obj.relations.length])
+    }
+    t.deepEqual(datacal, datas)
   }
   let uid = 'officialPlugin'
   let componentUID, component, r, data, query, origin
@@ -95,7 +104,7 @@ test.serial.only('Plugin: officialPlugin', async t => {
             {relation: {name: 'translation'}, from:{name: 'bar(zh)'}},
           ]},
           {name: 'bar(zh)', relations:[
-            {relation: {name: 'translation'}, from:{name: 'bar(zh)'}},
+            {relation: {name: 'translation'}, from:{name: 'bar(jp)'}},
           ]},
           {name: 'bar(jp)'},
           {name: 'bar(fr)'},
@@ -111,9 +120,57 @@ test.serial.only('Plugin: officialPlugin', async t => {
     }
     if(tname='turn on'){
       let result = await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      await testTagRelationCount([
+        ['good', 3,],
+        ['nice', 3,],
+        ['great', 3,],
+        ['fine', 3,],
+        ['bad', 2,],
+        ['evil', 2,],
+        ['awful', 2,],
+        ['hungry', 0,],
+        ['starve', 0,],
+        ['famish', 0,],
+        ['foo(en)', 3,],
+        ['foo(zh)', 3,],
+        ['foo(jp)', 3,],
+        ['foo(fr)', 3,],
+        ['bar(en)', 2,],
+        ['bar(zh)', 2,],
+        ['bar(jp)', 2,],
+        ['bar(fr)', 0,],
+        ['ha(en)', 0,],
+        ['ha(zh)', 0,],
+        ['ha(jp)', 0,],
+        ['ha(fr)', 0,],
+      ])
     }
     if(tname='turn off'){
       let result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      await testTagRelationCount([
+        ['good', 1,],
+        ['nice', 2,],
+        ['great', 2,],
+        ['fine', 1,],
+        ['bad', 1,],
+        ['evil', 2,],
+        ['awful', 1,],
+        ['hungry', 0,],
+        ['starve', 0,],
+        ['famish', 0,],
+        ['foo(en)', 1,],
+        ['foo(zh)', 2,],
+        ['foo(jp)', 2,],
+        ['foo(fr)', 1,],
+        ['bar(en)', 1,],
+        ['bar(zh)', 2,],
+        ['bar(jp)', 1,],
+        ['bar(fr)', 0,],
+        ['ha(en)', 0,],
+        ['ha(zh)', 0,],
+        ['ha(jp)', 0,],
+        ['ha(fr)', 0,],
+      ])
     }
 
   }

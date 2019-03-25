@@ -2070,7 +2070,7 @@ test.serial('reverse delete for taglike', async t => {
   }
   t.pass()
 })
-test.serial.only('bulkAdd without hooks', async t => {
+test.serial('bulkAdd without hooks', async t => {
   let result
   async function testBulkAdd(result) {
     for (let each of result) {
