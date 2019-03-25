@@ -514,6 +514,7 @@ async function apiSingleField ({operation, model, field, data, entry, query, met
   let hookActions = []
 
   let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({model, field, data})
+  let oldEntry = clone(entry._doc)
   let thisresult = await APIs[`${fieldPrefix}API`]({operation, prefield: model+`-${fieldPrefix}`, field: fieldSuffix, entry, data: newdata, session, origin, meta})
 
   withs = {[fieldPrefix]: thisresult}
@@ -525,7 +526,12 @@ async function apiSingleField ({operation, model, field, data, entry, query, met
   let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, flags, hookActions}
   let history = await saveHistory(returnData, session)
 
-  await processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, withs, operation, data, field, entry})
+  let hookActionData = await processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, withs, operation, data, field, entry, oldEntry})
+  if (hookActionData.length) {
+    history.hookActions = hookActionData
+    returnData.hookActions = hookActionData
+    await history.save()
+  }
 
   return returnData
 }
@@ -612,7 +618,8 @@ async function api({ operation, data, query, model, meta, field, session, origin
     throw error
   }
 }
-async function processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, operation, withs, data, field, entry}) {
+async function processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, operation, withs, data, field, entry, oldEntry}) {
+  if (meta && meta.hookAction) return []
   for (let key of Object.keys(withs)) {
     if (key === 'flags' || key === 'r') continue
     for (let each of withs[key]) {
@@ -621,14 +628,11 @@ async function processEntryHooks({hookActions, history, result, meta, origin, or
       }
     }
   }
-
-  for (let hookAction of hookActions) {
-    hookAction.meta.hooks.parent_history = history._id
-  }
+  let done = []
   let hooks = globals.pluginsData.hook[model]
   if (hooks && hooks.length) {
     for (let hook of hooks) {
-      let thisHookActions = await hook({operation, result, meta, origin, origin_flags, model, withs, data, field, entry})
+      let thisHookActions = await hook({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session})
       if (thisHookActions && thisHookActions.length) {
         hookActions = [...hookActions, ...thisHookActions]
       }
@@ -636,11 +640,28 @@ async function processEntryHooks({hookActions, history, result, meta, origin, or
   }
   for (let hookAction of hookActions) {
     let thisHookAction = Object.assign({}, hookAction, {session})
-    await apiSessionWrapper(thisHookAction)
+    if (!thisHookAction.meta) {
+      thisHookAction.meta = {hookAction: true}
+    } else {
+      thisHookAction.meta.hookAction = true
+    }
+    thisHookAction.meta.api_parent_history = history._id
+    // await apiSessionWrapper(thisHookAction)
+    let __ = await bulkOPSessionWrapper(thisHookAction)
+    delete thisHookAction.session
+
+    let total = __.length
+    let field = _.sum(__.map(_ => _.goodWiths[_.field].total))
+    let fieldEntry = _.sum(__.map(_ => _.goodWiths[_.field].entry))
+    let fieldOrigin = _.sum(__.map(_ => _.goodWiths[_.field].origin))
+    let statistic = {total, field, fieldEntry, fieldOrigin}
+    done.push({input: thisHookAction, output: __, statistic})
   }
+  return done
 }
 async function processSubEntryHooks({hooks, name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry}) {
   let hookActions = []
+  if (meta && meta.hookAction) return []
   for (let hook of hooks) {
     let newHookActions = await thishook({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry})
     if (newHookActions && newHookActions.length) {
@@ -734,7 +755,12 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags, hookActions}
       let history = await saveHistory(returnData, session)
 
-      await processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, withs, data, operation, field, entry})
+      let hookActionData = await processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, withs, data, operation, field, entry})
+      if (hookActionData.length) {
+        history.hookActions = hookActionData
+        returnData.hookActions = hookActionData
+        await history.save()
+      }
 
       return returnData
     } else { // e.g. add new tag, add new catalogues
@@ -749,6 +775,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
     let entry = await Model.find(query).session(session)
     if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
     entry = entry[0]
+    let oldEntry = clone(entry._doc)
 
     if (!field) {
       let {simple, withs} = extractWiths({data, model})
@@ -763,7 +790,12 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags, hookActions}
       let history = await saveHistory(returnData, session)
 
-      await processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, withs, operation, data, field, entry})
+      let hookActionData = await processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, withs, operation, data, field, entry, oldEntry})
+      if (hookActionData.length) {
+        history.hookActions = hookActionData
+        returnData.hookActions = hookActionData
+        await history.save()
+      }
 
       return returnData
     } else {
@@ -822,28 +854,43 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         for (let amodel of Object.keys(withs.r)) {
           for (let id of Object.keys(withs.r[amodel])) {
             let field = fieldMap[model]
-            hookActions.push({
+            let data = withs.r[amodel][id]
+            data.id = id
+            let thisModel = {
               operation: '-',
               model: amodel,
-              data: withs.r[amodel][id],
-              query: {id},
-              origin:[],
               field,
+              origin: [],
               meta: {
                 noReverse: true,
-                hooks: {
-                  level: 1,
-                },
-              }
-            })
+              },
+              data: [{data:[data]}],
+            }
+            hookActions.push(thisModel)
           }
         }
+        //hookActions.push({
+        //  operation: '-',
+        //  model: amodel,
+        //  data: withs.r[amodel][id],
+        //  query: {id},
+        //  origin:[],
+        //  field,
+        //  meta: {
+        //    noReverse: true,
+        //  }
+        //})
       }
 
       let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags, hookActions}
       let history = await saveHistory(returnData, session)
 
-      await processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, withs, operation, data, field, entry})
+      let hookActionData = await processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, withs, operation, data, field, entry})
+      if (hookActionData.length) {
+        history.hookActions = hookActionData
+        returnData.hookActions = hookActionData
+        await history.save()
+      }
 
       return returnData
     } else {
@@ -1674,8 +1721,10 @@ async function bulkOPSessionWrapper({operation, model, data, session, meta, orig
       eachmodel = eachdata.model || model
       eachfield = eachdata.field || field
       eachmeta = eachdata.meta || meta
+      if (meta) eachmeta = Object.assign({}, eachmeta, meta)
       eachorigin = eachdata.origin || origin
       eachdata = eachdata.data
+
 
       if (eachfield) {
         let data = _.pick(eachdata, [eachfield])
@@ -1693,8 +1742,18 @@ async function bulkOPSessionWrapper({operation, model, data, session, meta, orig
           })
         let id = r.modelID
         let withs = r.withs
-        let origin_flags = r.origin_flags
-        result.push({model: eachmodel, id, withs, origin_flags})
+        let goodWiths = {}
+        for (let key of Object.keys(withs)) {
+          let result = withs[key].filter(w => {
+            let entryCount = !!w.origin_flags.entry
+            let originCount = !!w.origin_flags.origin.length
+            return entryCount || originCount
+          })
+          let entry = _.sum(result.map(w => w.origin_flags.entry))
+          let origin = _.sum(result.map(w => !!w.origin_flags.origin.length))
+          goodWiths[key] = {entry, origin, total: result.length}
+        }
+        result.push({model: eachmodel, field:eachfield, id, withs, goodWiths})
       } else {
         if (common) eachdata = common({data:eachdata, model:eachmodel})
         if (query) eachquery = query({data:eachdata, model:eachmodel})
@@ -1735,6 +1794,7 @@ async function bulkOPSessionWrapper({operation, model, data, session, meta, orig
       eachmodel = eachdata.model || model
       eachfield = eachdata.field || field
       eachmeta = eachdata.meta || meta
+      if (meta) eachmeta = Object.assign({}, eachmeta, meta)
       eachorigin = eachdata.origin || origin
       eachdata = eachdata.data
       if (eachfield) {
@@ -1753,8 +1813,18 @@ async function bulkOPSessionWrapper({operation, model, data, session, meta, orig
           })
         let id = r.modelID
         let withs = r.withs
-        let origin_flags = r.origin_flags
-        result.push({model: eachmodel, id, withs, origin_flags})
+        let goodWiths = {}
+        for (let key of Object.keys(withs)) {
+          let result = withs[key].filter(w => {
+            let entryCount = !!w.origin_flags.entry
+            let originCount = !!w.origin_flags.origin.length
+            return entryCount || originCount
+          })
+          let entry = _.sum(result.map(w => w.origin_flags.entry))
+          let origin = _.sum(result.map(w => !!w.origin_flags.origin.length))
+          goodWiths[key] = {entry, origin, total: result.length}
+        }
+        result.push({model: eachmodel, field:eachfield, id, withs, goodWiths})
       } else {
         let query = eachdata
         let r = await apiSessionWrapper({
