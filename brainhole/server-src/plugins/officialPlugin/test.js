@@ -1,7 +1,7 @@
 // because the ava test package DO NOT have a global 'before' and 'after' hook
 // i had to concat all test scripts into test-final.js
 // see test-final.js for all the imports
-test.serial.skip('Plugin: officialPlugin', async t => {
+test.serial.only('Plugin: officialPlugin', async t => {
   let tname
   async function testData({r, componentUID, op}) {
     for (let each of r.result) {
@@ -110,7 +110,10 @@ test.serial.skip('Plugin: officialPlugin', async t => {
       await globals.bulkOP({operation: '+', data})
     }
     if(tname='turn on'){
-      await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      let result = await globals.pluginAPI({operation:'on', uid, component, componentUID})
+    }
+    if(tname='turn off'){
+      let result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
     }
 
   }

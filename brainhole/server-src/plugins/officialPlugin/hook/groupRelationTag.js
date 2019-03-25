@@ -104,24 +104,83 @@ async function getGroupsAdd () {
 }
 async function addAllGroupRelations () {
   let newdata = await getGroupsAdd()
-  let toAdd = []
-  for (let group of Object.keys(newdata)) {
+  let result = {
+    model: 'Tag',
+    field: 'relations',
+    data:[],
   }
+  for (let group of Object.keys(newdata)) {
+    for (let eachdata of newdata[group].data) {
+      result.data.push(eachdata)
+    }
+  }
+  return result
 }
-async function turnOn () {
+async function deleteAllGroupRelations () {
+  let tags = await globals.Models.Tag.aggregate([
+    {
+      $match: {
+        'relations.origin.id': hook.uid,
+      }
+    },
+    {
+      $project: {
+        id: 1,
+        name: 1,
+        relations: 1
+      }
+    }
+  ])
+  let data = []
+  let deletedIDs = [[]]
+  for (let tag of tags) {
+    let relations = tag.relations.filter(_ => {
+      for (let eachorigin of _.origin) {
+        if (eachorigin.id === hook.uid && !deletedIDs.includes(_.id)) {
+          deletedIDs.push(_.id)
+          return true
+        }
+      }
+    })
+    if (relations.length) {
+      data.push({ id: tag.id, relations: relations.map(_ => ({id: _.id})) })
+    }
+  }
+  let todo = {model: 'Tag', field:'relations', data}
+  return todo
+}
+async function turnOn ({meta}) {
   console.log(`turn on ${hook.uid}`)
-
+  let origin = { id: hook.uid }
+  let toAdd = await addAllGroupRelations()
+  let result = await globals.bulkOP({operation:"+", data: [toAdd], meta, origin})
+  return result
 }
-async function turnOff () {
+async function turnOff ({meta}) {
   console.log(`turn off ${hook.uid}`)
+  let origin = { id: hook.uid }
+  let toDel = await deleteAllGroupRelations()
+  let result = await globals.bulkOP({operation:"-", data: [toDel], meta, origin})
+  return result
 }
 
 // this is a function generator, it return the real hook function with parameters
 async function gen(parameters) {
   let hookData = {}
-  let tags = parameters.tags
+  let groups = parameters.groups
+  let relationIDs = await globals.Models.Relation.find({name: {$in: groups}})
+  relationIDs = relationIDs.map(_ => _.id)
   // this function will be injected into the taglikeAPI
-  async function groupRelationTagOPs({operation, entry, old_sub_entry, new_sub_entry, meta, origin}) {
+  async function preventRelationDelete ({operation, result, meta, origin, origin_flags, model, withs, data, field, entry}) {
+    if (operation==='-'&&!field) {
+      if (relationIDs.includes(entry.id)) {
+        if (origin_flags.entry) {
+          throw Error(`The hook:${hook.uid} is active, you can not delete these relations:${tags}, but you are trying to delete ${entry._doc}`)
+        }
+      }
+    }
+  }
+  async function groupRelationTagOPs({operation, result, meta, origi, origin_flagsn, model, withs, data, field, entry}) {
     let {uuid} = parameters
     if (operation === "+") {
 
@@ -133,7 +192,8 @@ async function gen(parameters) {
     return []
   }
   return {
-    relation: groupRelationTagOPs
+    Tag: groupRelationTagOPs,
+    Relation: preventRelationDelete,
   }
 }
 let hook = {

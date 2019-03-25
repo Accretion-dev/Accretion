@@ -15,7 +15,7 @@ let HookAction = {
   children: [],
 }
 
-async function bulkAdd({data, componentUID}) {
+async function bulkAdd({data, componentUID, meta}) {
   let query = ({model, data}) => {
     let required = globals.getRequire(model)
     let keys = []
@@ -25,21 +25,13 @@ async function bulkAdd({data, componentUID}) {
     data = _.pick(data, keys)
     return data
   }
-  let history = new globals.Models.History({
-    operation:'on', meta:{component: componentUID}
-  })
-  history = await history.save()
-  let meta = {root_parent_history: history._id}
   let result = await globals.bulkOP({operation: '+', data, query, origin:{id: componentUID}, meta})
-  history.meta.success = true
-  await globals.Models.History.findOneAndUpdate(
-    {_id:history._id},
-    {$set: history},
-  )
   return result
 }
-async function bulkDel({componentUID}) {
+async function bulkDel({componentUID, meta}) {
   let result
+  let origin = {id: componentUID}
+  let data = []
   for (let model of globals.topModels) {
     let Model = globals.Models[model]
     let ids = await Model.aggregate([
@@ -54,18 +46,9 @@ async function bulkDel({componentUID}) {
         }
       }
     ])
-    let history = new globals.Models.History({
-      operation:'off', meta:{component: componentUID}
-    })
-    history = await history.save()
-    let meta = {root_parent_history: history._id}
-    result = await globals.bulkOP({operation: '-', model, data: ids, origin:{id: componentUID}, meta})
-    history.meta.success = true
-    await globals.Models.History.findOneAndUpdate(
-      {_id:history._id},
-      {$set: history},
-    )
+    if (ids.length) data.push({model, data:ids})
   }
+  result = await globals.bulkOP({operation: '-', data, meta, origin})
   return result
 }
 async function pluginAPI({operation, uid, component, componentUID}) {
@@ -76,13 +59,18 @@ async function pluginAPI({operation, uid, component, componentUID}) {
     if (!plugin[component]) throw Error(`component ${component} not exist in plugin ${uid}`)
     let thiscomponent = plugin[component].find(_ => _.uid === componentUID)
     if (!thiscomponent) throw Error(`component entry uid:${componentUID} not exist in component ${component} in plugin ${uid}`)
+    let history = new globals.Models.History({
+      operation, data:componentUID,
+    })
+    history = await history.save()
+    let meta = {root_parent_history: history._id}
     if (component === 'hook') {
       let hook
       if (operation === 'on') {
         try {
           thiscomponent.active = true
           if (thiscomponent.data) {
-            await bulkAdd({data: thiscomponent.data, componentUID})
+            result = await bulkAdd({data: thiscomponent.data, componentUID})
           }
           hook = globals.pluginsData.hook
           let updateHookErrors = await updateHooks(globals.plugins)
@@ -90,7 +78,7 @@ async function pluginAPI({operation, uid, component, componentUID}) {
             throw Error(`update hook function error: ${JSON.stringify(updateHookErrors,null,2)}`)
           }
           if (thiscomponent.turnOn) {
-            await thiscomponent.turnOn()
+            await thiscomponent.turnOn({meta})
           }
           await globals.Models.Plugins.findOneAndUpdate(
             {uid},
@@ -110,10 +98,10 @@ async function pluginAPI({operation, uid, component, componentUID}) {
             throw Error(`update hook function error: ${JSON.stringify(updateHookErrors,null,2)}`)
           }
           if (thiscomponent.turnOff) {
-            await thiscomponent.turnOff()
+            await thiscomponent.turnOff({meta})
           }
           if (thiscomponent.data) {
-            await bulkDel({componentUID})
+            result = await bulkDel({componentUID})
           }
           await globals.Models.Plugins.findOneAndUpdate(
             {uid},
@@ -140,11 +128,16 @@ async function pluginAPI({operation, uid, component, componentUID}) {
       }
     } else if (component === 'data') {
       if (operation === 'on') {
-        result = await bulkAdd({data: thiscomponent.data, componentUID})
+        result = await bulkAdd({data: thiscomponent.data, componentUID, meta})
       } else if (operation === 'off') {
-        result = await bulkDel({componentUID})
+        result = await bulkDel({componentUID, meta})
       }
     }
+    history.query = true
+    await globals.Models.History.findOneAndUpdate(
+      {_id:history._id},
+      {$set: history},
+    )
     return {component: thiscomponent, result}
   } else { // operation on plugin itself
     if (operation === 'on') {
