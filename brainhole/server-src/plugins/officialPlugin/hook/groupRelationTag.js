@@ -13,6 +13,7 @@ async function getSingleGroup ({groupRelation, session, thisid}) {
       $match: {
         'relations.relation_id': groupRelation.id,
         'relations.other_model': 'Tag',
+        'relations.origin.id': 'manual',
       }
     },
     {
@@ -201,11 +202,13 @@ async function gen(parameters) {
         let groupRelation = await globals.Models.Relation.findOne({id}).session(session)
         r[id] = await getSingleGroup({groupRelation, session, thisid: entry.id})
       }
-      let toAdd = await allGroupRelations(r)
-      final = {operation:"+", data: [toAdd], meta, origin}
+      let modified = await allGroupRelations(r)
+      if (modified.data.length) {
+        final = {operation, data: [modified], meta, origin}
+      } else {
+        return []
+      }
     } else if (operation === '*') {
-
-    } else if (operation === '-') {
 
     }
     return [final]

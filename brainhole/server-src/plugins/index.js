@@ -6,14 +6,6 @@ import globals from "../globals"
 globals.pluginsData = {}
 
 let components = ["hook", 'task', 'model', 'data']
-let HookAction = {
-  relations: [],
-  metadatas: [],
-  tags: [],
-  catalogues: [],
-  fathers: [],
-  children: [],
-}
 
 async function bulkAdd({data, componentUID, meta}) {
   let query = ({model, data}) => {
@@ -195,6 +187,14 @@ function updateData (plugins) {
   globals.pluginsData.model = models
 }
 async function updateHooks (plugins) {
+  let HookAction = {
+    relations: [],
+    metadatas: [],
+    tags: [],
+    catalogues: [],
+    fathers: [],
+    children: [],
+  }
   let initHookErrors = []
   for (let eachPlugin of plugins) {
     if (!eachPlugin.active) continue
