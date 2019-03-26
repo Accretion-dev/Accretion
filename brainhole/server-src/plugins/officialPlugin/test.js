@@ -262,6 +262,44 @@ test.serial.only('Plugin: officialPlugin', async t => {
       ])
     }
     if(tname='add new tag into this group, with field'){
+      result = await globals.api({
+        operation: '+',
+        model: 'Tag',
+        field: 'relations',
+        query: {name: 'bar(fr)'},
+        data:{
+          name: 'bar(zz)',
+          relations:[
+            {relation:{name:'translation'}, to:{name: 'bar(zz)'}},
+          ]
+        }
+      })
+      await testTagRelationCount([
+        ['good', 4,],
+        ['nice', 4,],
+        ['great', 4,],
+        ['fine', 4,],
+        ['veryGood', 4,],
+        ['bad', 2,],
+        ['evil', 2,],
+        ['awful', 2,],
+        ['hungry', 0,],
+        ['starve', 0,],
+        ['famish', 0,],
+        ['foo(en)', 8,],
+        ['foo(zh)', 8,],
+        ['foo(jp)', 8,],
+        ['foo(fr)', 8,],
+        ['bar(en)', 8,],
+        ['bar(zh)', 8,],
+        ['bar(jp)', 8,],
+        ['bar(fr)', 8,],
+        ['bar(zz)', 8,],
+        ['ha(en)', 0,],
+        ['ha(zh)', 0,],
+        ['ha(jp)', 0,],
+        ['ha(fr)', 0,],
+      ])
 
     }
     if(tname='delete one tag relation, but not leave group'){
