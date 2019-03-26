@@ -493,7 +493,6 @@ async function querySub({entry, data, field, session, test, entry_model}) {
       return result
     } else if (result.length !== 1) {
       if (!(result.length)) {
-        debugger
         let currentData = entry[field].map(__ => (_.pick(__, ['id', query_key+"_id", 'from_id', 'to_id', 'other_id'])))
         throw Error(`query:${J(query)}\nfull_tag_query:${J(full_tag_query)} not found in ${J(field)}, current data:${J(currentData)}`)
       } else {
@@ -525,6 +524,29 @@ async function apiSingleField ({operation, model, field, data, entry, query, met
   let withs, simple, result
   let flags = {}
   let hookActions = []
+
+  if (operation === '*') {
+    // preModify hook injection
+    let hooks = globals.pluginsData.hook[model]
+    if (hooks && hooks.length) {
+      for (let hook of hooks) {
+        if (hook.preModify) {
+          await hook.preModify({operation, meta, origin, model, data, field, entry, session})
+        }
+      }
+    }
+  }
+  if (operation === '-') {
+    // predelete hook injection
+    let hooks = globals.pluginsData.hook[model]
+    if (hooks && hooks.length) {
+      for (let hook of hooks) {
+        if (hook.preDelete) {
+          await hook.preDelete({operation, meta, origin, model, data, field, entry, session})
+        }
+      }
+    }
+  }
 
   let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({model, field, data})
   let oldEntry = clone(entry._doc)
@@ -790,6 +812,16 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
     entry = entry[0]
     let oldEntry = clone(entry._doc)
 
+    // preModify hook injection
+    let hooks = globals.pluginsData.hook[model]
+    if (hooks && hooks.length) {
+      for (let hook of hooks) {
+        if (hook.preModify) {
+          await hook.preModify({operation, meta, origin, model, data, field, entry, session})
+        }
+      }
+    }
+
     if (!field) {
       let {simple, withs} = extractWiths({data, model})
       entry.set(simple)
@@ -854,6 +886,16 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
         origin_flags.origin = entry.origin
       }
 
+      // predelete hook injection
+      let hooks = globals.pluginsData.hook[model]
+      if (hooks && hooks.length) {
+        for (let hook of hooks) {
+          if (hook.preDelete) {
+            await hook.preDelete({operation, meta, origin, model, data, field, entry, session})
+          }
+        }
+      }
+
       // delete this entry
       let withs = {}
       let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session, origin: [], meta}) // origin be null to delete all tags
@@ -882,17 +924,6 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
             hookActions.push(thisModel)
           }
         }
-        //hookActions.push({
-        //  operation: '-',
-        //  model: amodel,
-        //  data: withs.r[amodel][id],
-        //  query: {id},
-        //  origin:[],
-        //  field,
-        //  meta: {
-        //    noReverse: true,
-        //  }
-        //})
       }
 
       let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags, hookActions}
