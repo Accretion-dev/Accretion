@@ -1,10 +1,10 @@
 // because the ava test package DO NOT have a global 'before' and 'after' hook
 // i had to concat all test scripts into test-final.js
 // see test-final.js for all the imports
-test.serial('Plugin: officialPlugin', async t => {
-  let tname
+test.serial.only('Plugin: officialPlugin', async t => {
+  let tname, result
   async function testData({r, componentUID, op}) {
-    for (let each of r.result) {
+    for (let each of r.data) {
       let obj = await globals.Models[each.model].findOne({id:each.id})
       if (op === 'on') {
         t.truthy(obj)
@@ -118,8 +118,8 @@ test.serial('Plugin: officialPlugin', async t => {
       ]
       await globals.bulkOP({operation: '+', data})
     }
-    if(tname='turn on'){
-      let result = await globals.pluginAPI({operation:'on', uid, component, componentUID})
+    if(tname='turn on and off'){
+      result = await globals.pluginAPI({operation:'on', uid, component, componentUID})
       await testTagRelationCount([
         ['good', 3,],
         ['nice', 3,],
@@ -144,9 +144,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['ha(jp)', 0,],
         ['ha(fr)', 0,],
       ])
-    }
-    if(tname='turn off'){
-      let result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
       await testTagRelationCount([
         ['good', 1,],
         ['nice', 2,],
@@ -171,8 +169,107 @@ test.serial('Plugin: officialPlugin', async t => {
         ['ha(jp)', 0,],
         ['ha(fr)', 0,],
       ])
+      result = await globals.pluginAPI({operation:'on', uid, component, componentUID})
     }
+    if(tname='test delete group relations, throw errors'){
+      let componentObj = plugin[component].find(_ => _.uid === componentUID)
+      for (let group of componentObj.parameters.groups) {
+        let fn = async () => {
+          await globals.api({
+            operation: '-',
+            model: 'Relation',
+            query: {name: group},
+            origin: []
+          })
+        }
+        let error = await t.throwsAsync(fn, Error)
+        t.true(error.message.startsWith(`The hook:${componentObj.uid}`))
+      }
+    }
+    if((tname='create new tag and add into this group')){
+      result = await globals.api({
+        operation: '+',
+        model: 'Tag',
+        data:{
+          name: 'veryGood',
+          relations:[
+            {relation:{name:'simular'}, to:{name: 'good'}},
+            {relation:{name:'simular'}, to:{name: 'fine'}},
+          ]
+        }
+      })
+      await testTagRelationCount([
+        ['good', 4,],
+        ['nice', 4,],
+        ['great', 4,],
+        ['fine', 4,],
+        ['veryGood', 4,],
+        ['bad', 2,],
+        ['evil', 2,],
+        ['awful', 2,],
+        ['hungry', 0,],
+        ['starve', 0,],
+        ['famish', 0,],
+        ['foo(en)', 3,],
+        ['foo(zh)', 3,],
+        ['foo(jp)', 3,],
+        ['foo(fr)', 3,],
+        ['bar(en)', 2,],
+        ['bar(zh)', 2,],
+        ['bar(jp)', 2,],
+        ['bar(fr)', 0,],
+        ['ha(en)', 0,],
+        ['ha(zh)', 0,],
+        ['ha(jp)', 0,],
+        ['ha(fr)', 0,],
+      ])
+      result = await globals.api({
+        operation: '+',
+        model: 'Tag',
+        data:{
+          name: 'bar(zz)',
+          relations:[
+            {relation:{name:'translation'}, to:{name: 'foo(en)'}},
+            {relation:{name:'translation'}, to:{name: 'bar(en)'}},
+          ]
+        }
+      })
+      await testTagRelationCount([
+        ['good', 4,],
+        ['nice', 4,],
+        ['great', 4,],
+        ['fine', 4,],
+        ['veryGood', 4,],
+        ['bad', 2,],
+        ['evil', 2,],
+        ['awful', 2,],
+        ['hungry', 0,],
+        ['starve', 0,],
+        ['famish', 0,],
+        ['foo(en)', 7,],
+        ['foo(zh)', 7,],
+        ['foo(jp)', 7,],
+        ['foo(fr)', 7,],
+        ['bar(en)', 7,],
+        ['bar(zh)', 7,],
+        ['bar(jp)', 7,],
+        ['bar(fr)', 0,],
+        ['bar(zz)', 7,],
+        ['ha(en)', 0,],
+        ['ha(zh)', 0,],
+        ['ha(jp)', 0,],
+        ['ha(fr)', 0,],
+      ])
+    }
+    if(tname='add new tag into this group, with field'){
 
+    }
+    if(tname='delete one tag relation, but not leave group'){
+
+    }
+    if(tname='delete one tag relation, leave group'){
+
+    }
   }
   if(0&&(tname='test hook simularTags')) {
     component = 'hook'

@@ -390,7 +390,7 @@ test('flags', async t => {
   }
   t.pass()
 })
-test.serial.only('test all taglike api', async t => {
+test.serial('test all taglike api', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All

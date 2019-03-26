@@ -52,15 +52,15 @@ async function getSingleGroup ({groupRelation, session, thisid}) {
     thisGroupMap[thisid] = thisMatch
   }
   let exists = []
-  if (session) debugger
   if (thisid) tags = tags.filter(_ => thisGroupMap[_.id].data.includes(thisid))
   for (let tag of tags) {
     let thisid = tag.id
+    // relations that already exists (and have this hook origin)
     let thatids = tag.relations.filter(_ =>
-      _.relation_id === groupRelation.id && !((_.origin.map(__ => __.id).includes(hook.uid)))
+      _.relation_id === groupRelation.id && ((_.origin.map(__ => __.id).includes(hook.uid)))
     ).map(_ => _.other_id)
     let fullids = thisGroupMap[thisid].data
-    let newids = fullids
+    let newids = fullids = fullids.filter(_ => !thatids.includes(_))
     let thisRelations = []
     let thisExists
     for (let newid of fullids) {
@@ -71,7 +71,7 @@ async function getSingleGroup ({groupRelation, session, thisid}) {
         exists.push(thisExists)
         thisRelations.push({
           relation_id: groupRelation.id,
-          from_id: newid,
+          other_id: newid,
         })
       } else if (newid < thisid) {
         thisExists = `${newid}-${thisid}`
@@ -79,7 +79,7 @@ async function getSingleGroup ({groupRelation, session, thisid}) {
         exists.push(thisExists)
         thisRelations.push({
           relation_id: groupRelation.id,
-          to_id: newid,
+          other_id: newid,
         })
       }
     }
@@ -88,7 +88,6 @@ async function getSingleGroup ({groupRelation, session, thisid}) {
       relations:thisRelations
     })
   }
-  if (session) debugger
   thisAddData = thisAddData.filter(_ => _.relations.length>0)
   thisResult.data = thisAddData
   thisResult.groupMap = thisGroupMap
@@ -204,7 +203,6 @@ async function gen(parameters) {
       }
       let toAdd = await allGroupRelations(r)
       final = {operation:"+", data: [toAdd], meta, origin}
-      debugger
     } else if (operation === '*') {
 
     } else if (operation === '-') {
