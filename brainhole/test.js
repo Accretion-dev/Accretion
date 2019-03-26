@@ -390,7 +390,7 @@ test('flags', async t => {
   }
   t.pass()
 })
-test.serial('test all taglike api', async t => {
+test.serial.only('test all taglike api', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -475,6 +475,20 @@ test.serial('test all taglike api', async t => {
         }
         if (name === 'relations') {
           taglike = {relations: [
+          // id[0] > id[*]
+          // 0: 1=>0,0=>2,3=>0,0=>3,0=>4,0=>5,0=>6,0=>7,8=>0,9=>0,10=>0,11=>0
+          // 1: 1=>0,
+          // 2: 0=>2,
+          // 3: 0=>3,3=>0
+          // 4: 0=>4
+          // 5: 0=>5
+          // 6: 0=>6
+          // 7: 0=>7
+          // 8: 8=>0
+          // 9: 9=>0
+          //10: 10=>0
+          //11: 11=>0
+          //12:
             { relation_id: T[0].id, // all _id
               from_id: D[1].id, flags: { debug: true }, },
             { relation: { id: T[1].id }, // Q: relation, to
@@ -492,11 +506,28 @@ test.serial('test all taglike api', async t => {
             { relation_id: T[7].id, // Q: to
               to: {id: D[7].id}, flags: { debug: true }, },
             { relation: { name: T[8].name }, // Q: relation
-              to_id: D[8].id, flags: { debug: true }, },
+              other: {id:D[8].id}, flags: { debug: true }, },
             { relation: { name: T[9].name }, // Q: relation
-              to_id: D[9].id, flags: { debug: true }, },
+              other_id: D[9].id, flags: { debug: true }, },
+            { relation: { name: T[10].name }, // Q: relation
+              other: {id:D[10].id}, flags: { debug: true }, },
+            { relation: { name: T[11].name }, // Q: relation
+              other_id: D[11].id, flags: { debug: true }, },
           ]}
           getNewTaglike = (U) => { return {relations: [
+          // 0: 1=>0,0=>9,3=>0,0=>10,2=>0,9=>0,10=>0,12=>0,8=>0,9=>0,10=>0,6=>0
+          // 1: 1=>0,
+          // 2: 2=>0
+          // 3: 3=>0
+          // 4:
+          // 5:
+          // 6: 6=>0
+          // 7:
+          // 8: 8=>0
+          // 9: 9=>0, 9=>0, 0=>9
+          //10: 10=>0, 0=>10, 10=>0
+          //11:
+          //12: 12=>0
             { id: U[0].id, // M: comment and flags
               modify_flags: {changeTaglike: false}, comment: 'test comment updated 0', flags: { debug: 'change to false', add_new_flag: true }, },
             { id: U[1].id, // M: to(0->2 => 0->9)
@@ -508,7 +539,7 @@ test.serial('test all taglike api', async t => {
               __query__: { relation: { name: T[3].name }, },
               relation: { name: T[2].name }, modify_flags: {changeTaglike: true},
               to: {id:D[10].id}, comment: 'update comment 3', flags: {debug: 'change to false', debug: 'change to false'}, },
-            { // _Q_: relation; M: relation(4 => 1)
+            { // _Q_: relation; M: relation(4 => 0)
               __query__: { relation: { name: T[4].name, } }, modify_flags: {changeTaglike: true},
               relation_id: T[0].id, comment: 'new new comment 4', flags: {debug: 'change to false', add_new_flag: true} },
             { // _Q_: relation; Q: from; M: to (0->5 => 9->0)
@@ -516,7 +547,21 @@ test.serial('test all taglike api', async t => {
               from: {id:D[9].id}, comment: 'new comment 5', flags: {debug: 'change to false', add_new_flag: true} },
             { // _Q_: relation; M: to (0->6 => 10->0)
               __query__:{ relation: { id: T[6].id, } }, modify_flags: {changeTaglike: true},
-              from_id: D[10].id, comment: 'comment update 6', flags: { debug: 'true to false', add_new_flag: true} } ]} }
+              from_id: D[10].id, comment: 'comment update 6', flags: { debug: 'true to false', add_new_flag: true} } ,
+            { // _Q_: relation; M: to (0->7 => 12->0), relation(7 => 12)
+              __query__:{ relation: { id: T[7].id, }, other_id: D[7].id }, modify_flags: {changeTaglike: true},
+              relation: { name: T[12].name },
+              other: {id:D[12].id},
+              comment: 'comment update 7', flags: { debug: 'true to false', add_new_flag: true} } ,
+            { // _Q_: relation; M: to (11->0 => 6->0)
+              __query__:{ relation: { id: T[11].id, }, other_id: D[11].id }, modify_flags: {changeTaglike: true},
+              other: {id:D[6].id},
+              comment: 'comment update 11', flags: { debug: 'true to false', add_new_flag: true} } ,
+            { // _Q_: relation; M: to (0->4 => 2->0), note before we have change T[4] to T[0]
+              __query__:{ relation: { id: T[0].id, }, other_id: D[4].id }, modify_flags: {changeTaglike: true},
+              other: {id:D[2].id},
+              comment: 'comment update 20', flags: { debug: 'true to false', add_new_flag: true} } ,
+            ]}}
           getBadNewTaglike = (U) => { return {relations: [
             {
               __query__: { relation: { name: T[0].name }, from: {id: D[1].id}},
@@ -529,6 +574,22 @@ test.serial('test all taglike api', async t => {
             { __query__: { relation: { id: T[8].id } } },
             { __query__: { relation: { name: T[9].name } } }, ]} }
           if ('test fuctions and results') {
+            testFunctions.testArticleRelationCount = async ({data}) => {
+              let array = data
+              let counts = []
+              let length = array.length
+              let count = 0
+              for (let d of D) {
+                let eachData = (await Models[each].findOne({id: d.id}))._doc
+                let from_count = eachData.relations.filter(_ => _.from_id === eachData.id).length
+                let to_count = eachData.relations.filter(_ => _.to_id === eachData.id).length
+                counts.push([from_count, to_count])
+                count += 1
+                if (count === length) break
+              }
+              //console.log({array, counts})
+              t.deepEqual(array, counts, JSON.stringify({array, counts}))
+            }
             testFunctions.testRelationCount = async ({data}) => {
               let array = data
               let counts = []
@@ -584,9 +645,11 @@ test.serial('test all taglike api', async t => {
             testDatas = {
               '0-0': {
                 testRelationCount: [...Array(NN).keys()].map(_ => 2),
+                testArticleRelationCount: [[6,6],[1,0],[0,1],[1,1],[0,1],[0,1],[0,1],[0,1],[1,0],[1,0],[1,0],[1,0],[0,0]],
                 testRelationConsistent: true },
               '0-1': {
-                testRelationCount: [4,2,4,0,0,2,2,2,2,2],
+                testRelationCount: [4,2,4,0,0,2,2,0,2,2,2,2,2],
+                testArticleRelationCount: [[2,10],[1,0],[1,0],[1,0],[0,0],[0,0],[1,0],[0,0],[1,0],[2,1],[2,1],[0,0],[1,0]],
                 testRelationConsistent: true },
               '0-2': {
                 testRelationCount: [...Array(NN).keys()].map(_ => 0), },
@@ -596,14 +659,15 @@ test.serial('test all taglike api', async t => {
                 testRelationCount: [...Array(NN).keys()].map(_ => 2),
                 testRelationConsistent: true, },
               '1-2': {
-                testRelationCount: [4,2,4,0,0,2,2,2,2,2],
+                testRelationCount: [4,2,4,0,0,2,2,0,2,2,2,2,2],
+                testArticleRelationCount: [[2,10],[1,0],[1,0],[1,0],[0,0],[0,0],[1,0],[0,0],[1,0],[2,1],[2,1],[0,0],[1,0]],
                 testRelationConsistent: true },
               '1-3': {
-                testRelationCount: [2,2,4,0,0,2,2,2,0,0],
+                testRelationCount: [2,2,4,0,0,2,2,0,0,0,2,2,2],
                 testRelationConsistent: true,
                 testRelationDelOther: true, },
               '1-4': {
-                testRelationCount: [2,2,4,0,0,2,2,2,0,0],
+                testRelationCount: [2,2,4,0,0,2,2,0,0,0,2,2,2],
                 testRelationConsistent: true, },
               '2-0': {
                 testRelationCount: [...Array(NN).keys()].map(_ => 0), },

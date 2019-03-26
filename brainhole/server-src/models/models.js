@@ -436,10 +436,20 @@ async function queryTaglikeID ({field, query, test, getEntry, session, entry_mod
       if (!from_model) from_model = entry_model
       let from = fullquery.from
       let r = await Models[from_model].find(from).session(session)
-      if (r.length !== 1) throw Error(`not single result when query ${from_model} with ${JSON.stringify(from,null,2)}, fullquery:${JSON.stringify(fullquery,null,2)}, r:${r}`)
+      if (r.length !== 1) throw Error(`not single result when query ${from_model} with ${J(from)}, fullquery:${J(fullquery)}, r:${r}`)
       from = r[0]
       fullquery.from_id = from.id
       if (!inSubquery) delete fullquery.from
+    }
+    if (!fullquery.other_id && fullquery.other) {
+      let other_model = fullquery.other_model
+      if (!other_model) other_model = entry_model
+      let other = fullquery.other
+      let r = await Models[other_model].find(other).session(session)
+      if (r.length !== 1) throw Error(`not single result when query ${other_model} with ${J(other)}, fullquery:${J(fullquery)}, r:${r}`)
+      other = r[0]
+      fullquery.other_id = other.id
+      if (!inSubquery) delete fullquery.other
     }
   }
   return {tag_query_id: query_id, raw_tag_query: rawquery, full_tag_query: fullquery, tag_query_entry: query_entry}
@@ -467,7 +477,9 @@ async function querySub({entry, data, field, session, test, entry_model}) {
     let {tag_query_id, full_tag_query} = await queryTaglikeID({field, query, session, entry_model, inSubquery: true})
     // search for subtaglike, must have unique result if not test
     if (field === 'relations') {
-      if (full_tag_query.to_id) {
+      if (full_tag_query.other_id) {
+        result = entry[field].filter(_ => _[query_key+'_id'] === tag_query_id && _.other_id === full_tag_query.other_id )
+      } else if (full_tag_query.to_id) {
         result = entry[field].filter(_ => _[query_key+'_id'] === tag_query_id && _.to_id === full_tag_query.to_id )
       } else if (full_tag_query.from_id) {
         result = entry[field].filter(_ => _[query_key+'_id'] === tag_query_id && _.from_id === full_tag_query.from_id )
@@ -481,8 +493,9 @@ async function querySub({entry, data, field, session, test, entry_model}) {
       return result
     } else if (result.length !== 1) {
       if (!(result.length)) {
-        let currentData = entry[field].map(__ => (_.pick(__, ['id', query_key+"_id"])))
-        throw Error(`query:${JSON.stringify(query)} not found in ${field}, current data:${J(currentData)}`)
+        debugger
+        let currentData = entry[field].map(__ => (_.pick(__, ['id', query_key+"_id", 'from_id', 'to_id', 'other_id'])))
+        throw Error(`query:${J(query)}\nfull_tag_query:${J(full_tag_query)} not found in ${J(field)}, current data:${J(currentData)}`)
       } else {
         throw Error(`inconsistant database, have duplicated subtaglike:${J(result)}, delete them with ids!\nquery:${J({query, field})}`)
       }
@@ -1173,10 +1186,6 @@ async function fathersAPI ({operation, prefield, field, entry, data, session, or
 async function childrenAPI ({operation, prefield, field, entry, data, session, origin, meta}) {
   return await familyAPI({operation, prefield, field, entry, data, type:'children', session, origin, meta})
 }
-async function processAutoActions (auto_actions) {
-  // make unique
-  return auto_actions
-}
 async function taglikeAPI ({name, operation, prefield, field, data, entry, session, origin, meta}) {
   let Models = globals.Models
   // tags, catalogues, metadatas, relations
@@ -1615,53 +1624,89 @@ async function metadatasAPI ({operation, prefield, field, data, entry, session, 
 }
 
 function extractRelationInfo ({full_tag_query, entry_model, entry_id, old}) {
-  let other_model, other_id
   let aorb, other_aorb
-  let {from_id, from_model, to_id, to_model} = full_tag_query
-  if (!from_id && !to_id) {
+  let {from_id, from_model, to_id, to_model, other_id, other_model} = full_tag_query
+  if (!from_id && !to_id && !other_id) {
     if (old) {
       return _.pick(old, ['other_model', 'other_id', 'aorb', 'other_aorb', 'from_id', 'from_model', 'to_id', 'to_model'])
     } else {
-      throw Error('no from-to info')
+      throw Error('no from-to-other info')
     }
   }
-  if (!from_model) from_model = entry_model
-  if (!to_model) to_model = entry_model
-  if (!from_id) from_id = entry_id
-  if (!to_id) to_id = entry_id
-  if (from_id && from_model && to_id && to_model) {
-    if (from_id === to_id && from_model === to_model) {
-      throw Error('Can not have a self-relation')
-    }
-    if (entry_id === from_id && entry_model === from_model) {
-      other_id = to_id
-      other_model = to_model
-      aorb = 'a'
-      other_aorb = 'b'
-    } else if (entry_id === to_id && entry_model === to_model) {
-      other_id = from_id
-      other_model = from_model
-      aorb = 'b'
-      other_aorb = 'a'
-    } else {
-      throw Error(`if given {from_id, from_model, to_id, to_model}, at least one pair should be the same as {entry_id, entry_model}, current is ${ {from_id, from_model, to_id, to_model} } v.s. ${ {entry_id, entry_model} }, origin data: ${full_tag_query}`)
-    }
-  } else if (from_id && from_model) {
-      other_id = from_id
-      other_model = from_model
+  if (other_id) { // if use other_id, from small id to large id
+    if (!other_model) other_model = entry_model
+    if (other_id < entry_id) {
+      from_id = other_id
+      from_model = other_model
       to_id = entry_id
       to_model = entry_model
       aorb = 'b'
       other_aorb = 'a'
-  } else if (to_id && to_model) {
-      other_id = to_id
-      other_model = to_model
+    } else if (other_id > entry_id) {
+      to_id = other_id
+      to_model = other_model
       from_id = entry_id
       from_model = entry_model
       aorb = 'a'
       other_aorb = 'b'
+    } else { // same id
+      if (other_model === entry_model) {
+        throw Error('Can not have a self-relation')
+      } else if (other_model < entry_model) {
+        from_id = other_id
+        from_model = other_model
+        to_id = entry_id
+        to_model = entry_model
+        aorb = 'b'
+        other_aorb = 'a'
+      } else { // (other_model > entry_model)
+        to_id = other_id
+        to_model = other_model
+        from_id = entry_id
+        from_model = entry_model
+        aorb = 'a'
+        other_aorb = 'b'
+      }
+    }
   } else {
-    throw Error(`should have {from_id, from_model} or {to_id, to_model}`)
+    if (!from_model) from_model = entry_model
+    if (!to_model) to_model = entry_model
+    if (!from_id) from_id = entry_id
+    if (!to_id) to_id = entry_id
+    if (from_id && from_model && to_id && to_model) {
+      if (from_id === to_id && from_model === to_model) {
+        throw Error('Can not have a self-relation')
+      }
+      if (entry_id === from_id && entry_model === from_model) {
+        other_id = to_id
+        other_model = to_model
+        aorb = 'a'
+        other_aorb = 'b'
+      } else if (entry_id === to_id && entry_model === to_model) {
+        other_id = from_id
+        other_model = from_model
+        aorb = 'b'
+        other_aorb = 'a'
+      } else {
+        throw Error(`if given {from_id, from_model, to_id, to_model}, at least one pair should be the same as {entry_id, entry_model}, current is ${ {from_id, from_model, to_id, to_model} } v.s. ${ {entry_id, entry_model} }, origin data: ${full_tag_query}`)
+      }
+    } else if (from_id && from_model) {
+        other_id = from_id
+        other_model = from_model
+        to_id = entry_id
+        to_model = entry_model
+        aorb = 'b'
+        other_aorb = 'a'
+    } else if (to_id && to_model) {
+        other_id = to_id
+        other_model = to_model
+        from_id = entry_id
+        from_model = entry_model
+        aorb = 'a'
+        other_aorb = 'b'
+    } else {
+      throw Error(`should have {from_id, from_model} or {to_id, to_model}`)
+    }
   }
   return {other_model, other_id, aorb, other_aorb, from_id, from_model, to_id, to_model}
 }
