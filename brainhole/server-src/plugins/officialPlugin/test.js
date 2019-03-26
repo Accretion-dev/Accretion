@@ -61,6 +61,7 @@ test.serial('Plugin: officialPlugin', async t => {
         {model: "Relation", data: [
           {name: 'simular'},
           {name: 'translation'},
+          {name: 'blabla'},
         ]},
         {model: "Tag", data: [
           // test simular
@@ -383,13 +384,11 @@ test.serial('Plugin: officialPlugin', async t => {
         ['ha(fr)', 3,],
       ])
       // leave group
-      console.log('before del')
       result = await globals.api({
         operation: '-',
         model: 'Tag',
         query: {name: 'bar(zz)'},
       })
-      console.log('after del')
       // connects:
       // good<>nice,nice<>great,great<>fine,veryGood<>good,vefyGood<>fine
       // bad <>evil, evil<>awful
@@ -536,6 +535,79 @@ test.serial('Plugin: officialPlugin', async t => {
         ['ha(fr)', 0,],
       ])
     }
+    if(tname='modify to add'){
+      result = await globals.api({
+        operation: '+',
+        model: 'Tag',
+        field: 'relations',
+        query: {name: 'bar(fr)'},
+        data:{
+          relations:[
+            {relation:{name:'blabla'}, other:{name: 'bar(jp)'}},
+          ]
+        }
+      })
+      await testTagRelationCount([
+        ['good', 2,],
+        ['nice', 2,],
+        ['great', 1,],
+        ['fine', 1,],
+        ['veryGood', 2,],
+        ['bad', 2,],
+        ['evil', 2,],
+        ['awful', 2,],
+        ['hungry', 0,],
+        ['starve', 0,],
+        ['famish', 0,],
+        ['foo(en)', 0,],
+        ['foo(zh)', 2,],
+        ['foo(jp)', 2,],
+        ['foo(fr)', 2,],
+        ['bar(en)', 2,],
+        ['bar(zh)', 2,],
+        ['bar(jp)', 3,],
+        ['bar(fr)', 1,],
+        ['ha(zh)', 0,],
+        ['ha(jp)', 0,],
+        ['ha(fr)', 0,],
+      ])
+      result = await globals.api({
+        operation: '*',
+        model: 'Tag',
+        field: 'relations',
+        query: {name: 'bar(fr)'},
+        data:{
+          relations:[
+            {__query__:{relation:{name:'blabla'}, other:{name: 'bar(jp)'}},
+             relation:{name: 'translation'}},
+          ]
+        }
+      })
+      await testTagRelationCount([
+        ['good', 2,],
+        ['nice', 2,],
+        ['great', 1,],
+        ['fine', 1,],
+        ['veryGood', 2,],
+        ['bad', 2,],
+        ['evil', 2,],
+        ['awful', 2,],
+        ['hungry', 0,],
+        ['starve', 0,],
+        ['famish', 0,],
+        ['foo(en)', 0,],
+        ['foo(zh)', 2,],
+        ['foo(jp)', 2,],
+        ['foo(fr)', 2,],
+        ['bar(en)', 3,],
+        ['bar(zh)', 3,],
+        ['bar(jp)', 3,],
+        ['bar(fr)', 3,],
+        ['ha(zh)', 0,],
+        ['ha(jp)', 0,],
+        ['ha(fr)', 0,],
+      ])
+    }
     if('turn off and last check'){
       // turn off and test last
       result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
@@ -557,8 +629,8 @@ test.serial('Plugin: officialPlugin', async t => {
         ['foo(fr)', 1,],
         ['bar(en)', 1,],
         ['bar(zh)', 2,],
-        ['bar(jp)', 1,],
-        ['bar(fr)', 0,],
+        ['bar(jp)', 2,],
+        ['bar(fr)', 1,],
         ['ha(zh)', 0,],
         ['ha(jp)', 0,],
         ['ha(fr)', 0,],

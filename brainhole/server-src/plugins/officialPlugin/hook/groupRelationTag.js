@@ -63,7 +63,7 @@ async function getSingleGroupAdd ({groupRelation, session, thisid}) {
     let thisid = tag.id
     // relations that already exists (and have this hook origin)
     let thatids = tag.relations.filter(_ =>
-      _.relation_id === groupRelation.id && ((_.origin.map(__ => __.id).includes(hook.uid)))
+      _.relation_id === groupRelation.id && ((_.origin.find(__ => __.id === hook.uid)))
     ).map(_ => _.other_id)
     let fullids = thisGroupMap[thisid].data
     let newids = fullids = fullids.filter(_ => !thatids.includes(_))
@@ -232,15 +232,16 @@ async function gen(parameters) {
     }
   }
   async function groupRelationTagOPs({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session}) {
-    if (!withs || !withs.relations) return
+    let doc = entry._doc
+    if (!doc.relations) return
     origin = { id: hook.uid }
     let thisRelationIDs, groups, final
-    if (operation === "+") {
-      thisRelationIDs = withs.relations.map(_ => _.relation_id)
+    if (operation === "+" || operation === "*") {
+      thisRelationIDs = doc.relations.map(_ => _.relation_id)
       groups = _.intersection(thisRelationIDs, relationIDs)
       if (!groups.length) return
       // now we have least one new added group relation
-      let groupRelations = withs.relations.filter(_ => relationIDs.includes(_.relation_id))
+      let groupRelations = doc.relations.filter(_ => relationIDs.includes(_.relation_id))
       let r = { }
       for (let id of groups) {
         let groupRelation = await globals.Models.Relation.findOne({id}).session(session)
@@ -248,7 +249,7 @@ async function gen(parameters) {
       }
       let modified = await addGroupRelations(r)
       if (modified.data.length) {
-        final = {operation, data: [modified], meta, origin}
+        final = {operation:'+', data: [modified], meta, origin}
       } else {
         return []
       }

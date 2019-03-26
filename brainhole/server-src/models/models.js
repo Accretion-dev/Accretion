@@ -1466,6 +1466,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         simple = full_tag_query
         this_sub_entry.set(simple)
         if (changeTaglike) { // test if it is duplicated with another taglike
+          // can not use .find here, ... subSchema.find will not return null when not find
           if (this_sub_entry.origin.filter(_ => _.id !== 'manual').length) {
             throw Error(`can not change key paramerters of a ${name}, its origin is not only manual`)
           }

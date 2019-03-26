@@ -395,11 +395,11 @@ test.serial('test all taglike api', async t => {
   let WithsDict = globals.WithsDict
   let All = globals.All
   let apis = [
+    {name: 'relations', withname: 'WithRelation', model:'Relation'},
     {name: 'metadatas', withname: 'WithMetadata', model:'Metadata'},
     {name: 'catalogues', withname: 'WithCatalogue', model:'Catalogue'},
     {name: 'tags', withname: 'WithTag', model:'Tag'},
     {name: 'family', withname: 'WithFather'},
-    {name: 'relations', withname: 'WithRelation', model:'Relation'},
   ]
   const pstep = false
   for (let apiname of apis) {

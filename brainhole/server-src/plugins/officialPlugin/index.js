@@ -1,10 +1,8 @@
 import globals from '../../globals'
 
 async function turnOn () {
-  console.log('turn on official plugin')
 }
 async function turnOff () {
-  console.log('turn off official plugin')
 }
 let plugin = {
   uid: "officialPlugin",
