@@ -54,8 +54,8 @@ async function bulkDel({componentUID, meta}) {
 async function pluginAPI({operation, uid, component, componentUID}) {
   let plugin = globals.plugins.find(_ => _.uid === uid)
   if (!plugin) throw Error(`can not find plugin of uid: ${uid}`)
+  let result = {}
   if (component && componentUID) { // operation on plugin component
-    let result
     if (!plugin[component]) throw Error(`component ${component} not exist in plugin ${uid}`)
     let thiscomponent = plugin[component].find(_ => _.uid === componentUID)
     if (!thiscomponent) throw Error(`component entry uid:${componentUID} not exist in component ${component} in plugin ${uid}`)
@@ -63,14 +63,16 @@ async function pluginAPI({operation, uid, component, componentUID}) {
       operation, data:componentUID,
     })
     history = await history.save()
-    let meta = {root_parent_history: history._id}
+    // if meta.hookAction is true, api will not process any hook
+    // useful when what to make a 'clean' api operation
+    let meta = {plugin_parent_history: history._id, hookAction: true}
     if (component === 'hook') {
       let hook
       if (operation === 'on') {
         try {
           thiscomponent.active = true
           if (thiscomponent.data) {
-            result = await bulkAdd({data: thiscomponent.data, componentUID})
+            result.hook = await bulkAdd({data: thiscomponent.data, componentUID, meta})
           }
           hook = globals.pluginsData.hook
           let updateHookErrors = await updateHooks(globals.plugins)
@@ -78,7 +80,12 @@ async function pluginAPI({operation, uid, component, componentUID}) {
             throw Error(`update hook function error: ${JSON.stringify(updateHookErrors,null,2)}`)
           }
           if (thiscomponent.turnOn) {
-            await thiscomponent.turnOn({meta})
+            result.initData = await thiscomponent.turnOn({meta})
+            let total = result.initData.length
+            let field = _.sum(result.initData.map(_ => _.goodWiths[_.field].total))
+            let fieldEntry = _.sum(result.initData.map(_ => _.goodWiths[_.field].entry))
+            let fieldOrigin = _.sum(result.initData.map(_ => _.goodWiths[_.field].origin))
+            result.statistic = {total, field, fieldEntry, fieldOrigin}
           }
           await globals.Models.Plugins.findOneAndUpdate(
             {uid},
@@ -98,10 +105,15 @@ async function pluginAPI({operation, uid, component, componentUID}) {
             throw Error(`update hook function error: ${JSON.stringify(updateHookErrors,null,2)}`)
           }
           if (thiscomponent.turnOff) {
-            await thiscomponent.turnOff({meta})
+            result.initData = await thiscomponent.turnOff({meta})
+            let total = result.initData.length
+            let field = _.sum(result.initData.map(_ => _.goodWiths[_.field].total))
+            let fieldEntry = _.sum(result.initData.map(_ => _.goodWiths[_.field].entry))
+            let fieldOrigin = _.sum(result.initData.map(_ => _.goodWiths[_.field].origin))
+            result.statistic = {total, field, fieldEntry, fieldOrigin}
           }
           if (thiscomponent.data) {
-            result = await bulkDel({componentUID})
+            result.hook = await bulkDel({componentUID, meta})
           }
           await globals.Models.Plugins.findOneAndUpdate(
             {uid},
@@ -113,8 +125,7 @@ async function pluginAPI({operation, uid, component, componentUID}) {
           throw e
         }
       } else if (operation === 'count') {
-        let result = await thiscomponent.count()
-        return result
+        result.count = await thiscomponent.count()
       }
     } else if (component === 'task') {
       if (operation === 'on') {
@@ -128,9 +139,9 @@ async function pluginAPI({operation, uid, component, componentUID}) {
       }
     } else if (component === 'data') {
       if (operation === 'on') {
-        result = await bulkAdd({data: thiscomponent.data, componentUID, meta})
+        result.data = await bulkAdd({data: thiscomponent.data, componentUID, meta})
       } else if (operation === 'off') {
-        result = await bulkDel({componentUID, meta})
+        result.data = await bulkDel({componentUID, meta})
       }
     }
     history.query = true
@@ -138,7 +149,8 @@ async function pluginAPI({operation, uid, component, componentUID}) {
       {_id:history._id},
       {$set: history},
     )
-    return {component: thiscomponent, result}
+    result.component = thiscomponent
+    return result
   } else { // operation on plugin itself
     if (operation === 'on') {
       plugin.active = true
