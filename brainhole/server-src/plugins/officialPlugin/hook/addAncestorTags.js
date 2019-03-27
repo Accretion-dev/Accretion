@@ -1,28 +1,156 @@
-async function turnOn () {
+import globals from "../../../globals"
+import _ from 'lodash'
+
+async function addAllAncestorTags () {
+  let tags = await globals.getAllAncestors({model: 'Tag'})
+  let tagIDs = Object.keys(tags).map(_ => Number(_))
+  let datas = []
+  for (let model of globals.WithsDict.WithTag) {
+    let data = {
+      model,
+      field: 'tags',
+      data: []
+    }
+    let roots = await globals.Models[model].aggregate([
+      {$match: {
+        'tags.tag_id': { $in: tagIDs }
+      }},
+      {$project: {id: 1, tags: 1}}
+    ])
+    for (let root of roots) {
+      let thistagdata = []
+      for (let tag of root.tags) {
+        if (tags[tag.tag_id]) {
+          for (let add of tags[tag.tag_id].ancestors) {
+            thistagdata.push({
+              tag_id: add,
+              origin: [{
+                id: `${hook.uid}-${tag.id}`,
+                hook: `${hook.uid}`
+              }]
+            })
+          }
+        }
+      }
+      data.data.push({
+        id: root.id,
+        tags:thistagdata,
+      })
+    }
+    if (data.data.length) {
+      datas.push(data)
+    }
+  }
+  return datas
+}
+async function delAllAncestorTags () {
+  let datas = []
+  for (let model of globals.WithsDict.WithTag) {
+    let data = {
+      model,
+      field: 'tags',
+      data: []
+    }
+    let roots = await globals.Models[model].aggregate([
+      {$match: {
+        'tags.origin.hook': hook.uid
+      }},
+      {$project: {id: 1, tags: 1}}
+    ])
+    for (let root of roots) {
+      let thistagdata = []
+      for (let tag of root.tags) {
+        let thisorigins = tag.origin.filter(_ => _.hook === hook.uid)
+        if (thisorigins.length) {
+          thistagdata.push({
+            id: tag.id,
+            origin: thisorigins.map(_ => ({id:_.id}))
+          })
+        }
+      }
+      data.data.push({
+        id: root.id,
+        tags:thistagdata
+      })
+    }
+    datas.push(data)
+  }
+  return datas
+}
+
+async function turnOn ({meta}) {
   console.log(`turn on ${hook.uid}`)
+  let toAdd = await addAllAncestorTags()
+  let result = await globals.bulkOP({operation:"+", data: toAdd, meta})
+  return result
 }
-async function turnOff () {
+async function turnOff ({meta}) {
   console.log(`turn off ${hook.uid}`)
+  let toDel = await delAllAncestorTags()
+  let result = await globals.bulkOP({operation:"-", data: toDel, meta})
+  return result
 }
-  
+
 // this is a function generator, it return the real hook function with parameters
 async function gen(parameters) {
   // test
   // this function will be injected into the taglikeAPI
-  async function addAncestorTags({operation, entry, old_sub_entry, new_sub_entry, meta, origin}) {
-    let {uuid} = parameters
-    if (operation === "+") {
-
-    } else if (operation === '*') {
-
-    } else if (operation === '-') {
-
+  async function ancestorTags({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry, session, full_delete}) {
+    if (operation === "+" || operation ===  '-') {
+      if (!origin_flags.origin.some(_ => _.id === 'manual')) return []
+      if (operation === '-'&&full_delete) return []
+    } else if (operation === "*") {
+      if (!changeTaglike) return []
+      // old_sub_entry can be changed, it must only have 'manual' origin
     }
-    return []
+
+    let ancestors, sub_tag_id, this_sub_entry
+    if (operation === "*" || operation === '-') {
+      this_sub_entry = old_sub_entry
+    } else { // operation === +
+      if (origin_flags.entry) {
+        this_sub_entry = new_sub_entry
+      } else {
+        this_sub_entry = old_sub_entry
+      }
+    }
+    sub_tag_id = this_sub_entry.id
+    ancestors = await globals.getAncestors({model:'Tag', query:{id: this_sub_entry.tag_id}})
+
+    if (operation === '*') operation = '+'
+
+    let entry_model = entry.schema.options.collection
+    let result = [{operation, data: [
+      {model: entry_model, field:'tags', data: [{
+        id: entry.id,
+        tags: ancestors.map(__ => {
+          if (operation === "+") {
+            return {
+              tag_id: __, origin:[{
+                id: `${hook.uid}-${sub_tag_id}`,
+                hook: `${hook.uid}`
+              }]
+            }
+          } else {
+            return {
+              __query__:{tag_id: __}, origin:[{
+                id: `${hook.uid}-${sub_tag_id}`,
+                hook: `${hook.uid}`
+              }]
+            }
+          }
+        })
+      }]}
+    ]}]
+    return result
   }
-  return {
-    tags: addAncestorTags
+  let result = {
+    tags: ancestorTags
   }
+  //for (let name of globals.WithsDict.WithTag) {
+  //  result[name] = ancestorTags
+  //}
+  return result
 }
 let hook = {
   uid: "addAncestorTags",

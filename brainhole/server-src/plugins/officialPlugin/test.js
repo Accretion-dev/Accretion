@@ -2,7 +2,7 @@
 // i had to concat all test scripts into test-final.js
 // see test-final.js for all the imports
 test.serial('Plugin: officialPlugin', async t => {
-  let tname, result
+  let tname, result, refetch
   async function testData({r, componentUID, op}) {
     for (let each of r.data) {
       let obj = await globals.Models[each.model].findOne({id:each.id})
@@ -30,6 +30,24 @@ test.serial('Plugin: officialPlugin', async t => {
     }
     t.deepEqual(datacal, datas)
   }
+  async function testTagCount(datas) {
+    let datacal = []
+    for (let data of datas) {
+      let obj = await globals.Models.Article.findOne({title: data[0]})
+      if (!obj) t.fail(`Article name ${data[0]} not exists`)
+      datacal.push([data[0], obj.tags.length])
+    }
+    t.deepEqual(datacal, datas)
+  }
+  async function testTagArticleRevCount(datas) {
+    let datacal = []
+    for (let data of datas) {
+      let obj = await globals.Models.Tag.findOne({name: data[0]})
+      if (!obj) t.fail(`Tag name ${data[0]} not exists`)
+      datacal.push([data[0], obj.r.Article.length])
+    }
+    t.deepEqual(datacal, datas)
+  }
   let uid = 'officialPlugin'
   let componentUID, component, r, data, query, origin
   // turn on
@@ -53,7 +71,7 @@ test.serial('Plugin: officialPlugin', async t => {
     r = await globals.pluginAPI({operation:'off', uid, component, componentUID})
     await testData({r, componentUID, op:'off'})
   }
-  if(tname='test hook groupRelations') {
+  if(0&&(tname='test hook groupRelations')) {
     component = 'hook'
     componentUID = `${uid}[${component}]groupRelationTag`
     if(tname='add unitttest data') {
@@ -608,7 +626,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['ha(fr)', 0,],
       ])
     }
-    if('turn off and last check'){
+    if('turn off and delete unittest data'){
       // turn off and test last
       result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
       await testTagRelationCount([
@@ -635,6 +653,282 @@ test.serial('Plugin: officialPlugin', async t => {
         ['ha(jp)', 0,],
         ['ha(fr)', 0,],
       ])
+      await globals.Models.Tag.deleteMany({})
+      await globals.Models.Relation.deleteMany({})
+    }
+  }
+  if(tname='test hook addAncesotrTags') {
+    component = 'hook'
+    componentUID = `${uid}[${component}]addAncestorTags`
+    if(tname='add unitttest data') {
+      data = [
+        {model: "Tag", data: [
+          {name: '1', children:[{name: '1.1'},{name: '1.2'},{name: '1.3'}]},
+          {name: '1.1', children:[{name:'1.1.1'}]},
+          {name: '1.1.1', children:[{name:'1.1.1.1'}]},
+          {name: '1.1.1.1', children:[{name:'1.1.1.1.1'}]},
+          {name: '1.1.1.1.1', fathers:[{name:'1.1.1'}]},
+          {name: '1.2', children:[{name:'1.2.1'},{name:'1.2.2'}]},
+          {name: '1.2.1'},
+          {name: '1.2.2', children:[{name:'1.2.2.1'}]},
+          {name: '1.2.2.1'},
+          {name: '1.3', children:[{name:'1.3.1'}]},
+          {name: '1.3.1', children:[{name:'1.3.1.1'},{name:'1.3.1.2'}]},
+          {name: '1.3.1.1'},
+          {name: '1.3.1.2', fathers:[{name:'3.2'}]},
+          {name: '2', children:[{name:'2.1'},{name:'2.2'}]},
+          {name: '2.1'},
+          {name: '2.2'},
+          {name: '3', children:[{name:'3.1'},{name:'3.2'}]},
+          {name: '3.1'},
+          {name: '3.2'},
+        ]},
+        {model: "Article", data: [
+          {title: '1', tags:[
+            {tag: {name:'1.2.2.1'}},
+            {tag: {name:'1.3.1'}},
+            {tag: {name:'1.1.1.1.1'}},
+            {tag: {name:'1.1.1'}},
+          ]},
+          {title: '2', tags: [
+            {tag: {name:'1.3.1.2'}},
+            {tag: {name:'2.2'}},
+          ]},
+          {title: '3', tags: [
+            {tag: {name:'1.3.1.2'}},
+            {tag: {name:'3.2'}},
+          ]},
+          {title: '4', tags: [
+            {tag: {name:'1.1.1.1'}},
+          ]},
+          {title: '5', tags: [
+            {tag: {name:'1.2.1'}},
+            {tag: {name:'1.3.1.1'}},
+            {tag: {name:'1.3'}},
+          ]},
+        ]},
+      ]
+      await globals.bulkOP({operation: '+', data})
+      await testTagCount([
+        ['1', 4],
+        ['2', 2],
+        ['3', 2],
+        ['4', 1],
+        ['5', 3],
+      ])
+    }
+    if(tname='turn on and off'){
+      result = await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      // 1: 1.2.2.1, 1.2.2, 1.2, 1
+      //    1.3.1, 1.3,
+      //    1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      // 2: 1.3.1.2, 1.3.1, 1.3, 1, 3.2, 3
+      //    2.2, 2
+      // 3: 3.2, 3
+      //    1.3.1.2, 1.3.1, 1.3, 1,
+      // 4: 1.1.1.1, 1.1.1, 1.1, 1
+      // 5: 1.2.1, 1.2, 1, 1.3.1.1, 1.3.1, 1.3
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 6],
+        ['4', 4],
+        ['5', 6],
+      ])
+      result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      await testTagCount([
+        ['1', 4],
+        ['2', 2],
+        ['3', 2],
+        ['4', 1],
+        ['5', 3],
+      ])
+      result = await globals.pluginAPI({operation:'on', uid, component, componentUID})
+    }
+    if(tname='add and delete by field'){
+      result = await globals.api({
+        operation: '+',
+        model: 'Article',
+        field: 'tags',
+        query: {title: '4'},
+        data:{
+          tags:[
+            {tag:{name:'1.1'}},
+          ]
+        }
+      })
+      refetch = await globals.Models.Article.findOne({title: '4'})
+      t.true(refetch._doc.tags[2].origin[1].id === 'manual')
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 6],
+        ['4', 4],
+        ['5', 6],
+      ])
+      result = await globals.api({
+        operation: '+',
+        model: 'Article',
+        field: 'tags',
+        query: {title: '4'},
+        data:{
+          tags:[
+            {tag:{name:'3.2'}},
+          ]
+        }
+      })
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 6],
+        ['4', 6],
+        ['5', 6],
+      ])
+      // 1: 1.2.2.1, 1.2.2, 1.2, 1
+      //    1.3.1, 1.3,
+      //    1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      // 2: 1.3.1.2, 1.3.1, 1.3, 1, 3.2, 3
+      //    2.2, 2
+      // 3: 3.2, 3
+      //    1.3.1.2, 1.3.1, 1.3, 1,
+      // 4: 1.1.1.1, 1.1.1, 1.1, 1, 3.2, 3
+      // 5: 1.2.1, 1.2, 1, 1.3.1.1, 1.3.1, 1.3
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        field: 'tags',
+        query: {title: '4'},
+        data:{
+          tags:[
+            {__query__:{tag:{name:'3.2'}}},
+          ]
+        }
+      })
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 6],
+        ['4', 4],
+        ['5', 6],
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        field: 'tags',
+        query: {title: '4'},
+        data:{
+          tags:[
+            {__query__:{tag:{name:'1.1'}}},
+          ]
+        }
+      })
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 6],
+        ['4', 4],
+        ['5', 6],
+      ])
+      await testTagArticleRevCount([
+        ['1.3.1.2', 2]
+      ])
+      // 1: 1.2.2.1, 1.2.2, 1.2, 1
+      //    1.3.1, 1.3,
+      //    1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      // 2: 1.3.1.2, 1.3.1, 1.3, 1, 3.2, 3
+      //    2.2, 2
+      // 3: 3.2, 3
+      //    1.3.1.2, 1.3.1, 1.3, 1,
+      // 4: 1.1.1.1, 1.1.1, 1.1, 1
+      // 5: 1.2.1, 1.2, 1, 1.3.1.1, 1.3.1, 1.3
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        field: 'tags',
+        query: {title: '3'},
+        data:{
+          tags:[
+            {__query__:{tag:{name:'1.3.1.2'}}},
+          ]
+        }
+      })
+      // 1: 1.2.2.1, 1.2.2, 1.2, 1
+      //    1.3.1, 1.3,
+      //    1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      // 2: 1.3.1.2, 1.3.1, 1.3, 1, 3.2, 3
+      //    2.2, 2
+      // 3: 3.2, 3
+      // 4: 1.1.1.1, 1.1.1, 1.1, 1
+      // 5: 1.2.1, 1.2, 1, 1.3.1.1, 1.3.1, 1.3
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 2],
+        ['4', 4],
+        ['5', 6],
+      ])
+      await testTagArticleRevCount([
+        ['1.3.1.2', 1]
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        field: 'tags',
+        query: {title: '3'},
+        data:{
+          tags:[
+            {__query__:{tag:{name:'3'}}},
+          ]
+        }
+      })
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 2],
+        ['4', 4],
+        ['5', 6],
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        field: 'tags',
+        query: {title: '3'},
+        data:{
+          tags:[
+            {__query__:{tag:{name:'3.2'}}},
+          ]
+        }
+      })
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 0],
+        ['4', 4],
+        ['5', 6],
+      ])
+      // 1: 1.2.2.1, 1.2.2, 1.2, 1
+      //    1.3.1, 1.3,
+      //    1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      // 2: 1.3.1.2, 1.3.1, 1.3, 1, 3.2, 3
+      //    2.2, 2
+      // 3: 3.2, 3
+      // 4: 1.1.1.1, 1.1.1, 1.1, 1
+      // 5: 1.2.1, 1.2, 1, 1.3.1.1, 1.3.1, 1.3
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        query: {title: '5'},
+      })
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 0],
+        ['4', 4],
+      ])
+    }
+    if(tname='add and delete tag family, refresh all related entries'){
+    }
+    if(tname='turn off and delete unittest data'){
     }
   }
   if(0&&(tname='test hook simularTags')) {
@@ -697,34 +991,31 @@ test.serial('Plugin: officialPlugin', async t => {
       ]
       await globals.bulkOP({operation: '+', data})
     }
-    if(tname='turn on'){
+    if(tname='turn on and turn off'){
       await globals.pluginAPI({operation:'on', uid, component, componentUID})
-    }
-    if(0&&(tname='turn off')){
       await globals.pluginAPI({operation:'off', uid, component, componentUID})
       await globals.pluginAPI({operation:'on', uid, component, componentUID})
     }
-    if(tname='add hook'){
-      if(tname='add without field'){
+    if(tname='test delete the related relations, throw errors'){
+    }
+    if(tname='add and delete by field'){
 
-      }
-      if(tname='add with field'){
+    }
+    if(tname='modify with field, raise error'){
 
-      }
-      if(tname='modify with field, raise error'){
-
-      }
-      if(tname='delete with field'){
-
-      }
+    }
+    if(tname='add and delete tag relation, refresh all related entries'){
 
     }
   }
-  if(tname='test hook addAncesotrTags') {
-  }
-  if(tname='test hook translationTags') {
-  }
   if(tname='test hook ambiguousTags') {
+    if(tname='add unitttest data') {
+    }
+    if(tname='turn on and turn off'){
+    }
+
+    if('turn off and delete unittest data'){
+    }
   }
   t.pass()
 })

@@ -686,11 +686,11 @@ async function processEntryHooks({hookActions, history, result, meta, origin, or
   }
   return done
 }
-async function processSubEntryHooks({hooks, name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry}) {
+async function processSubEntryHooks({hooks, name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry, session, changeTaglike, full_delete}) {
   let hookActions = []
   if (meta && meta.hookAction) return []
   for (let hook of hooks) {
-    let newHookActions = await thishook({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry})
+    let newHookActions = await hook({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry, session, changeTaglike, full_delete})
     if (newHookActions && newHookActions.length) {
       hookActions = [...hookActions, ...newHookActions]
     }
@@ -792,7 +792,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       return returnData
     } else { // e.g. add new tag, add new catalogues
       let entry = await Model.find(query).session(session)
-      if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${query} not unique: ${entry}`)
+      if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${J(query)} not unique: ${entry}`)
       entry = entry[0]
 
       let result = await apiSingleField({operation, model, field, data, entry, query, meta, session, origin})
@@ -1107,7 +1107,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
 
         hookActions = await processSubEntryHooks({
           hooks, name:type, operation, meta, origin, entry, origin_flags,
-          new_sub_entry: thisresult,
+          new_sub_entry: thisresult, session,
         })
         if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1122,7 +1122,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
 
         hookActions = await processSubEntryHooks({
           hooks, name:type, operation, meta, origin, entry, origin_flags,
-          new_sub_entry: thisresult,
+          new_sub_entry: thisresult, session
         })
         if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1166,7 +1166,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
 
           hookActions = await processSubEntryHooks({
             hooks, name:type, operation, meta, origin, entry, origin_flags,
-            old_sub_entry: thisresult,
+            old_sub_entry: thisresult, session
           })
           if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1185,7 +1185,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
 
       hookActions = await processSubEntryHooks({
         hooks, name:type, operation, meta, origin, entry, origin_flags,
-        old_sub_entry: thisresult,
+        old_sub_entry: thisresult, session
       })
       if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1311,7 +1311,8 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           thisresult.origin_flags = origin_flags
 
           hookActions = await processSubEntryHooks({
-            hooks, name, operation, meta, origin: thisorigin, entry, origin_flags,
+            hooks, name, operation, meta, origin: thisorigin, entry, origin_flags, session,
+            old_sub_entry: this_sub_entry
           })
           if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1370,7 +1371,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 
           hookActions = await processSubEntryHooks({
             hooks, name, operation, meta, origin: thisorigin, entry, origin_flags,
-            new_sub_entry: this_sub_entry._doc
+            new_sub_entry: this_sub_entry._doc, session
           })
           if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1513,7 +1514,8 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 
         hookActions = await processSubEntryHooks({
           hooks, name, operation, meta, origin: thisorigin, entry,
-          old_sub_entry, new_sub_entry: this_sub_entry._doc
+          old_sub_entry, new_sub_entry: this_sub_entry._doc, session,
+          changeTaglike
         })
         if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1544,6 +1546,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
       }
       return result
     } else if (operation === '-') {
+      let full_delete = false
       let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
       let entries = []
       if (data) {
@@ -1561,6 +1564,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         }
       } else {
         // must write with .map(_ => _), or will cause bug... don't know why
+        full_delete = true
         entries = entry[name].map(_ => ({this_sub_entry:_, origin}))
       }
       for (let {this_sub_entry, origin} of entries) {
@@ -1587,7 +1591,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 
             hookActions = await processSubEntryHooks({
               hooks, name, operation, meta, origin, entry, origin_flags,
-              old_sub_entry: this_sub_entry
+              old_sub_entry: this_sub_entry, session, full_delete
             })
             if (hookActions.length) toReturn.hookActions = hookActions
 
@@ -1624,7 +1628,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 
         hookActions = await processSubEntryHooks({
           hooks, name, operation, meta, origin, entry, origin_flags,
-          old_sub_entry
+          old_sub_entry, session, full_delete
         })
         if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1831,7 +1835,6 @@ async function bulkOPSessionWrapper({operation, model, data, session, meta, orig
       eachorigin = eachdata.origin || origin
       eachdata = eachdata.data
 
-
       if (eachfield) {
         let data = _.pick(eachdata, [eachfield])
         let query = _.omit(eachdata, [eachfield])
@@ -1981,35 +1984,36 @@ async function bulkOP({operation, model, data, session, meta, origin, query, com
 
 async function getAllAncestors ({model}) {
   let fathers, children
-  let entries = await Models[model].aggregate([
-    {$match: Object.assign({}, query, {
-      $or:{
-        'fathers.origin.id': "manual",
-        'children.origin.id': "manual",
-      }
-    })},
-    {$project: {id: 1, fathers:1}}
+  let entries = await globals.Models[model].aggregate([
+    {$match: {
+      $or:[
+        {'fathers.origin.id': "manual"},
+        {'children.origin.id': "manual"},
+      ]
+    }},
+    {$project: {id: 1, fathers:1, children: 1}}
   ])
   let entryDict = {}
   for (let entry of entries) {
     entryDict[entry.id] = entry
     entry.ancestors = new Set()
     fathers = entry.fathers.filter(_ => _.origin.some(__ => __.id === 'manual') )
-    entry.fathers = new Set(fathers)
+    entry.fathers = new Set(fathers.map(_ => _.id))
     children = entry.children.filter(_ => _.origin.some(__ => __.id === 'manual') )
-    entry.children = new Set(children)
+    entry.children = new Set(children.map(_ => _.id))
   }
+  let count = 0
   while (true) {
     let roots = entries.filter(_ => !(_.fathers.size) && !_.done)
-    if (roots) {
+    if (roots.length) {
       for (let root of roots) {
         root.done = true
-        for (let childID of root.children) {
-          let child = entryDict[childID]
+        for (let child of root.children) {
+          child = entryDict[child]
           child.fathers.delete(root.id)
           child.ancestors.add(root.id)
           for (let ancestor of root.ancestors) {
-            child.ancestors.add(root.ancestor)
+            child.ancestors.add(ancestor)
           }
         }
       }
@@ -2026,22 +2030,12 @@ async function getAllAncestors ({model}) {
 }
 async function getAncestors ({model, query, ancestorIDs}) {
   if (!ancestorIDs) ancestorIDs = new Set()
-  let roots = await Models[model].aggregate([
-    {$match: Object.assign({}, query, {
-      'fathers.origin.id': "manual",
-    })},
-    {$project: {id: 1, fathers:1}}
-  ])
-  for (let root of roots) {
-    let fathersIDs = root.fathers.map(_ => _.id)
-    for (let fatherID of fatherIDs) {
-      if (!ancestorIDs.has(fatherID)) {
-        ancestorIDs.add(fatherID)
-        let newFathers = await getAncestors({model, query:{id: fatherID}, ancestorIDs})
-        for (let newFather of newFathers) {
-          ancestorIDs.add(newFather)
-        }
-      }
+  let root = await globals.Models[model].findOne(query)
+  let fatherIDs = root.fathers.map(_ => _.id)
+  for (let fatherID of fatherIDs) {
+    if (!ancestorIDs.has(fatherID)) {
+      ancestorIDs.add(fatherID)
+      await getAncestors({model, query:{id: fatherID}, ancestorIDs})
     }
   }
   return Array.from(ancestorIDs)
