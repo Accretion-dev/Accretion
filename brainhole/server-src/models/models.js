@@ -335,18 +335,10 @@ function initModels () {
   globals.WithsDict = WithsDict
   globals.subSchema = subSchema
   globals.All = All
+  globals.topModels = top
   if (globals.isMain) {
     console.log('model info:', _.pick(globals, ['Withs', 'subSchema', 'structTree', 'Models', 'WithsDict']))
   }
-
-  globals.api = api
-  globals.apiSessionWrapper = apiSessionWrapper
-  globals.bulkOP = bulkOP
-  globals.bulkOPSessionWrapper = bulkOPSessionWrapper
-  globals.mongoose = mongoose
-  globals.getRequire = getRequire
-  globals.topModels = top
-
   return {Models, Schemas, structTree, globals, All, Withs, WithsDict}
 }
 
@@ -1075,7 +1067,12 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
       let r = await globals.Models[model].find(queryData).session(session)
       if (r.length !== 1) throw Error(`not single result when query ${model} with ${J(queryData)}\n${J(r)}`)
       let anotherEntry = r[0]
-      fulldata.push({anotherEntry})
+
+      if (each.origin) {
+        fulldata.push({anotherEntry, origin: each.origin})
+      } else {
+        fulldata.push({anotherEntry, origin})
+      }
     }
   }
   const reverseMap = {fathers: 'children', children: 'fathers'}
@@ -1083,7 +1080,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
   if (operation === '+') {
     for (let eachdata of fulldata) {
       let origin_flags = {}
-      let {anotherEntry} = eachdata
+      let {anotherEntry, origin} = eachdata
 
       let subentry = entry[type].find(_ => _.id === anotherEntry.id)
       if (subentry) { // only add origin
@@ -1140,7 +1137,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
   } else if (operation === '-') {
     for (let eachdata of fulldata) {
       let origin_flags = {}
-      let {anotherEntry} = eachdata
+      let {anotherEntry, origin} = eachdata
       let subentry = entry[type].find(_ => _.id === anotherEntry.id)
       if (!subentry) {
         origin_flags.entry = false
@@ -1234,6 +1231,15 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
   if (field) { // e.g. metadatas.flags, tags.flags
     let result = []
     for (let eachdata of data) {
+      let thisorigin
+      if (eachdata.origin) {
+        thisorigin = eachdata.origin
+        eachdata = clone(eachdata)
+        delete eachdata.origin
+      } else {
+        thisorigin = origin
+      }
+
       let this_sub_entry = await querySub({entry, data: eachdata, field: name, session, entry_model})
       let {fieldPrefix, fieldSuffix, newdata} = extractSingleField({
         model: name,
@@ -1248,7 +1254,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         entry: this_sub_entry,
         data: newdata,
         session,
-        origin
+        origin: thisorigin
       })
       let this_result = {[fieldPrefix]: thisresult, id: this_sub_entry.id}
       result.push(this_result)
@@ -1272,6 +1278,16 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
   } else {
     if (operation === '+') { // data should be array
       for (let eachdata of data) {
+        eachdata = Object.assign({}, eachdata)
+        let thisorigin
+        if (eachdata.origin) {
+          thisorigin = eachdata.origin
+          eachdata = clone(eachdata)
+          delete eachdata.origin
+        } else {
+          thisorigin = origin
+        }
+
         let {simple, withs} = extractWiths({data: eachdata, model: name, sub: true})
         let this_sub_entry = await querySub({entry, data: {__query__: simple}, field: name, session, test: true, entry_model})
         let origin_flags = {}
@@ -1280,10 +1296,10 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             throw Error(`inconsistant database, have duplicated subtaglike:${J(this_sub_entry)}, delete them with ids!`)
           }
           this_sub_entry = this_sub_entry[0]
-          let originIDs = origin.map(_ => _.id)
+          let originIDs = thisorigin.map(_ => _.id)
           let oldOriginIDs = this_sub_entry.origin.map(_ => _.id)
           let addOrigin = []
-          for (let eachorigin of origin) {
+          for (let eachorigin of thisorigin) {
             if (!oldOriginIDs.includes(eachorigin.id)) {
               this_sub_entry.origin.push(eachorigin)
               addOrigin.push(eachorigin)
@@ -1295,7 +1311,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           thisresult.origin_flags = origin_flags
 
           hookActions = await processSubEntryHooks({
-            hooks, name, operation, meta, origin, entry, origin_flags,
+            hooks, name, operation, meta, origin: thisorigin, entry, origin_flags,
           })
           if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1314,7 +1330,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           }
         } else { // create new subtaglike
           origin_flags.entry = true
-          origin_flags.origin = origin
+          origin_flags.origin = thisorigin
 
           simple.id = await getNextSequenceValue(prefield) // not use session
           // fullquery delete the query_key, only have query_key_id
@@ -1344,7 +1360,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             })
           }
 
-          full_tag_query.origin = origin
+          full_tag_query.origin = thisorigin
           let index = entry[name].push(full_tag_query)
           this_sub_entry = entry[name][index - 1]
 
@@ -1353,7 +1369,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           thisresult.origin_flags = origin_flags
 
           hookActions = await processSubEntryHooks({
-            hooks, name, operation, meta, origin, entry, origin_flags,
+            hooks, name, operation, meta, origin: thisorigin, entry, origin_flags,
             new_sub_entry: this_sub_entry._doc
           })
           if (hookActions.length) thisresult.hookActions = hookActions
@@ -1388,6 +1404,15 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
     } else if (operation === '*') {
       for (let eachdata of data) {
         eachdata = Object.assign({}, eachdata)
+        let thisorigin
+        if (eachdata.origin) {
+          thisorigin = eachdata.origin
+          eachdata = clone(eachdata)
+          delete eachdata.origin
+        } else {
+          thisorigin = origin
+        }
+
         let eachdataraw = Object.assign({}, eachdata)
         // eachdata delete __query__
         let this_sub_entry = await querySub({entry, data: eachdata, field: name, session, entry_model})
@@ -1487,7 +1512,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         thisresult.modify_flags = {changeTaglike}
 
         hookActions = await processSubEntryHooks({
-          hooks, name, operation, meta, origin, entry,
+          hooks, name, operation, meta, origin: thisorigin, entry,
           old_sub_entry, new_sub_entry: this_sub_entry._doc
         })
         if (hookActions.length) thisresult.hookActions = hookActions
@@ -1528,13 +1553,17 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             throw Error(`inconsistant database, have duplicated subtaglike:${J(this_sub_entry)}, delete them with ids!`)
           }
           this_sub_entry = this_sub_entry[0]
-          entries.push(this_sub_entry)
+          if (eachdata.origin) {
+            entries.push({this_sub_entry, origin: eachdata.origin})
+          } else {
+            entries.push({this_sub_entry, origin})
+          }
         }
       } else {
         // must write with .map(_ => _), or will cause bug... don't know why
-        entries = entry[name].map(_ => _)
+        entries = entry[name].map(_ => ({this_sub_entry:_, origin}))
       }
-      for (let this_sub_entry of entries) {
+      for (let {this_sub_entry, origin} of entries) {
         let origin_flags = {}
         if (!this_sub_entry) {
           origin_flags.entry = false
@@ -1949,6 +1978,86 @@ async function bulkOP({operation, model, data, session, meta, origin, query, com
     throw error
   }
 }
+
+async function getAllAncestors ({model}) {
+  let fathers, children
+  let entries = await Models[model].aggregate([
+    {$match: Object.assign({}, query, {
+      $or:{
+        'fathers.origin.id': "manual",
+        'children.origin.id': "manual",
+      }
+    })},
+    {$project: {id: 1, fathers:1}}
+  ])
+  let entryDict = {}
+  for (let entry of entries) {
+    entryDict[entry.id] = entry
+    entry.ancestors = new Set()
+    fathers = entry.fathers.filter(_ => _.origin.some(__ => __.id === 'manual') )
+    entry.fathers = new Set(fathers)
+    children = entry.children.filter(_ => _.origin.some(__ => __.id === 'manual') )
+    entry.children = new Set(children)
+  }
+  while (true) {
+    let roots = entries.filter(_ => !(_.fathers.size) && !_.done)
+    if (roots) {
+      for (let root of roots) {
+        root.done = true
+        for (let childID of root.children) {
+          let child = entryDict[childID]
+          child.fathers.delete(root.id)
+          child.ancestors.add(root.id)
+          for (let ancestor of root.ancestors) {
+            child.ancestors.add(root.ancestor)
+          }
+        }
+      }
+    } else {
+      break
+    }
+  }
+  let result = {}
+  entries = entries.filter(_ => _.ancestors.size)
+  for (let entry of entries) {
+    result[entry.id] = entry
+  }
+  return result
+}
+async function getAncestors ({model, query, ancestorIDs}) {
+  if (!ancestorIDs) ancestorIDs = new Set()
+  let roots = await Models[model].aggregate([
+    {$match: Object.assign({}, query, {
+      'fathers.origin.id': "manual",
+    })},
+    {$project: {id: 1, fathers:1}}
+  ])
+  for (let root of roots) {
+    let fathersIDs = root.fathers.map(_ => _.id)
+    for (let fatherID of fatherIDs) {
+      if (!ancestorIDs.has(fatherID)) {
+        ancestorIDs.add(fatherID)
+        let newFathers = await getAncestors({model, query:{id: fatherID}, ancestorIDs})
+        for (let newFather of newFathers) {
+          ancestorIDs.add(newFather)
+        }
+      }
+    }
+  }
+  return Array.from(ancestorIDs)
+}
+
+//
+Object.assign(globals, {
+  api,
+  apiSessionWrapper,
+  bulkOP,
+  bulkOPSessionWrapper,
+  mongoose,
+  getRequire,
+  getAllAncestors,
+  getAncestors
+})
 
 // export
 export default {api, initModels, getRequire, bulkOP}
