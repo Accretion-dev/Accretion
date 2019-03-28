@@ -646,7 +646,7 @@ async function api({ operation, data, query, model, meta, field, session, origin
   }
 }
 async function processEntryHooks({hookActions, history, result, meta, origin, origin_flags, model, session, operation, withs, data, field, entry, oldEntry}) {
-  if (meta && meta.hookAction) return []
+  if (meta&&meta.noHook) return []
   for (let key of Object.keys(withs)) {
     if (key === 'flags' || key === 'r') continue
     for (let each of withs[key]) {
@@ -657,8 +657,26 @@ async function processEntryHooks({hookActions, history, result, meta, origin, or
   }
   let done = []
   let hooks = globals.pluginsData.hook[model]
+  let haveManualOrigin
+  if (Array.isArray(origin)) {
+    if (origin.length) { // origin = [] means delete all origins
+      haveManualOrigin = origin.some(_ => _.id === 'manual')
+    } else {
+      haveManualOrigin = true
+    }
+  } else {
+    haveManualOrigin = origin.id === 'manual'
+  }
+
   if (hooks && hooks.length) {
     for (let hook of hooks) {
+      // so by default, a hook will not be active when in api operation cause by another hook
+      if (!haveManualOrigin&&
+          (!hook.test||
+           (hook.test&&
+            !hook.test({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session})))) {
+        continue
+      }
       let thisHookActions = await hook({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session})
       if (thisHookActions && thisHookActions.length) {
         hookActions = [...hookActions, ...thisHookActions]
@@ -668,11 +686,14 @@ async function processEntryHooks({hookActions, history, result, meta, origin, or
   for (let hookAction of hookActions) {
     let thisHookAction = Object.assign({}, hookAction, {session})
     if (!thisHookAction.meta) {
-      thisHookAction.meta = {hookAction: true}
+      thisHookAction.meta = {history_stack: [{id: history._id, type: 'api'}]}
     } else {
-      thisHookAction.meta.hookAction = true
+      if (!thisHookAction.meta.history_stack) {
+        thisHookAction.meta.history_stack = [{id: history._id, type: 'api'}]
+      } else {
+        thisHookAction.meta.history_stack.push({id: history._id, type: 'api'})
+      }
     }
-    thisHookAction.meta.api_parent_history = history._id
     // await apiSessionWrapper(thisHookAction)
     let __ = await bulkOPSessionWrapper(thisHookAction)
     delete thisHookAction.session
@@ -686,11 +707,27 @@ async function processEntryHooks({hookActions, history, result, meta, origin, or
   }
   return done
 }
-async function processSubEntryHooks({hooks, name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry, session, changeTaglike, full_delete}) {
+async function processSubEntryHooks({hooks, name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry, session, changeTaglike, full_delete, raw_origin}) {
+  if (meta&&meta.noHook) return []
   let hookActions = []
-  if (meta && meta.hookAction) return []
+  let haveManualOrigin
+  if (Array.isArray(raw_origin)) {
+    if (raw_origin.length) { // origin = [] means delete all origins
+      haveManualOrigin = raw_origin.some(_ => _.id === 'manual')
+    } else {
+      haveManualOrigin = true
+    }
+  } else {
+    haveManualOrigin = raw_origin.id === 'manual'
+  }
   for (let hook of hooks) {
-    let newHookActions = await hook({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry, session, changeTaglike, full_delete})
+    if (!haveManualOrigin&&
+        (!hook.test||
+         (hook.test&&
+          !hook.test({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry, session, changeTaglike, full_delete, raw_origin})))) {
+      continue
+    }
+    let newHookActions = await hook({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry, session, changeTaglike, full_delete, raw_origin})
     if (newHookActions && newHookActions.length) {
       hookActions = [...hookActions, ...newHookActions]
     }
@@ -883,7 +920,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       if (hooks && hooks.length) {
         for (let hook of hooks) {
           if (hook.preDelete) {
-            await hook.preDelete({operation, meta, origin, model, data, field, entry, session})
+            await hook.preDelete({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, session})
           }
         }
       }
@@ -892,10 +929,6 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       let withs = {}
       let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session, origin: [], meta}) // origin be null to delete all tags
       withs = thisresult
-
-      let simple = await entry.remove()
-      let result = simple
-      let modelID = result.id
 
       if (withs.r) { // delete
         for (let amodel of Object.keys(withs.r)) {
@@ -917,6 +950,10 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
           }
         }
       }
+
+      let simple = await entry.remove()
+      let result = simple
+      let modelID = result.id
 
       let returnData = {operation, modelID, model, field, data, query, result, withs, meta, origin, origin_flags, hookActions}
       let history = await saveHistory(returnData, session)
@@ -1077,6 +1114,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
   }
   const reverseMap = {fathers: 'children', children: 'fathers'}
   let revType = reverseMap[type]
+  let raw_origin = origin
   if (operation === '+') {
     for (let eachdata of fulldata) {
       let origin_flags = {}
@@ -1107,7 +1145,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
 
         hookActions = await processSubEntryHooks({
           hooks, name:type, operation, meta, origin, entry, origin_flags,
-          new_sub_entry: thisresult, session,
+          new_sub_entry: thisresult, session, raw_origin
         })
         if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1122,7 +1160,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
 
         hookActions = await processSubEntryHooks({
           hooks, name:type, operation, meta, origin, entry, origin_flags,
-          new_sub_entry: thisresult, session
+          new_sub_entry: thisresult, session, raw_origin
         })
         if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1166,7 +1204,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
 
           hookActions = await processSubEntryHooks({
             hooks, name:type, operation, meta, origin, entry, origin_flags,
-            old_sub_entry: thisresult, session
+            old_sub_entry: thisresult, session, raw_origin
           })
           if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1185,7 +1223,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
 
       hookActions = await processSubEntryHooks({
         hooks, name:type, operation, meta, origin, entry, origin_flags,
-        old_sub_entry: thisresult, session
+        old_sub_entry: thisresult, session, raw_origin
       })
       if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1227,6 +1265,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
   let other_entry
   let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
   let hookActions
+  let raw_origin = origin
 
   if (field) { // e.g. metadatas.flags, tags.flags
     let result = []
@@ -1312,7 +1351,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 
           hookActions = await processSubEntryHooks({
             hooks, name, operation, meta, origin: thisorigin, entry, origin_flags, session,
-            old_sub_entry: this_sub_entry
+            old_sub_entry: this_sub_entry, raw_origin
           })
           if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1371,7 +1410,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 
           hookActions = await processSubEntryHooks({
             hooks, name, operation, meta, origin: thisorigin, entry, origin_flags,
-            new_sub_entry: this_sub_entry._doc, session
+            new_sub_entry: this_sub_entry._doc, session, raw_origin
           })
           if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1515,7 +1554,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         hookActions = await processSubEntryHooks({
           hooks, name, operation, meta, origin: thisorigin, entry,
           old_sub_entry, new_sub_entry: this_sub_entry._doc, session,
-          changeTaglike
+          changeTaglike, raw_origin
         })
         if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1591,7 +1630,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 
             hookActions = await processSubEntryHooks({
               hooks, name, operation, meta, origin, entry, origin_flags,
-              old_sub_entry: this_sub_entry, session, full_delete
+              old_sub_entry: this_sub_entry, session, full_delete, raw_origin
             })
             if (hookActions.length) toReturn.hookActions = hookActions
 
@@ -1628,7 +1667,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 
         hookActions = await processSubEntryHooks({
           hooks, name, operation, meta, origin, entry, origin_flags,
-          old_sub_entry, session, full_delete
+          old_sub_entry, session, full_delete, raw_origin
         })
         if (hookActions.length) thisresult.hookActions = hookActions
 
@@ -1643,7 +1682,6 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           taglike.r[entry_model] = taglike.r[entry_model].filter(_ => _ !== code)
           await taglike.save()
         }
-
         if (name === 'relations') { // relationsDeleteHook
           let {other_model, other_id} = this_sub_entry
           let other_entry = await Models[other_model].find({id: other_id}).session(session) // process this later, so use the global name
@@ -1972,7 +2010,11 @@ async function bulkOP({operation, model, data, session, meta, origin, query, com
       operation:bulkOperation, data, meta, origin, field
     }); history.$session(session);
     history = await history.save();
-    meta.parent_history = history._id
+    if (!meta.history_stack) {
+      meta.history_stack = [{id: history._id, type: 'bulkOP'}]
+    } else {
+      meta.history_stack.push({id: history._id, type: 'bulkOP'})
+    }
     let result = await bulkOPSessionWrapper({operation, model, data, session, meta, origin, query, common})
     await session.commitTransaction()
     return result

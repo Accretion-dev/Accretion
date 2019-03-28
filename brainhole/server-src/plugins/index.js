@@ -68,7 +68,7 @@ async function pluginAPI({operation, uid, component, componentUID}) {
     history = await history.save()
     // if meta.hookAction is true, api will not process any hook
     // useful when what to make a 'clean' api operation
-    let meta = {plugin_parent_history: history._id, hookAction: true}
+    let meta = {history_stack: [{id: history._id, type: 'pluginAPI'}], noHook: true}
     if (component === 'hook') {
       let hook
       if (operation === 'on') {

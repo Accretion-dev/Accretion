@@ -70,7 +70,6 @@ test.serial('Plugin: officialPlugin', async t => {
     await testData({r, componentUID, op:'on', type:'data'})
     r = await globals.pluginAPI({operation:'off', uid, component, componentUID})
     await testData({r, componentUID, op:'off', type:'data'})
-    return
   }
   if((tname='test hook groupRelations')) {
     component = 'hook'
@@ -175,7 +174,6 @@ test.serial('Plugin: officialPlugin', async t => {
       result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
       t.true((await globals.Models.Relation.findOne({name: 'simular'})).origin.length == 1)
       t.true((await globals.Models.Relation.findOne({name: 'translation'})).origin.length == 1)
-      return
       await testTagRelationCount([
         ['good', 1,],
         ['nice', 2,],
@@ -665,7 +663,7 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.Models.Relation.deleteMany({})
     }
   }
-  if(tname='test hook addAncesotrTags') {
+  if((tname='test hook addAncesotrTags')) {
     component = 'hook'
     componentUID = `${uid}[${component}]addAncestorTags`
     if(tname='add unitttest data') {
@@ -774,6 +772,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 4],
         ['5', 6],
       ])
+      // +
       result = await globals.api({
         operation: '+',
         model: 'Article',
@@ -801,6 +800,7 @@ test.serial('Plugin: officialPlugin', async t => {
       //    1.3.1.2, 1.3.1, 1.3, 1,
       // 4: 1.1.1.1, 1.1.1, 1.1, 1, 3.2, 3
       // 5: 1.2.1, 1.2, 1, 1.3.1.1, 1.3.1, 1.3
+      // -
       result = await globals.api({
         operation: '-',
         model: 'Article',
@@ -819,6 +819,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 4],
         ['5', 6],
       ])
+      // -
       result = await globals.api({
         operation: '-',
         model: 'Article',
@@ -849,6 +850,7 @@ test.serial('Plugin: officialPlugin', async t => {
       //    1.3.1.2, 1.3.1, 1.3, 1,
       // 4: 1.1.1.1, 1.1.1, 1.1, 1
       // 5: 1.2.1, 1.2, 1, 1.3.1.1, 1.3.1, 1.3
+      // -
       result = await globals.api({
         operation: '-',
         model: 'Article',
@@ -878,6 +880,7 @@ test.serial('Plugin: officialPlugin', async t => {
       await testTagArticleRevCount([
         ['1.3.1.2', 1]
       ])
+      // -
       result = await globals.api({
         operation: '-',
         model: 'Article',
@@ -896,6 +899,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 4],
         ['5', 6],
       ])
+      // -
       result = await globals.api({
         operation: '-',
         model: 'Article',
@@ -914,6 +918,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 4],
         ['5', 6],
       ])
+      // +
       result = await globals.api({
         operation: '+',
         model: 'Article',
@@ -960,6 +965,7 @@ test.serial('Plugin: officialPlugin', async t => {
       //    2.2, 2
       // 3: 3.2, 3
       // 4: 1.1.1.1, 1.1.1, 1.1, 1
+      // +
       result = await globals.api({
         operation: '+',
         model: 'Tag',
@@ -977,6 +983,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['3', 4],
         ['4', 4],
       ])
+      // -
       result = await globals.api({
         operation: '-',
         model: 'Tag',
@@ -994,6 +1001,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['3', 2],
         ['4', 4],
       ])
+      // -
       result = await globals.api({
         operation: '-',
         model: 'Tag',
@@ -1018,6 +1026,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['3', 2],
         ['4', 4],
       ])
+      // -
       result = await globals.api({
         operation: '-',
         model: 'Tag',
@@ -1043,6 +1052,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 2],
       ])
       // delete a tag
+      // -
       result = await globals.api({
         operation: '-',
         model: 'Tag',
@@ -1062,6 +1072,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 2],
       ])
       // delete a tag
+      // -
       result = await globals.api({
         operation: '-',
         model: 'Tag',
@@ -1096,6 +1107,9 @@ test.serial('Plugin: officialPlugin', async t => {
         ['3', 1],
         ['4', 1],
       ])
+      await globals.Models.Tag.deleteMany({})
+      await globals.Models.Relation.deleteMany({})
+      await globals.Models.Article.deleteMany({})
     }
   }
   if(0&&(tname='test hook simularTags')) {

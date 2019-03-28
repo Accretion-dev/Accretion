@@ -227,6 +227,9 @@ async function gen(parameters) {
   relationIDs = relationIDs.map(_ => _.id)
   // this function will be injected into the taglikeAPI
   async function preventRelationDelete ({operation, result, meta, origin, origin_flags, model, withs, data, field, entry}) {
+    return []
+  }
+  preventRelationDelete.preDelete = async ({operation, result, meta, origin, origin_flags, model, withs, data, field, entry}) => {
     if (operation==='-'&&!field) {
       if (relationIDs.includes(entry.id)) {
         if (origin_flags.entry) {
@@ -287,6 +290,9 @@ async function gen(parameters) {
       let r = { }
       for (let id of groups) {
         let groupRelation = await globals.Models.Relation.findOne({id}).session(session)
+        if (!groupRelation) {
+          throw Error(`inconsistant database, groupRelation ${id} has been deleted!`)
+        }
         let {tags, thisGroupMap} = await getGroupMap({groupRelation, session})
         r[id] = {tags, oldGroupMap: thisGroupMap, groupRelation}
       }
