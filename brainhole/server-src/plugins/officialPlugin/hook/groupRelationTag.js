@@ -200,14 +200,14 @@ async function deleteAllGroupRelations () {
 }
 async function turnOn ({meta}) {
   console.log(`turn on ${hook.uid}`)
-  let origin = { id: hook.uid }
+  let origin = { id: hook.uid, hook: hook.uid }
   let toAdd = await addGroupRelations()
   let result = await globals.bulkOP({operation:"+", data: [toAdd], meta, origin})
   return result
 }
 async function turnOff ({meta}) {
   console.log(`turn off ${hook.uid}`)
-  let origin = { id: hook.uid }
+  let origin = { id: hook.uid, hook: hook.uid }
   let toDel = await deleteAllGroupRelations()
   let result = await globals.bulkOP({operation:"-", data: [toDel], meta, origin})
   return result
@@ -234,7 +234,7 @@ async function gen(parameters) {
   async function groupRelationTagOPs({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session}) {
     let doc = entry._doc
     if (!doc.relations) return
-    origin = { id: hook.uid }
+    origin = { id: hook.uid, hook: hook.uid }
     let thisRelationIDs, groups, final
     if (operation === "+" || operation === "*") {
       thisRelationIDs = doc.relations.map(_ => _.relation_id)
