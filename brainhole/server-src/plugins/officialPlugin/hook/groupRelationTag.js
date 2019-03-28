@@ -212,6 +212,10 @@ async function turnOff ({meta}) {
   let result = await globals.bulkOP({operation:"-", data: [toDel], meta, origin})
   return result
 }
+let data = [{model: 'Relation', data:[
+  {name: 'simular'},
+  {name: 'translation'},
+]}]
 
 // this is a function generator, it return the real hook function with parameters
 async function gen(parameters) {
@@ -303,6 +307,7 @@ let hook = {
     'translation',
   ]},
   function: gen,
+  data,
   turnOn,
   turnOff
 }
