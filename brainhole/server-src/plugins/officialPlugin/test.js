@@ -1167,31 +1167,30 @@ test.serial('Plugin: officialPlugin', async t => {
 
           {name: 'abcd', relations:[
             {relation: {name: 'disambiguation'}, from:{name: 'a'}},
+            {relation: {name: 'disambiguation'}, from:{name: 'b'}},
+            {relation: {name: 'disambiguation'}, from:{name: 'c'}},
+            {relation: {name: 'disambiguation'}, from:{name: 'd'}},
           ]},
+          {name: 'a'},
+          {name: 'b'},
+          {name: 'c'},
+          {name: 'd'},
 
+          {name: 'xyz', relations:[
+            {relation: {name: 'disambiguation'}, from:{name: 'x'}},
+            {relation: {name: 'disambiguation'}, from:{name: 'y'}},
+            {relation: {name: 'disambiguation'}, from:{name: 'z'}},
+          ]},
+          {name: 'x'},
+          {name: 'y'},
+          {name: 'z'},
 
         ]},
         {model: "Article", data: [
           // test the next hook
           {
             title: `${tname} 1`,
-            tags:[
-              {tag: {name: 'good'}},
-              {tag: {name: 'evil'}},
-              {tag: {name: 'famish'}},
-            ],
-          },
-          {
-            title: `${tname} 2`,
-            tags:[ {tag: {name: 'good'}}]
-          },
-          {
-            title: `${tname} 3`,
-            tags:[ {tag: {name: 'awful'}}]
-          },
-          {
-            title: `${tname} 4`,
-            tags:[ {tag: {name: 'famish'}}]
+            tags:[ ],
           },
         ]}
       ]
