@@ -144,12 +144,77 @@ async function gen(parameters) {
     ]}]
     return result
   }
-  let result = {
-    tags: ancestorTags
+  async function tagFamilyChange({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry, session, full_delete}) {
+    let entry_model = entry.schema.options.collection
+    if (entry_model !== 'Tag') return []
+    if (!origin_flags.origin.some(_ => _.id === 'manual')) return []
+    let this_sub_entry = operation==='+' ? new_sub_entry : old_sub_entry
+    let father, child
+    if (name === 'fathers') {
+      father = {id: this_sub_entry.id}
+      child = {id: entry.id}
+    } else if (name === 'children') {
+      father = {id: entry.id}
+      child = {id: this_sub_entry.id}
+    } else {
+      throw Error('should not be here')
+    }
+    let offsprings = await globals.getOffsprings({model:'Tag', query:child})
+    let ancestors = await globals.getAncestors({model:'Tag', query:father})
+    ancestors.push(father.id)
+    offsprings.push(child.id)
+    result = []
+    for (let model of globals.WithsDict.WithTag) {
+      let modelresult = {
+        model, field:'tags', data:[]
+      }
+      // add or delete a new tag for all the offsprings of father
+      for (let offspring of offsprings) {
+        let relatedEntries = await globals.Models[model].aggregate([
+          {$match: {
+            tags: {
+              $elemMatch: {
+                tag_id: offspring,
+                'origin.id': 'manual',
+              }
+            },
+          }},
+          {$project: {id: 1, tags: 1}}
+        ])
+        let datas = relatedEntries.map(thisentry => {
+          let that_sub_entry = thisentry.tags.find(_ => _.tag_id === offspring)
+          return {
+            id: thisentry.id,
+            tags: operation === '+'
+                  ?
+                  ancestors.map(__ => ({
+                    tag_id: __,
+                    origin:[{
+                      id: `${hook.uid}-${that_sub_entry.id}`,
+                      hook: `${hook.uid}`
+                  }]}))
+                  :
+                  ancestors.map(__ => ({
+                    __query__: {tag_id: __},
+                    origin:[{
+                      id: `${hook.uid}-${that_sub_entry.id}`,
+                      hook: `${hook.uid}`
+                  }]}))
+          }
+        })
+        modelresult.data = [...modelresult.data, ...datas]
+      }
+      if (modelresult.data.length) {
+        result.push(modelresult)
+      }
+    }
+    return [{operation, data: result}]
   }
-  //for (let name of globals.WithsDict.WithTag) {
-  //  result[name] = ancestorTags
-  //}
+  let result = {
+    tags: ancestorTags,
+    fathers: tagFamilyChange,
+    children: tagFamilyChange,
+  }
   return result
 }
 let hook = {

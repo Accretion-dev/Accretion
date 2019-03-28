@@ -34,7 +34,7 @@ test.serial('Plugin: officialPlugin', async t => {
     let datacal = []
     for (let data of datas) {
       let obj = await globals.Models.Article.findOne({title: data[0]})
-      if (!obj) t.fail(`Article name ${data[0]} not exists`)
+      if (!obj) t.fail(`Article title ${data[0]} not exists`)
       datacal.push([data[0], obj.tags.length])
     }
     t.deepEqual(datacal, datas)
@@ -786,7 +786,7 @@ test.serial('Plugin: officialPlugin', async t => {
       ])
       // 1: 1.2.2.1, 1.2.2, 1.2, 1
       //    1.3.1, 1.3,
-      //    1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      //    1.1.1.1.1, 1.1.1.1, 1.1.1, 1.1
       // 2: 1.3.1.2, 1.3.1, 1.3, 1, 3.2, 3
       //    2.2, 2
       // 3: 3.2, 3
@@ -834,7 +834,7 @@ test.serial('Plugin: officialPlugin', async t => {
       ])
       // 1: 1.2.2.1, 1.2.2, 1.2, 1
       //    1.3.1, 1.3,
-      //    1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      //    1.1.1.1.1, 1.1.1.1, 1.1.1, 1.1
       // 2: 1.3.1.2, 1.3.1, 1.3, 1, 3.2, 3
       //    2.2, 2
       // 3: 3.2, 3
@@ -854,7 +854,7 @@ test.serial('Plugin: officialPlugin', async t => {
       })
       // 1: 1.2.2.1, 1.2.2, 1.2, 1
       //    1.3.1, 1.3,
-      //    1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      //    1.1.1.1.1, 1.1.1.1, 1.1.1, 1.1
       // 2: 1.3.1.2, 1.3.1, 1.3, 1, 3.2, 3
       //    2.2, 2
       // 3: 3.2, 3
@@ -906,9 +906,27 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 4],
         ['5', 6],
       ])
+      result = await globals.api({
+        operation: '+',
+        model: 'Article',
+        field: 'tags',
+        query: {title: '3'},
+        data:{
+          tags:[
+            {tag:{name:'3.2'}},
+          ]
+        }
+      })
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 2],
+        ['4', 4],
+        ['5', 6],
+      ])
       // 1: 1.2.2.1, 1.2.2, 1.2, 1
       //    1.3.1, 1.3,
-      //    1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      //    1.1.1.1.1, 1.1.1.1, 1.1.1, 1.1
       // 2: 1.3.1.2, 1.3.1, 1.3, 1, 3.2, 3
       //    2.2, 2
       // 3: 3.2, 3
@@ -922,13 +940,154 @@ test.serial('Plugin: officialPlugin', async t => {
       await testTagCount([
         ['1', 10],
         ['2', 8],
-        ['3', 0],
+        ['3', 2],
         ['4', 4],
       ])
     }
     if(tname='add and delete tag family, refresh all related entries'){
+      // 1: 1.2.2.1, 1.2.2, 1.2, 1
+      //    1.3.1, 1.3,
+      //    1.1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      // 2: 1.3.1.2, 1.3.1, 1.3, 1, 3.2, 3
+      //    2.2, 2
+      // 3: 3.2, 3
+      // 4: 1.1.1.1, 1.1.1, 1.1, 1
+      result = await globals.api({
+        operation: '+',
+        model: 'Tag',
+        field: 'fathers',
+        query: {name: '3'},
+        data:{
+          fathers:[
+            {name:'2.2'},
+          ]
+        }
+      })
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 4],
+        ['4', 4],
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        field: 'fathers',
+        query: {name: '3'},
+        data:{
+          fathers:[
+            {name:'2.2'},
+          ]
+        }
+      })
+      await testTagCount([
+        ['1', 10],
+        ['2', 8],
+        ['3', 2],
+        ['4', 4],
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        field: 'fathers',
+        query: {name: '1.3.1.2'},
+        data:{
+          fathers:[
+            {name:'3.2'},
+          ]
+        }
+      })
+      // 1: 1.2.2.1, 1.2.2, 1.2, 1
+      //    1.3.1, 1.3,
+      //    1.1.1.1, 1.1.1.1, 1.1.1, 1.1
+      // 2: 1.3.1.2, 1.3.1, 1.3, 1,
+      //    2.2, 2
+      // 3: 3.2, 3
+      // 4: 1.1.1.1.1 1.1.1, 1.1, 1
+      await testTagCount([
+        ['1', 10],
+        ['2', 6],
+        ['3', 2],
+        ['4', 4],
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        field: 'children',
+        query: {name: '1.1'},
+        data:{
+          children:[
+            {name:'1.1.1'},
+          ]
+        }
+      })
+      // 1: 1.2.2.1, 1.2.2, 1.2, 1
+      //    1.3.1, 1.3,
+      //    1.1.1.1.1, 1.1.1.1, 1.1.1
+      // 2: 1.3.1.2, 1.3.1, 1.3, 1,
+      //    2.2, 2
+      // 3: 3.2, 3
+      // 4: 1.1.1.1, 1.1.1
+      await testTagCount([
+        ['1', 9],
+        ['2', 6],
+        ['3', 2],
+        ['4', 2],
+      ])
+      // delete a tag
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: '1.3'},
+      })
+      // 1: 1.2.2.1, 1.2.2, 1.2, 1
+      //    1.3.1
+      //    1.1.1.1.1, 1.1.1.1, 1.1.1
+      // 2: 1.3.1.2, 1.3.1
+      //    2.2, 2
+      // 3: 3.2, 3
+      // 4: 1.1.1.1, 1.1.1
+      await testTagCount([
+        ['1', 8],
+        ['2', 4],
+        ['3', 2],
+        ['4', 2],
+      ])
+      // delete a tag
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: '1.2.2'},
+      })
+      // 1: 1.2.2.1,
+      //    1.3.1
+      //    1.1.1.1.1, 1.1.1.1, 1.1.1
+      // 2: 1.3.1.2, 1.3.1
+      //    2.2, 2
+      // 3: 3.2, 3
+      // 4: 1.1.1.1, 1.1.1
+      await testTagCount([
+        ['1', 5],
+        ['2', 4],
+        ['3', 2],
+        ['4', 2],
+      ])
     }
     if(tname='turn off and delete unittest data'){
+      result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      // 1: 1.2.2.1,
+      //    1.3.1
+      //    1.1.1.1.1, 1.1.1
+      // 2: 1.3.1.2
+      //    2.2
+      // 3: 3.2
+      // 4: 1.1.1.1
+      await testTagCount([
+        ['1', 4],
+        ['2', 2],
+        ['3', 1],
+        ['4', 1],
+      ])
     }
   }
   if(0&&(tname='test hook simularTags')) {

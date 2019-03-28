@@ -2031,7 +2031,8 @@ async function getAllAncestors ({model}) {
 async function getAncestors ({model, query, ancestorIDs}) {
   if (!ancestorIDs) ancestorIDs = new Set()
   let root = await globals.Models[model].findOne(query)
-  let fatherIDs = root.fathers.map(_ => _.id)
+  let fathers = root.fathers.filter(_ => _.origin.some(__ => __.id === 'manual') )
+  let fatherIDs = fathers.map(_ => _.id)
   for (let fatherID of fatherIDs) {
     if (!ancestorIDs.has(fatherID)) {
       ancestorIDs.add(fatherID)
@@ -2039,6 +2040,19 @@ async function getAncestors ({model, query, ancestorIDs}) {
     }
   }
   return Array.from(ancestorIDs)
+}
+async function getOffsprings ({model, query, offspringIDs}) {
+  if (!offspringIDs) offspringIDs = new Set()
+  let root = await globals.Models[model].findOne(query)
+  let children = root.children.filter(_ => _.origin.some(__ => __.id === 'manual') )
+  let childrenIDs = children.map(_ => _.id)
+  for (let childrenID of childrenIDs) {
+    if (!offspringIDs.has(childrenID)) {
+      offspringIDs.add(childrenID)
+      await getOffsprings({model, query:{id: childrenID}, offspringIDs})
+    }
+  }
+  return Array.from(offspringIDs)
 }
 
 //
@@ -2050,7 +2064,8 @@ Object.assign(globals, {
   mongoose,
   getRequire,
   getAllAncestors,
-  getAncestors
+  getAncestors,
+  getOffsprings
 })
 
 // export
