@@ -1189,14 +1189,5 @@ test.serial('Plugin: officialPlugin', async t => {
 
     }
   }
-  if(tname='test hook ambiguousTags') {
-    if(tname='add unitttest data') {
-    }
-    if(tname='turn on and turn off'){
-    }
-
-    if('turn off and delete unittest data'){
-    }
-  }
   t.pass()
 })
