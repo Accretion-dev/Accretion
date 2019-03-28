@@ -84,22 +84,22 @@ test.serial('Plugin: officialPlugin', async t => {
         {model: "Tag", data: [
           // test simular
           {name: 'good', relations: [
-            {relation: {name: 'simular'}, from:{name: 'nice'}},
+            {relation: {name: 'simular'}, other:{name: 'nice'}},
           ]},
           {name: 'nice', relations: [
-            {relation: {name: 'simular'}, from:{name: 'great'}},
+            {relation: {name: 'simular'}, other:{name: 'great'}},
           ]},
           {name: 'great', relations: [
-            {relation: {name: 'simular'}, from:{name: 'fine'}},
+            {relation: {name: 'simular'}, other:{name: 'fine'}},
           ]
           },
           {name: 'fine'},
 
           {name: 'bad', relations: [
-            {relation: {name: 'simular'}, from:{name: 'evil'}},
+            {relation: {name: 'simular'}, other:{name: 'evil'}},
           ]},
           {name: 'evil', relations: [
-            {relation: {name: 'simular'}, from:{name: 'awful'}},
+            {relation: {name: 'simular'}, other:{name: 'awful'}},
           ]},
           {name: 'awful'},
 
@@ -109,29 +109,29 @@ test.serial('Plugin: officialPlugin', async t => {
 
           // test translation
           {name: 'foo(en)', relations:[
-            {relation: {name: 'translation'}, from:{name: 'foo(zh)'}},
+            {relation: {name: 'translation'}, other:{name: 'foo(zh)'}},
           ]},
           {name: 'foo(zh)', relations:[
-            {relation: {name: 'translation'}, from:{name: 'foo(jp)'}},
+            {relation: {name: 'translation'}, other:{name: 'foo(jp)'}},
           ]},
           {name: 'foo(jp)', relations:[
-            {relation: {name: 'translation'}, from:{name: 'foo(fr)'}},
+            {relation: {name: 'translation'}, other:{name: 'foo(fr)'}},
           ]},
           {name: 'foo(fr)'},
 
           {name: 'bar(en)', relations:[
-            {relation: {name: 'translation'}, from:{name: 'bar(zh)'}},
+            {relation: {name: 'translation'}, other:{name: 'bar(zh)'}},
           ]},
           {name: 'bar(zh)', relations:[
-            {relation: {name: 'translation'}, from:{name: 'bar(jp)'}},
+            {relation: {name: 'translation'}, other:{name: 'bar(jp)'}},
           ]},
           {name: 'bar(jp)'},
           {name: 'bar(fr)'},
 
           {name: 'ha(en)', relations:[
-            {relation: {name: 'translation'}, from:{name: 'ha(zh)'}},
-            {relation: {name: 'translation'}, from:{name: 'ha(jp)'}},
-            {relation: {name: 'translation'}, from:{name: 'ha(fr)'}},
+            {relation: {name: 'translation'}, other:{name: 'ha(zh)'}},
+            {relation: {name: 'translation'}, other:{name: 'ha(jp)'}},
+            {relation: {name: 'translation'}, other:{name: 'ha(fr)'}},
           ]},
           {name: 'ha(zh)'},
           {name: 'ha(jp)'},
@@ -1112,39 +1112,64 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.Models.Article.deleteMany({})
     }
   }
-  if(0&&(tname='test hook simularTags')) {
+  return
+  if((tname='test hook simularTags')) {
     component = 'hook'
     componentUID = `${uid}[${component}]simularTags`
     let hook = plugin.hook.find(_ => _.uid === componentUID)
     if(tname='add unitttest data') {
       data = [
         {model: "Relation", data: [
-          {name: 'simular'},
+          {name: 'simular', symmetric: true},
+          {name: 'translation', symmetric: true},
+          {name: 'disambiguation', symmetric: false},
         ]},
         {model: "Tag", data: [
-          // test clarify hook
           {name: 'good', relations: [
-            {relation: {name: 'simular'}, from:{name: 'nice'}},
-            {relation: {name: 'simular'}, from:{name: 'great'}},
-            {relation: {name: 'simular'}, from:{name: 'fine'}},
+            {relation: {name: 'simular'}, other:{name: 'nice'}},
+            {relation: {name: 'simular'}, other:{name: 'great'}},
+            {relation: {name: 'simular'}, other:{name: 'fine'}},
           ]},
-          {name: 'nice'},
-          {name: 'great'},
-          {name: 'fine'},
+          {name: 'nice', relations: [
+            {relation: {name: 'simular'}, other:{name: 'great'}},
+          ]},
+          {name: 'great' },
+          {name: 'fine' },
 
           {name: 'bad', relations: [
-            {relation: {name: 'simular'}, from:{name: 'evil'}},
-            {relation: {name: 'simular'}, from:{name: 'awful'}},
+            {relation: {name: 'simular'}, other:{name: 'evil'}},
           ]},
-          {name: 'evil'},
+          {name: 'evil', relations: [
+            {relation: {name: 'simular'}, other:{name: 'awful'}},
+          ]},
           {name: 'awful'},
 
-          {name: 'hungry', relations: [
-            {relation: {name: 'simular'}, from:{name: 'starve'}},
-            {relation: {name: 'simular'}, from:{name: 'famish'}},
+          // test translation
+          {name: 'foo(en)', relations:[
+            {relation: {name: 'translation'}, other:{name: 'foo(zh)'}},
+            {relation: {name: 'translation'}, other:{name: 'foo(jp)'}},
+            {relation: {name: 'translation'}, other:{name: 'foo(fr)'}},
           ]},
-          {name: 'starve'},
-          {name: 'famish'},
+          {name: 'foo(zh)', relations:[
+            {relation: {name: 'translation'}, other:{name: 'foo(jp)'}},
+          ]},
+          {name: 'foo(jp)'},
+          {name: 'foo(fr)'},
+
+          {name: 'bar(en)', relations:[
+            {relation: {name: 'translation'}, other:{name: 'bar(zh)'}},
+          ]},
+          {name: 'bar(zh)', relations:[
+            {relation: {name: 'translation'}, other:{name: 'bar(jp)'}},
+          ]},
+          {name: 'bar(jp)'},
+          {name: 'bar(fr)'},
+
+          {name: 'abcd', relations:[
+            {relation: {name: 'disambiguation'}, from:{name: 'a'}},
+          ]},
+
+
         ]},
         {model: "Article", data: [
           // test the next hook
