@@ -7,7 +7,7 @@ globals.pluginsData = {}
 
 let components = ["hook", 'task', 'model', 'data']
 
-async function bulkAdd({data, componentUID, meta}) {
+async function bulkAdd({data, componentUID, meta, type}) {
   let query = ({model, data}) => {
     let required = globals.getRequire(model)
     let keys = []
@@ -17,19 +17,30 @@ async function bulkAdd({data, componentUID, meta}) {
     data = _.pick(data, keys)
     return data
   }
-  let result = await globals.bulkOP({operation: '+', data, query, origin:{id: componentUID}, meta})
+  let result = await globals.bulkOP({
+    operation: '+', data, query,
+    origin:{
+      id: `${componentUID}-${type}`,
+      hook: componentUID,
+      type,
+    },
+    meta,
+  })
   return result
 }
-async function bulkDel({componentUID, meta}) {
+async function bulkDel({componentUID, meta, rawdata, type}) {
   let result
-  let origin = {id: componentUID}
+  let origin = {id: `${componentUID}-${type}`}
+  let flattenData = globals.flattenData(rawdata)
+  let models = new Set(flattenData.map(_ => _.model))
   let data = []
-  for (let model of globals.topModels) {
+
+  for (let model of models) {
     let Model = globals.Models[model]
     let ids = await Model.aggregate([
       {
         $match: {
-          'origin.id': componentUID,
+          'origin.id': origin.id,
         },
       },
       {
@@ -64,7 +75,7 @@ async function pluginAPI({operation, uid, component, componentUID}) {
         try {
           thiscomponent.active = true
           if (thiscomponent.data) {
-            result.hook = await bulkAdd({data: thiscomponent.data, componentUID, meta})
+            result.hookData = await bulkAdd({data: thiscomponent.data, componentUID, meta, type:'hook-data'})
           }
           hook = globals.pluginsData.hook
           let updateHookErrors = await updateHooks(globals.plugins)
@@ -105,7 +116,7 @@ async function pluginAPI({operation, uid, component, componentUID}) {
             result.statistic = {total, field, fieldEntry, fieldOrigin}
           }
           if (thiscomponent.data) {
-            result.hook = await bulkDel({componentUID, meta})
+            result.hookData = await bulkDel({componentUID, meta, rawdata: thiscomponent.data, type: 'hook-data'})
           }
           await globals.Models.Plugins.findOneAndUpdate(
             {uid},
@@ -131,9 +142,9 @@ async function pluginAPI({operation, uid, component, componentUID}) {
       }
     } else if (component === 'data') {
       if (operation === 'on') {
-        result.data = await bulkAdd({data: thiscomponent.data, componentUID, meta})
+        result.data = await bulkAdd({data: thiscomponent.data, componentUID, meta, type: 'data'})
       } else if (operation === 'off') {
-        result.data = await bulkDel({componentUID, meta})
+        result.data = await bulkDel({componentUID, meta, rawdata: thiscomponent.data, type: 'data'})
       }
     }
     history.query = true

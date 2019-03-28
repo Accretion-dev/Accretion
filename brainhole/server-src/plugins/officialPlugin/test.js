@@ -3,17 +3,17 @@
 // see test-final.js for all the imports
 test.serial('Plugin: officialPlugin', async t => {
   let tname, result, refetch
-  async function testData({r, componentUID, op}) {
+  async function testData({r, componentUID, op, type}) {
     for (let each of r.data) {
       let obj = await globals.Models[each.model].findOne({id:each.id})
       if (op === 'on') {
         t.truthy(obj)
-        let origin = obj.origin.find(_ => _.id === componentUID)
+        let origin = obj.origin.find(_ => _.id.startsWith(componentUID) && _.type === type)
         t.truthy(origin)
       } else if (op === 'off') {
         if (obj) {
           t.truthy(obj)
-          let origin = obj.origin.find(_ => _.id === componentUID)
+          let origin = obj.origin.find(_ => _.id.startsWith(componentUID) && _.type === type)
           t.falsy(origin)
         } else {
           t.true(each.origin_flags.entry)
@@ -67,9 +67,10 @@ test.serial('Plugin: officialPlugin', async t => {
     component = 'data'
     componentUID = `${uid}[${component}]pluginHookDemo`
     r = await globals.pluginAPI({operation:'on', uid, component, componentUID})
-    await testData({r, componentUID, op:'on'})
+    await testData({r, componentUID, op:'on', type:'data'})
     r = await globals.pluginAPI({operation:'off', uid, component, componentUID})
-    await testData({r, componentUID, op:'off'})
+    await testData({r, componentUID, op:'off', type:'data'})
+    return
   }
   if((tname='test hook groupRelations')) {
     component = 'hook'
@@ -142,7 +143,11 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.bulkOP({operation: '+', data})
     }
     if(tname='turn on and off'){
+      t.true((await globals.Models.Relation.findOne({name: 'simular'})).origin.length == 1)
+      t.true((await globals.Models.Relation.findOne({name: 'translation'})).origin.length == 1)
       result = await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      t.true((await globals.Models.Relation.findOne({name: 'simular'})).origin.length == 2)
+      t.true((await globals.Models.Relation.findOne({name: 'translation'})).origin.length == 2)
       await testTagRelationCount([
         ['good', 3,],
         ['nice', 3,],
@@ -168,6 +173,9 @@ test.serial('Plugin: officialPlugin', async t => {
         ['ha(fr)', 3,],
       ])
       result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      t.true((await globals.Models.Relation.findOne({name: 'simular'})).origin.length == 1)
+      t.true((await globals.Models.Relation.findOne({name: 'translation'})).origin.length == 1)
+      return
       await testTagRelationCount([
         ['good', 1,],
         ['nice', 2,],

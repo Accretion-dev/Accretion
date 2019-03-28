@@ -2065,7 +2065,8 @@ Object.assign(globals, {
   getRequire,
   getAllAncestors,
   getAncestors,
-  getOffsprings
+  getOffsprings,
+  flattenData,
 })
 
 // export
