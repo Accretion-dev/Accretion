@@ -221,6 +221,7 @@ let hook = {
   uid: "addAncestorTags",
   name: "addAncestorTags",
   description: "When a tag is added for a model, automatically add all its ancestor as tag",
+  priority: 0,
   parameters: {},
   function: gen,
   turnOn,

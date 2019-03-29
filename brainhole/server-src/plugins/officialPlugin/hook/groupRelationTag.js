@@ -308,6 +308,7 @@ let hook = {
   uid: "groupRelationTag",
   name: "groupRelationTag",
   description: "if a=>b, b=>c, then auto add a=>c",
+  priority: -10,
   parameters: {groups: [
     'simular',
     'translation',

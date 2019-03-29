@@ -334,6 +334,7 @@ let hook = {
     Translation is a two way simular kind of relation, if tag A and tag B have the translation relation, when tag A is added(deleted), tag B should also be added(deleted), and vice versa.
     Disambiguation is a one way simular kind of relation, if tag A has a Disambiguation relation to tag B, when tag A is added(deleted), tag B should also be added(deleted), but NOT vice versa.
   `,
+  priority: 10,
   parameters: {relations: [
     {name: 'simular'},
     {name: 'translation'},

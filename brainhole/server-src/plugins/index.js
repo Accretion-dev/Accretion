@@ -6,7 +6,6 @@ import globals from "../globals"
 globals.pluginsData = {}
 
 let components = ["hook", 'task', 'model', 'data']
-
 async function bulkAdd({data, componentUID, meta, type}) {
   let query = ({model, data}) => {
     let required = globals.getRequire(model)
@@ -206,6 +205,8 @@ async function updateHooks (plugins) {
     fathers: [],
     children: [],
   }
+  let orderedHookData = []
+  let orderedHooks = []
   let initHookErrors = []
   for (let eachPlugin of plugins) {
     if (!eachPlugin.active) continue
@@ -213,22 +214,29 @@ async function updateHooks (plugins) {
       if (!eachHook.active) continue
       let uid = eachHook.uid
       let parameters = Object.assign({}, eachHook.parameters, {uid})
-      try {
-        let thishook = await eachHook.function(parameters)
-        for (let hooktype of Object.keys(thishook)) {
-          if (!HookAction[hooktype]) HookAction[hooktype] = []
-          HookAction[hooktype].push(thishook[hooktype])
-        }
-      } catch (error) {
-        initHookErrors.push({plugin:eachPlugin.uid, hook: eachHook.uid, error: error.message})
-      }
+      orderedHookData.push({uid, parameters, eachHook})
     }
-    if (eachPlugin.task) { // for auto run task
-      for (let eachTask of eachPlugin.task) {
+    //if (eachPlugin.task) { // for auto run task
+    //  for (let eachTask of eachPlugin.task) {
+    //  }
+    //}
+  }
+  orderedHookData = orderedHookData.sort((a,b)=> a.eachHook.priority - b.eachHook.priority)
+  for (let each of orderedHookData) {
+    let {uid, parameters, eachHook} = each
+    orderedHooks.push(eachHook)
+    try {
+      let thishook = await eachHook.function(parameters)
+      for (let hooktype of Object.keys(thishook)) {
+        if (!HookAction[hooktype]) HookAction[hooktype] = []
+        HookAction[hooktype].push(thishook[hooktype])
       }
+    } catch (error) {
+      initHookErrors.push({plugin:eachPlugin.uid, hook: eachHook.uid, error: error.message})
     }
   }
   globals.pluginsData.hook = HookAction
+  globals.pluginsData.orderedHooks = orderedHooks
   return initHookErrors
 }
 async function initPlugins ({allActive}) {
