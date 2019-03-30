@@ -829,7 +829,9 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
       return returnData
     } else { // e.g. add new tag, add new catalogues
       let entry = await Model.find(query).session(session)
-      if (entry.length != 1) throw Error(`(${operation}, ${model}) entry with query: ${J(query)} not unique: ${entry}`)
+      if (entry.length != 1) {
+        throw Error(`(${operation}, ${model}) entry with query: ${J(query)} not unique: ${entry}`)
+      }
       entry = entry[0]
 
       let result = await apiSingleField({operation, model, field, data, entry, query, meta, session, origin})

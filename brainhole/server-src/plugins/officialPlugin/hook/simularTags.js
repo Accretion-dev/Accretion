@@ -1,217 +1,367 @@
 import globals from "../../../globals"
 import _ from 'lodash'
 
-async function getGroupMap({groupRelation, session}) {
-  let thisGroupMatching = []
-  let thisGroupMap = {}
-  // all tags that have the group relations
-  let tags_ = globals.Models.Tag.aggregate([
-    {
-      $match: {
-        'relations.relation_id': groupRelation.id,
-        'relations.other_model': 'Tag',
-        'relations.origin.id': 'manual',
-      }
-    },
-    {
-      $project: {
-        id: 1,
-        name: 1,
-        relations: 1
-      }
-    }
-  ])
-  if (session) tags_ = tags_.session(session)
-  let tags = await tags_
-  // calculate thisGroupMap, like
-  //  {id0: [id0, id1, id2],id1: [id0, id1, id2],id2: [id0, id1, id2]}
-  for (let tag of tags) {
-    let thisid = tag.id
-    let thatids = tag.relations.filter(
-      _ => _.relation_id === groupRelation.id && _.origin.find(__ => __.id==='manual')
-    ).map(_ => _.other_id)
-    let fullids = [thisid, ...thatids]
-    let done = false
-    let thisMatch
-    for (let each of thisGroupMatching) {
-      let {data} = each
-      let intersection = _.intersection(data, fullids)
-      if (intersection.length) {
-        done = true
-        let __ = _.union(data, fullids)
-        each.data = __
-        thisMatch = each
-        break
-      }
-    }
-    if (!done) {
-      let __ = {data: fullids}
-      thisGroupMatching.push(__)
-      thisMatch = __
-    }
-    thisGroupMap[thisid] = thisMatch
-  }
-  return {tags, thisGroupMap}
-}
-async function getSingleGroupAdd ({groupRelation, session, thisid}) {
-  let {tags, thisGroupMap} = await getGroupMap({groupRelation, session})
-  let thisResult = {}
-  let thisAddData = []
-  let exists = []
-  if (thisid) tags = tags.filter(_ => thisGroupMap[_.id].data.includes(thisid))
-  for (let tag of tags) {
-    let thisid = tag.id
-    // relations that already exists (and have this hook origin)
-    let thatids = tag.relations.filter(_ =>
-      _.relation_id === groupRelation.id && ((_.origin.find(__ => __.id === hook.uid)))
-    ).map(_ => _.other_id)
-    let fullids = thisGroupMap[thisid].data
-    let newids = fullids = fullids.filter(_ => !thatids.includes(_))
-    let thisRelations = []
-    let thisExists
-    for (let newid of fullids) {
-      // force all all groups (thanks to the origin features)
-      if (newid > thisid) {
-        thisExists = `${thisid}-${newid}`
-        if (exists.includes(thisExists)) continue
-        exists.push(thisExists)
-        thisRelations.push({
-          relation_id: groupRelation.id,
-          other_id: newid,
-        })
-      } else if (newid < thisid) {
-        thisExists = `${newid}-${thisid}`
-        if (exists.includes(thisExists)) continue
-        exists.push(thisExists)
-        thisRelations.push({
-          relation_id: groupRelation.id,
-          other_id: newid,
-        })
-      }
-    }
-    thisAddData.push({
-      id: thisid,
-      relations:thisRelations
-    })
-  }
-  thisAddData = thisAddData.filter(_ => _.relations.length>0)
-  thisResult.data = thisAddData
-  thisResult.groupMap = thisGroupMap
-  return thisResult
-}
-async function getGroupsAdd () {
-  let groups = hook.parameters.groups
-  let result = { }
-  for (let group of groups) {
-    let groupRelation = await globals.Models.Relation.find({name: group})
-    if (!groupRelation.length) {
-      continue
-    } else if (groupRelation.length > 1) {
-      throw Error(`error in hook ${hook.uid}: more than one relation named '${group}'`)
-    }
-    groupRelation = groupRelation[0]
-    result[group] = await getSingleGroupAdd({groupRelation})
-  }
-  return result
-}
-async function addGroupRelations (newdata) {
-  if (!newdata) newdata = await getGroupsAdd()
+async function addSingleSimularTags({entry, subtag, session}) {
+  let todo = {}
+  let tags
   let result = {
-    model: 'Tag',
-    field: 'relations',
-    data:[],
+    model, field: 'tags', data: [
+      {id: entry.id}
+    ]
   }
-  for (let group of Object.keys(newdata)) {
-    for (let eachdata of newdata[group].data) {
-      result.data.push(eachdata)
-    }
-  }
-  return result
-}
-async function delGroupRelations ({r, field, id}) {
-  let thisData = []
-  let result = {
-    model: 'Tag',
-    field: 'relations',
-    data:thisData,
-  }
-  for (let group of Object.keys(r)) {
-    let {tags, oldGroupMap, newGroupMap, groupRelation} = r[group]
-    let relation_id = groupRelation.id
-    let oldKeys = Object.keys(oldGroupMap)
-    for (let key of oldKeys) {
-      if (Number(key) === id && !field) {
-        // delete the tag (and all its relations)
-        // do not need hook action for this taa
-        continue
-      }
-      let oldIDs, newIDs
-      oldIDs = oldGroupMap[key].data
-      if (!newGroupMap[key]) {
-        newIDs = []
+
+  // if not given newtags, addSimularTags for all possible tag
+  for (let relationID of hook.hookData.relationIDs) { // for each relation
+    let {symmetric, aorbAdd, relation} = hook.hookData.relations[relationID]
+    if (!newtag) {
+      if (relation.symmetric) {
+        tags = globals.Models.Tag.aggregate([
+          {
+            $match: {
+              relations: {
+                $elemMatch: {
+                  relation_id: relation.id,
+                  other_model: 'Tag',
+                }
+              }
+            }
+          },
+          {
+            $project: {
+              id: 1,
+              name: 1,
+              relations: 1
+            }
+          }
+        ])
       } else {
-        newIDs = newGroupMap[key].data
+        tags = globals.Models.Tag.aggregate([
+          {
+            $match: {
+              relations: {
+                $elemMatch: {
+                  relation_id: relation.id,
+                  other_model: 'Tag',
+                  aorb: aorbAdd
+                }
+              }
+            }
+          },
+          {
+            $project: {
+              id: 1,
+              name: 1,
+              relations: 1
+            }
+          }
+        ])
       }
-      let toDels = oldIDs.filter(_ => !newIDs.includes(_))
-      let toDelRelations = toDels.map(_ => ({
-        __query__: {
-          relation_id, other_id: _
+      if (session) tags = tags.session(session)
+      tags = await tags
+    } else {
+      let subrelationIDs
+      if (symmetric) {
+        subrelationIDs = newtag.relations.filter(__ => __.relation_id === relation.id).map(_ => _.id)
+      } else {
+        subrelationIDs = newtag.relations.filter(__ => __.relation_id === relation.id && __.aorb === relation.aorbAdd).map(_ => _.id)
+      }
+      tags = globals.Models.Tag.aggregate([
+        {
+          $match: {
+            'relations.id': {
+              $in: subrelationIDs
+            }
+          }
+        },
+        {
+          $project: {
+            id: 1,
+            name: 1,
+            relations: 1
+          }
         }
-      }))
-      if (toDelRelations.length) {
-        thisData.push({id: Number(key), relations: toDelRelations})
+      ])
+      if (session) tags = tags.session(session)
+      tags = await tags
+    }
+    let tagIDs = tags.map(_ => _.id)
+    let Tags = {}
+    for (let tag of tags) {
+      let todo
+      if (symmetric) {
+        todo = tag.relations.filter(__ => __.relation_id === relation.id).
+               map(_ => ({id: _.id, other_id: _.other_id}))
+      } else {
+        todo = tag.relations.filter(__ => __.relation_id === relation.id && __.aorb === aorbAdd).
+               map(_ => ({id: _.id, other_id: _.other_id}))
+      }
+      tag.todo = todo
+      Tags[tag.id] = tag
+    }
+
+    for (let model of globals.WithsDict.WithTag) {
+      let entries = await globals.Models[model].aggregate([
+        {$match: {
+          'tags.tag_id': { $in: tagIDs }
+        }},
+        {$project: {id: 1, tags: 1}}
+      ])
+      for (let entry of entries) {
+        if (!resultEntryDict[model][entry.id]) {
+          let toAdd = {
+            id: entry.id,
+            tags: [],
+          }
+          resultDict[model].data.push(toAdd)
+          resultEntryDict[model][entry.id] = toAdd
+        }
+        let toAddTags = resultEntryDict[model][entry.id].tags
+        for (let subtag of entry.tags) {
+          if (!Tags[subtag.tag_id]) continue
+          for (let eachtodo of Tags[subtag.tag_id].todo) {
+            let {id, other_id} = eachtodo
+            toAddTags.push({
+              tag_id: other_id,
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid}]
+            })
+          }
+        }
       }
     }
   }
+  result = result.filter(_ => _.data.length)
   return result
 }
-async function deleteAllGroupRelations () {
-  let tags = await globals.Models.Tag.aggregate([
-    {
-      $match: {
-        'relations.origin.id': hook.uid,
-      }
-    },
-    {
-      $project: {
-        id: 1,
-        name: 1,
-        relations: 1
-      }
+async function delSingleSimularTags({entry, subtag}) {
+  let todo = {}
+  let tags
+  let result = []
+  // resultDict['modelName']
+  let resultDict = {}
+  // resultDict['modelName'][entryID]
+  let resultEntryDict = {}
+  for (let model of globals.WithsDict.WithTag) {
+    let eachmodel = {
+      model, field: 'tags', data: []
     }
-  ])
-  let data = []
-  let deletedIDs = [[]]
-  for (let tag of tags) {
-    let relations = tag.relations.filter(_ => {
-      for (let eachorigin of _.origin) {
-        if (eachorigin.id === hook.uid && !deletedIDs.includes(_.id)) {
-          deletedIDs.push(_.id)
-          return true
+    result.push(eachmodel)
+    resultDict[model] = eachmodel
+    resultEntryDict[model] = {}
+  }
+
+  if (deltag) {
+
+
+  } else {
+    for (let relationID of hook.hookData.relationIDs) { // for each relation
+      let {symmetric, aorbAdd, relation} = hook.hookData.relations[relationID]
+      for (let model of globals.WithsDict.WithTag) {
+        let entries = await globals.Models[model].aggregate([
+          {$match: {
+            'tags.origin.hook': hook.uid
+          }},
+          {$project: {id: 1, tags: 1}}
+        ])
+        for (let entry of entries) {
+          if (!resultEntryDict[model][entry.id]) {
+            let toDel = {
+              id: entry.id,
+              tags: [],
+            }
+            resultDict[model].data.push(toDel)
+            resultEntryDict[model][entry.id] = toDel
+          }
+          let toDelTags = resultEntryDict[model][entry.id].tags
+          for (let subtag of entry.tags) {
+            if (!subtag.origin.some(_ => _.hook === hook.uid)) continue
+            let origin = subtag.origin.filter(_ => _.hook === hook.uid).map(_ => ({id: _.id}))
+            toDelTags.push({
+              id: subtag.id,
+              origin,
+            })
+          }
         }
       }
-    })
-    if (relations.length) {
-      data.push({ id: tag.id, relations: relations.map(_ => ({id: _.id})) })
     }
   }
-  let todo = {model: 'Tag', field:'relations', data}
-  return todo
+  result = result.filter(_ => _.data.length)
+  return result
 }
 
+async function addAllSimularTags() {
+  let todo = {}
+  let tags
+  let result = []
+  // resultDict['modelName']
+  let resultDict = {}
+  // resultDict['modelName'][entryID]
+  let resultEntryDict = {}
+  for (let model of globals.WithsDict.WithTag) {
+    let eachmodel = {
+      model, field: 'tags', data: []
+    }
+    result.push(eachmodel)
+    resultDict[model] = eachmodel
+    resultEntryDict[model] = {}
+  }
+
+  for (let relationID of hook.hookData.relationIDs) { // for each relation
+    let {symmetric, aorbAdd, relation} = hook.hookData.relations[relationID]
+    if (relation.symmetric) {
+      tags = await globals.Models.Tag.aggregate([
+        {
+          $match: {
+            relations: {
+              $elemMatch: {
+                relation_id: relation.id,
+                other_model: 'Tag',
+              }
+            }
+          }
+        },
+        {
+          $project: {
+            id: 1,
+            name: 1,
+            relations: 1
+          }
+        }
+      ])
+    } else {
+      tags = await globals.Models.Tag.aggregate([
+        {
+          $match: {
+            relations: {
+              $elemMatch: {
+                relation_id: relation.id,
+                other_model: 'Tag',
+                aorb: aorbAdd
+              }
+            }
+          }
+        },
+        {
+          $project: {
+            id: 1,
+            name: 1,
+            relations: 1
+          }
+        }
+      ])
+    }
+    tags = await tags
+    let tagIDs = tags.map(_ => _.id)
+    let Tags = {}
+    for (let tag of tags) {
+      let todo
+      if (symmetric) {
+        todo = tag.relations.filter(__ => __.relation_id === relation.id).
+               map(_ => ({id: _.id, other_id: _.other_id}))
+      } else {
+        todo = tag.relations.filter(__ => __.relation_id === relation.id && __.aorb === aorbAdd).
+               map(_ => ({id: _.id, other_id: _.other_id}))
+      }
+      tag.todo = todo
+      Tags[tag.id] = tag
+    }
+
+    for (let model of globals.WithsDict.WithTag) {
+      let entries = await globals.Models[model].aggregate([
+        {$match: {
+          'tags.tag_id': { $in: tagIDs }
+        }},
+        {$project: {id: 1, tags: 1}}
+      ])
+      for (let entry of entries) {
+        if (!resultEntryDict[model][entry.id]) {
+          let toAdd = {
+            id: entry.id,
+            tags: [],
+          }
+          resultDict[model].data.push(toAdd)
+          resultEntryDict[model][entry.id] = toAdd
+        }
+        let toAddTags = resultEntryDict[model][entry.id].tags
+        for (let subtag of entry.tags) {
+          if (!Tags[subtag.tag_id]) continue
+          for (let eachtodo of Tags[subtag.tag_id].todo) {
+            let {id, other_id} = eachtodo
+            toAddTags.push({
+              tag_id: other_id,
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid}]
+            })
+          }
+        }
+      }
+    }
+  }
+  result = result.filter(_ => _.data.length)
+  return result
+}
+async function delAllSimularTags() {
+  let todo = {}
+  let tags
+  let result = []
+  // resultDict['modelName']
+  let resultDict = {}
+  // resultDict['modelName'][entryID]
+  let resultEntryDict = {}
+  for (let model of globals.WithsDict.WithTag) {
+    let eachmodel = {
+      model, field: 'tags', data: []
+    }
+    result.push(eachmodel)
+    resultDict[model] = eachmodel
+    resultEntryDict[model] = {}
+  }
+
+  for (let relationID of hook.hookData.relationIDs) { // for each relation
+    let {symmetric, aorbAdd, relation} = hook.hookData.relations[relationID]
+    for (let model of globals.WithsDict.WithTag) {
+      let entries = await globals.Models[model].aggregate([
+        {$match: {
+          'tags.origin.hook': hook.uid
+        }},
+        {$project: {id: 1, tags: 1}}
+      ])
+      for (let entry of entries) {
+        if (!resultEntryDict[model][entry.id]) {
+          let toDel = {
+            id: entry.id,
+            tags: [],
+          }
+          resultDict[model].data.push(toDel)
+          resultEntryDict[model][entry.id] = toDel
+        }
+        let toDelTags = resultEntryDict[model][entry.id].tags
+        for (let subtag of entry.tags) {
+          if (!subtag.origin.some(_ => _.hook === hook.uid)) continue
+          let origin = subtag.origin.filter(_ => _.hook === hook.uid).map(_ => ({id: _.id}))
+          toDelTags.push({
+            id: subtag.id,
+            origin,
+          })
+        }
+      }
+    }
+  }
+
+  result = result.filter(_ => _.data.length)
+  return result
+}
 
 async function turnOn ({meta}) {
   console.log(`turn on ${hook.uid}`)
   let origin = { id: hook.uid, hook: hook.uid }
-  let toAdd = await addGroupRelations()
-  let result = await globals.bulkOP({operation:"+", data: [toAdd], meta, origin})
+  let toAdd = await addAllSimularTags()
+  let result = await globals.bulkOP({operation:"+", data: toAdd, meta, origin})
   return result
 }
 async function turnOff ({meta}) {
   console.log(`turn off ${hook.uid}`)
   let origin = { id: hook.uid, hook: hook.uid }
-  let toDel = await deleteAllGroupRelations()
-  let result = await globals.bulkOP({operation:"-", data: [toDel], meta, origin})
+  let toDel = await delAllSimularTags()
+  let result = await globals.bulkOP({operation:"-", data: toDel, meta, origin})
   return result
 }
 
@@ -223,16 +373,15 @@ let data = [{model: 'Relation', data:[
 
 // this is a function generator, it return the real hook function with parameters
 async function gen(parameters) {
-  let hookData = {
-    oldMap: new Map()
-  }
+  hook.hookData = { }
   let relations = {}
   let relationIDs = []
   for (let relation of parameters.relations) {
     let r = await globals.Models.Relation.findOne({name: relation.name})
-    relations[r.id] = {symmetric: r.symmetric, aorbAdd: relation.aorbAdd}
+    relations[r.id] = {symmetric: r.symmetric, aorbAdd: relation.aorbAdd, relation: r}
     relationIDs.push(r.id)
   }
+  Object.assign(hook.hookData, {relations, relationIDs})
   // this function will be injected into the taglikeAPI
   async function preventRelationDelete ({operation, result, meta, origin, origin_flags, model, withs, data, field, entry}) {
     return []
@@ -247,46 +396,108 @@ async function gen(parameters) {
     }
   }
   async function simularTagOPs({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session}) {
-    return []
+    let tags, tagIDs
+    let todotags = []
 
-    let doc = entry._doc
-    if (!doc.relations) return
-    origin = { id: hook.uid, hook: hook.uid }
-    let thisRelationIDs, groups, final
-    if (operation === "+" || operation === "*") {
-      thisRelationIDs = doc.relations.map(_ => _.relation_id)
-      groups = _.intersection(thisRelationIDs, relationIDs)
-      if (!groups.length) return
-      // now we have least one new added group relation
-      let groupRelations = doc.relations.filter(_ => relationIDs.includes(_.relation_id))
-      let r = { }
-      for (let id of groups) {
-        let groupRelation = await globals.Models.Relation.findOne({id}).session(session)
-        r[id] = await getSingleGroupAdd({groupRelation, session, thisid: entry.id})
-      }
-      let modified = await addGroupRelations(r)
-      if (modified.data.length) {
-        final = {operation:'+', data: [modified], meta, origin}
+    for (let relationID of hook.hookData.relationIDs) {
+      let {symmetric, aorbAdd, relation} = hook.hookData.relations[relationID]
+      tagIDs = withs.map(_ => _.tag_id)
+      if (relation.symmetric) {
+        tags = await globals.Models.Tag.aggregate([
+          {
+            $match: {
+              id: {$id: tagIDs},
+              relations: {
+                $elemMatch: {
+                  relation_id: relation.id,
+                  other_model: 'Tag',
+                }
+              }
+            }
+          },
+          {
+            $project: {
+              id: 1,
+              name: 1,
+              relations: 1
+            }
+          }
+        ])
       } else {
-        return []
+        tags = await globals.Models.Tag.aggregate([
+          {
+            $match: {
+              id: {$id: tagIDs},
+              relations: {
+                $elemMatch: {
+                  relation_id: relation.id,
+                  other_model: 'Tag',
+                  aorb: aorbAdd
+                }
+              }
+            }
+          },
+          {
+            $project: {
+              id: 1,
+              name: 1,
+              relations: 1
+            }
+          }
+        ])
       }
-    } else if (operation === '*') {
-    } else if (operation === '-') {
-      if (!hookData.oldMap.has(session)) return []
-      let groupResults = hookData.oldMap.get(session)
-      hookData.oldMap.delete(session)
-      let groups = Object.keys(groupResults)
-      for (let id of groups) {
-        let __ = groupResults[id]
-        let {tags, thisGroupMap} = await getGroupMap({groupRelation: __.groupRelation, session})
-        __.newGroupMap = thisGroupMap
+      if (!tags.length) return [] // exit hook
+      let Tags = {}
+
+      for (let tag of tags) {
+        let todo
+        if (symmetric) {
+          todo = tag.relations.filter(__ => __.relation_id === relation.id).
+                 map(_ => ({id: _.id, other_id: _.other_id}))
+        } else {
+          todo = tag.relations.filter(__ => __.relation_id === relation.id && __.aorb === aorbAdd).
+                 map(_ => ({id: _.id, other_id: _.other_id}))
+        }
+        tag.todo = todo
+        Tags[tag.id] = tag
       }
-      let modified = await delGroupRelations({r: groupResults, field, id:entry.id})
-      if (modified.data.length) {
-        final = {operation, data: [modified], meta, origin}
-      } else {
-        return []
+
+      if (operation === "+") {
+        for (let subtag of entry.tags) {
+          if (!Tags[subtag.tag_id]) continue
+          for (let eachtodo of Tags[subtag.tag_id].todo) {
+            let {id, other_id} = eachtodo
+            todotags.push({
+              tag_id: other_id,
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid}]
+            })
+          }
+        }
+      } else if (operation === '*') {
+        // tagChanged flag?
+      } else if (operation === '-') {
+        for (let subtag of entry.tags) {
+          if (!Tags[subtag.tag_id]) continue
+          for (let eachtodo of Tags[subtag.tag_id].todo) {
+            let {id, other_id} = eachtodo
+            todotags.push({
+              tag_id: other_id,
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid}]
+            })
+          }
+        }
       }
+    }
+
+    if (operation === "+" || operation === '*') {
+      operation = "+"
+    }
+    let final = {
+      operation, data: [{
+        model, filed: 'tags', data:[{
+          id: entry.id, tags: todotags
+        }]
+      }], meta
     }
     return [final]
   }
@@ -318,7 +529,7 @@ async function gen(parameters) {
         let {tags, thisGroupMap} = await getGroupMap({groupRelation, session})
         r[id] = {tags, oldGroupMap: thisGroupMap, groupRelation}
       }
-      hookData.oldMap.set(session, r)
+      hook.hookData.oldMap.set(session, r)
     }
   }
   return {

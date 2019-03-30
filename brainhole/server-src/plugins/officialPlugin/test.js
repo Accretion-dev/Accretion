@@ -1,7 +1,7 @@
 // because the ava test package DO NOT have a global 'before' and 'after' hook
 // i had to concat all test scripts into test-final.js
 // see test-final.js for all the imports
-test.serial('Plugin: officialPlugin', async t => {
+test.serial.only('Plugin: officialPlugin', async t => {
   let tname, result, refetch
   async function testData({r, componentUID, op, type}) {
     for (let each of r.data) {
@@ -71,7 +71,7 @@ test.serial('Plugin: officialPlugin', async t => {
     r = await globals.pluginAPI({operation:'off', uid, component, componentUID})
     await testData({r, componentUID, op:'off', type:'data'})
   }
-  if((tname='test hook groupRelations')) {
+  if(0&&(tname='test hook groupRelations')) {
     component = 'hook'
     componentUID = `${uid}[${component}]groupRelationTag`
     if(tname='add unitttest data') {
@@ -663,7 +663,7 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.Models.Relation.deleteMany({})
     }
   }
-  if((tname='test hook addAncesotrTags')) {
+  if(0&&(tname='test hook addAncesotrTags')) {
     component = 'hook'
     componentUID = `${uid}[${component}]addAncestorTags`
     if(tname='add unitttest data') {
@@ -1112,7 +1112,6 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.Models.Article.deleteMany({})
     }
   }
-  return
   if((tname='test hook simularTags')) {
     component = 'hook'
     componentUID = `${uid}[${component}]simularTags`
@@ -1133,8 +1132,7 @@ test.serial('Plugin: officialPlugin', async t => {
           {name: 'nice', relations: [
             {relation: {name: 'simular'}, other:{name: 'great'}},
           ]},
-          {name: 'great' },
-          {name: 'fine' },
+          {name: 'great' }, {name: 'fine' },
 
           {name: 'bad', relations: [
             {relation: {name: 'simular'}, other:{name: 'evil'}},
@@ -1153,8 +1151,7 @@ test.serial('Plugin: officialPlugin', async t => {
           {name: 'foo(zh)', relations:[
             {relation: {name: 'translation'}, other:{name: 'foo(jp)'}},
           ]},
-          {name: 'foo(jp)'},
-          {name: 'foo(fr)'},
+          {name: 'foo(jp)'}, {name: 'foo(fr)'},
 
           {name: 'bar(en)', relations:[
             {relation: {name: 'translation'}, other:{name: 'bar(zh)'}},
@@ -1162,46 +1159,101 @@ test.serial('Plugin: officialPlugin', async t => {
           {name: 'bar(zh)', relations:[
             {relation: {name: 'translation'}, other:{name: 'bar(jp)'}},
           ]},
-          {name: 'bar(jp)'},
-          {name: 'bar(fr)'},
+          {name: 'bar(jp)'}, {name: 'bar(fr)'},
 
           {name: 'abcd', relations:[
-            {relation: {name: 'disambiguation'}, from:{name: 'a'}},
-            {relation: {name: 'disambiguation'}, from:{name: 'b'}},
-            {relation: {name: 'disambiguation'}, from:{name: 'c'}},
-            {relation: {name: 'disambiguation'}, from:{name: 'd'}},
+            {relation: {name: 'disambiguation'}, to:{name: 'a'}},
+            {relation: {name: 'disambiguation'}, to:{name: 'b'}},
+            {relation: {name: 'disambiguation'}, to:{name: 'c'}},
+            {relation: {name: 'disambiguation'}, to:{name: 'd'}},
           ]},
-          {name: 'a'},
-          {name: 'b'},
-          {name: 'c'},
-          {name: 'd'},
+          {name: 'a'}, {name: 'b'}, {name: 'c'}, {name: 'd'},
 
           {name: 'xyz', relations:[
-            {relation: {name: 'disambiguation'}, from:{name: 'x'}},
-            {relation: {name: 'disambiguation'}, from:{name: 'y'}},
-            {relation: {name: 'disambiguation'}, from:{name: 'z'}},
+            {relation: {name: 'disambiguation'}, to:{name: 'x'}},
+            {relation: {name: 'disambiguation'}, to:{name: 'y'}},
+            {relation: {name: 'disambiguation'}, to:{name: 'z'}},
           ]},
-          {name: 'x'},
-          {name: 'y'},
-          {name: 'z'},
-
+          {name: 'x'}, {name: 'y'}, {name: 'z'},
         ]},
         {model: "Article", data: [
-          // test the next hook
-          {
-            title: `${tname} 1`,
-            tags:[ ],
+          { title: `1`,
+            tags:[
+              {tag:{name: 'good'}}, {tag:{name: 'great'}},
+            ],
+          },
+          { title: `2`,
+            tags:[
+              {tag:{name: 'evil'}},
+            ],
+          },
+          { title: `3`,
+            tags:[
+              {tag:{name: 'foo(en)'}},
+            ],
+          },
+          { title: `4`,
+            tags:[
+              {tag:{name: 'bar(zh)'}},
+            ],
+          },
+          { title: `5`,
+            tags:[
+              {tag:{name: 'a'}}, {tag:{name: 'c'}},
+            ],
+          },
+          { title: `6`,
+            tags:[
+              {tag:{name: 'x'}},
+            ],
           },
         ]}
       ]
       await globals.bulkOP({operation: '+', data})
+      await testTagCount([
+        ['1', 2],
+        ['2', 1],
+        ['3', 1],
+        ['4', 1],
+        ['5', 2],
+        ['6', 1],
+      ])
     }
     if(tname='turn on and turn off'){
       await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      await testTagCount([
+        ['1', 4],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 3],
+        ['6', 2],
+      ])
       await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      await testTagCount([
+        ['1', 2],
+        ['2', 1],
+        ['3', 1],
+        ['4', 1],
+        ['5', 2],
+        ['6', 1],
+      ])
       await globals.pluginAPI({operation:'on', uid, component, componentUID})
     }
     if(tname='test delete the related relations, throw errors'){
+      let componentObj = plugin[component].find(_ => _.uid === componentUID)
+      for (let relation of componentObj.parameters.relations) {
+        let fn = async () => {
+          await globals.api({
+            operation: '-',
+            model: 'Relation',
+            query: {name: relation.name},
+            origin: []
+          })
+        }
+        let error = await t.throwsAsync(fn, Error)
+        t.true(error.message.startsWith(`The hook:${componentObj.uid}`))
+      }
     }
     if(tname='add and delete by field'){
 

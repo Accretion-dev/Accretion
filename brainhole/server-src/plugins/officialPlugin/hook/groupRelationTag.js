@@ -8,9 +8,13 @@ async function getGroupMap({groupRelation, session}) {
   let tags_ = globals.Models.Tag.aggregate([
     {
       $match: {
-        'relations.relation_id': groupRelation.id,
-        'relations.other_model': 'Tag',
-        'relations.origin.id': 'manual',
+        relations: {
+          $elemMatch: {
+            relation_id: groupRelation.id,
+            other_model: 'Tag',
+            'origin.id': 'manual',
+          }
+        }
       }
     },
     {
