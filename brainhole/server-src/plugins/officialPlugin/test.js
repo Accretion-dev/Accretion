@@ -1,7 +1,7 @@
 // because the ava test package DO NOT have a global 'before' and 'after' hook
 // i had to concat all test scripts into test-final.js
 // see test-final.js for all the imports
-test.serial.only('Plugin: officialPlugin', async t => {
+test.serial('Plugin: officialPlugin', async t => {
   let tname, result, refetch
   async function testData({r, componentUID, op, type}) {
     for (let each of r.data) {
@@ -71,7 +71,7 @@ test.serial.only('Plugin: officialPlugin', async t => {
     r = await globals.pluginAPI({operation:'off', uid, component, componentUID})
     await testData({r, componentUID, op:'off', type:'data'})
   }
-  if(0&&(tname='test hook groupRelations')) {
+  if((tname='test hook groupRelations')) {
     component = 'hook'
     componentUID = `${uid}[${component}]groupRelationTag`
     if(tname='add unitttest data') {
@@ -663,7 +663,7 @@ test.serial.only('Plugin: officialPlugin', async t => {
       await globals.Models.Relation.deleteMany({})
     }
   }
-  if(0&&(tname='test hook addAncesotrTags')) {
+  if((tname='test hook addAncesotrTags')) {
     component = 'hook'
     componentUID = `${uid}[${component}]addAncestorTags`
     if(tname='add unitttest data') {
@@ -1122,6 +1122,7 @@ test.serial.only('Plugin: officialPlugin', async t => {
           {name: 'simular', symmetric: true},
           {name: 'translation', symmetric: true},
           {name: 'disambiguation', symmetric: false},
+          {name: 'blabla', symmetric: false},
         ]},
         {model: "Tag", data: [
           {name: 'good', relations: [
@@ -1436,6 +1437,17 @@ test.serial.only('Plugin: officialPlugin', async t => {
       result = await globals.api({
         operation: '-',
         model: 'Article',
+        query: {title: '5'},
+        field: 'tags',
+        data: {
+          tags: [
+            {__query__:{tag: {name: 'c'}}},
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
         query: {title: '6'},
         field: 'tags',
         data: {
@@ -1444,29 +1456,333 @@ test.serial.only('Plugin: officialPlugin', async t => {
           ]
         }
       })
+      result = await globals.api({
+        operation: '+',
+        model: 'Article',
+        query: {title: '6'},
+        field: 'tags',
+        data: {
+          tags: [
+            {tag: {name: 'c'}},
+          ]
+        }
+      })
       // 1: great => good
       //    nice => good
       // 2: evil => bad, awful
-      // 3:
+      // 3: anyway
       // 4: bar(zh) => bar(en), bar(jp)
       // 5: a => abcd
-      //    c => abcd
-      // 6: x => xyz
+      // 6: c => abcd
       await testTagCount([
         ['1', 3],
         ['2', 3],
         ['3', 1],
         ['4', 3],
-        ['5', 3],
-        ['6', 0],
+        ['5', 2],
+        ['6', 2],
+      ])
+      // modify to add
+      result = await globals.api({
+        operation: '*',
+        model: 'Article',
+        query: {title: '3'},
+        field: 'tags',
+        data: {
+          tags: [
+            {
+              __query__:{tag: {name: 'anyway'}},
+              tag: {name: 'good'}
+            },
+          ]
+        }
+      })
+      // 1: great => good
+      //    nice => good
+      // 2: evil => bad, awful
+      // 3: good => great, nice, fine
+      // 4: bar(zh) => bar(en), bar(jp)
+      // 5: a => abcd
+      //    c => abcd
+      // 6:
+      await testTagCount([
+        ['1', 3],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 2],
+        ['6', 2],
       ])
     }
     if(tname='modify with field, raise error'){
-
+      let fn = async () => {
+        await globals.api({
+          operation: '*',
+          model: 'Article',
+          query: {title: '3'},
+          field: 'tags',
+          data: {
+            tags: [
+              {
+                __query__:{tag: {name: 'nice'}},
+                tag: {name: 'anyway'}
+              },
+            ]
+          }
+        })
+      }
+      let error = await t.throwsAsync(fn, Error)
+      t.true(error.message.startsWith(`can not change key paramerters`))
     }
     if(tname='add and delete tag relation, refresh all related entries'){
-
+      // 1: great => good
+      //    nice => good
+      // 2: evil => bad, awful
+      // 3: good => great, nice, fine
+      // 4: bar(zh) => bar(en), bar(jp)
+      // 5: a => abcd
+      // 6: c => abcd
+      await testTagCount([
+        ['1', 3],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 2],
+        ['6', 2],
+      ])
+      result = await globals.api({
+        operation: '+',
+        model: 'Tag',
+        query: {name: 'good'},
+        field: 'relations',
+        data: {
+          relations: [
+            {
+              relation: {name: 'translation'}, other: {name: 'evil'},
+            },
+            {
+              relation: {name: 'disambiguation'}, to: {name: 'a'},
+            },
+            {
+              relation: {name: 'disambiguation'}, from: {name: 'c'},
+            },
+          ]
+        }
+      })
+      // 1: great => good => evil
+      //    nice => good => evil
+      //    good => c
+      // 2: evil => bad, awful, good
+      // 3: good => great, nice, fine, evil
+      //    good => c
+      // 4: bar(zh) => bar(en), bar(jp)
+      // 5: a => abcd, good
+      // 6: c => abcd
+      await testTagCount([
+        ['1', 5],
+        ['2', 4],
+        ['3', 6],
+        ['4', 3],
+        ['5', 3],
+        ['6', 2],
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: 'good'},
+        field: 'relations',
+        data: {
+          relations: [
+            {
+              __query__:{ relation: {name: 'translation'}, other: {name: 'evil'}},
+            },
+            {
+              __query__:{ relation: {name: 'disambiguation'}, to: {name: 'a'}},
+            },
+            {
+              __query__:{relation: {name: 'disambiguation'}, from: {name: 'c'}},
+            },
+          ]
+        }
+      })
+      // 1: great => good
+      //    nice => good
+      // 2: evil => bad, awful
+      // 3: good => great, nice, fine
+      // 4: bar(zh) => bar(en), bar(jp)
+      // 5: a => abcd
+      // 6: c => abcd
+      await testTagCount([
+        ['1', 3],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 2],
+        ['6', 2],
+      ])
+      // delete good <==> great
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: 'good'},
+        field: 'relations',
+        data: {
+          relations: [
+            {
+              __query__:{ relation: {name: 'simular'}, other: {name: 'great'}},
+            },
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: 'bar(en)'},
+        field: 'relations',
+        data: {
+          relations: [
+            {
+              __query__:{ relation: {name: 'translation'}, other: {name: 'bar(zh)'}},
+            },
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: 'abcd'},
+        field: 'relations',
+        data: {
+          relations: [
+            {
+              __query__:{ relation: {name: 'disambiguation'}, to: {name: 'a'}},
+            },
+          ]
+        }
+      })
+      // 1: great
+      //    nice => good
+      // 2: evil => bad, awful
+      // 3: good => nice, fine
+      // 4: bar(zh) => bar(jp)
+      // 5: a
+      // 6: c => abcd
+      await testTagCount([
+        ['1', 3],
+        ['2', 3],
+        ['3', 3],
+        ['4', 2],
+        ['5', 1],
+        ['6', 2],
+      ])
+      // test modify
+      result = await globals.api({
+        operation: '+',
+        model: 'Tag',
+        query: {name: 'good'},
+        field: 'relations',
+        data: {
+          relations: [
+            { relation: {name: 'blabla'}, other: {name: 'anyway'}},
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '+',
+        model: 'Tag',
+        query: {name: 'bar(en)'},
+        field: 'relations',
+        data: {
+          relations: [
+            { relation: {name: 'blabla'}, other: {name: 'anyway'}},
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '+',
+        model: 'Tag',
+        query: {name: 'abcd'},
+        field: 'relations',
+        data: {
+          relations: [
+            { relation: {name: 'blabla'}, other: {name: 'anyway'} },
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '*',
+        model: 'Tag',
+        query: {name: 'good'},
+        field: 'relations',
+        data: {
+          relations: [
+            {
+              __query__:{ relation: {name: 'blabla'}, other: {name: 'anyway'}},
+              relation: {name: 'simular'}, other: {name: 'great'},
+            },
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '*',
+        model: 'Tag',
+        query: {name: 'bar(en)'},
+        field: 'relations',
+        data: {
+          relations: [
+            {
+              __query__:{ relation: {name: 'blabla'}, other: {name: 'anyway'}},
+              relation: {name: 'translation'}, other: {name: 'bar(zh)'},
+            },
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '*',
+        model: 'Tag',
+        query: {name: 'abcd'},
+        field: 'relations',
+        data: {
+          relations: [
+            {
+              __query__:{ relation: {name: 'blabla'}, other: {name: 'anyway'}},
+              relation: {name: 'disambiguation'}, to: {name: 'a'},
+            },
+          ]
+        }
+      })
+      await testTagCount([
+        ['1', 3],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 2],
+        ['6', 2],
+      ])
     }
+    if(tname='turn off and delete unittest data'){
+      await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      // 1: great
+      //    nice
+      // 2: evil
+      // 3: good
+      // 4: bar(zh)
+      // 5: a
+      // 6: c
+      return
+      await testTagCount([
+        ['1', 2],
+        ['2', 1],
+        ['3', 1],
+        ['4', 1],
+        ['5', 1],
+        ['6', 1],
+      ])
+      await globals.Models.Tag.deleteMany({})
+      await globals.Models.Relation.deleteMany({})
+      await globals.Models.Article.deleteMany({})
+    }
+
   }
   t.pass()
 })

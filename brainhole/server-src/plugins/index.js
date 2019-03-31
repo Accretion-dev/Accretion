@@ -117,6 +117,7 @@ async function pluginAPI({operation, uid, component, componentUID}) {
           if (thiscomponent.data) {
             result.hookData = await bulkDel({componentUID, meta, rawdata: thiscomponent.data, type: 'hook-data'})
           }
+          delete thiscomponent.hookData
           await globals.Models.Plugins.findOneAndUpdate(
             {uid},
             {$set: plugin},

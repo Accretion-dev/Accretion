@@ -374,7 +374,8 @@ let data = [{model: 'Relation', data:[
 // this is a function generator, it return the real hook function with parameters
 async function gen(parameters) {
   hook.hookData = {
-    tagsDict: new Map()
+    tagsDict: new Map(),
+    beforeDeleteRelationDict: new Map(),
   }
   let relations = {}
   let relationIDs = []
@@ -410,7 +411,7 @@ async function gen(parameters) {
     for (let relationID of hook.hookData.relationIDs) {
       let {symmetric, aorbAdd, relation} = hook.hookData.relations[relationID]
       tagIDs = withs.tags.map(_ => _.tag_id)
-      if (operation === '+') {
+      if (operation === '+' || operation === '*') {
         if (relation.symmetric) {
           tags = await globals.Models.Tag.aggregate([
             {
@@ -476,7 +477,7 @@ async function gen(parameters) {
       }
 
       if (operation === "+") {
-        for (let subtag of entry.tags) {
+        for (let subtag of withs.tags) {
           if (!Tags[subtag.tag_id]) continue
           for (let eachtodo of Tags[subtag.tag_id].todo) {
             let {id, other_id, this_id} = eachtodo
@@ -487,7 +488,18 @@ async function gen(parameters) {
           }
         }
       } else if (operation === '*') {
-        // tagChanged flag?
+        for (let subtag of withs.tags) {
+          // for the modification that change this tag to a tag with special relation
+          //if (!subtag.modify_flags.changeTaglike) continue
+          if (!Tags[subtag.tag_id]) continue
+          for (let eachtodo of Tags[subtag.tag_id].todo) {
+            let {id, other_id, this_id} = eachtodo
+            todotags.push({
+              tag_id: other_id,
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
+            })
+          }
+        }
       } else if (operation === '-') {
         for (let subtag of withs.tags) {
           if (!Tags[subtag.tag_id]) continue
@@ -589,8 +601,120 @@ async function gen(parameters) {
     }
     hook.hookData.tagsDict.set(session, tagsDict)
   }
+  async function changeRelation ({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session}) {
+    let tags
+    let doc = entry._doc
+    if (!doc.relations) return
+    let final = []
+    // resultDict['modelName']
+    let resultDict = {}
+    // resultDict['modelName'][entryID]
+    let resultEntryDict = {}
+    for (let model of globals.WithsDict.WithTag) {
+      let eachmodel = {
+        model, field: 'tags', data: []
+      }
+      final.push(eachmodel)
+      resultDict[model] = eachmodel
+      resultEntryDict[model] = {}
+    }
+    let thisRelationIDs, groups, thiswiths
+    //if (operation === "+" || operation === "*") {
+    //  thiswiths = withs
+    //} else if (operation === '-') {
+    //  //thiswiths = hook.hookData.beforeDeleteRelationDict.get(session)
+    //  //hook.hookData.beforeDeleteRelationDict.delete(session)
+    //  thisWiths = withs
+    //}
+    for (let subrelation of withs.relations) {
+      if (!hook.hookData.relationIDs.includes(subrelation.relation_id)) continue
+      let {symmetric, aorbAdd, relation} = hook.hookData.relations[subrelation.relation_id]
+      let this_id = entry.id
+      // if have from_id, another_id is from_id, same for the 'to_id'
+      let other_key = subrelation.other_id ? "other_id" : (subrelation.to_id ? "to_id" : 'from_id')
+      let that_id = subrelation[other_key]
+      let this_tag = entry
+      let that_tag = await globals.Models.Tag.findOne( { id: that_id } ).session(session)
+      let Tags = {}
+      let id = withs.relations.find(_ => _.relation_id === relation.id && _[other_key] === that_id)
+      id = id.id
+
+      if (symmetric) {
+        Tags[this_id] = Object.assign({}, this_tag._doc, {
+          todo: [{id, other_id: that_id, this_id: this_id}]
+        })
+        Tags[that_id] = Object.assign({}, that_tag._doc, {
+          todo: [{id, other_id: this_id, this_id: that_id}]
+        })
+      } else {
+        // a => b, aorbAdd is b means if the tag is b, add b will add a, not the reverse
+        if (subrelation.aorb === aorbAdd) {
+          Tags[this_id] = Object.assign({}, this_tag._doc, {
+            todo: [{id, other_id: that_id, this_id: this_id}]
+          })
+        } else {
+          Tags[that_id] = Object.assign({}, that_tag._doc, {
+            todo: [{id, other_id: this_id, this_id: that_id}]
+          })
+        }
+      }
+      let tagIDs = Object.keys(Tags).map(_ => Number(_))
+
+      for (let model of globals.WithsDict.WithTag) {
+        let entries = await globals.Models[model].aggregate([
+          {$match: {
+            'tags.tag_id': { $in: tagIDs }
+          }},
+          {$project: {id: 1, tags: 1}}
+        ])
+        for (let entry of entries) {
+          if (!resultEntryDict[model][entry.id]) {
+            let toAdd = {
+              id: entry.id,
+              tags: [],
+            }
+            resultDict[model].data.push(toAdd)
+            resultEntryDict[model][entry.id] = toAdd
+          }
+          let toAddTags = resultEntryDict[model][entry.id].tags
+          for (let subtag of entry.tags) {
+            if (!Tags[subtag.tag_id]) continue
+            // this todo only have a single object
+            for (let eachtodo of Tags[subtag.tag_id].todo) {
+              let toPush
+              let {id, other_id, this_id} = eachtodo
+              if (operation === '-') {
+                let toDelete = entry.tags.find(_ => _.tag_id === other_id)
+                if (toDelete) {
+                  toPush = {
+                    id: toDelete.id,
+                    origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
+                  }
+                  toAddTags.push(toPush)
+                }
+              } else {
+                toPush = {
+                  tag_id: other_id,
+                  origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
+                }
+                toAddTags.push(toPush)
+              }
+            }
+          }
+        }
+      }
+    }
+    if (operation === "*") operation = '+'
+    final = final.filter(_ => _.data.length)
+    // this origin is only used to skip nested hook
+    origin = {id: `${hook.uid}-should-never-exists`, hook: hook.uid}
+    let toReturn = { operation, data:final, origin }
+    return [toReturn]
+  }
+
   let toReturn = {
     Relation: preventRelationDelete,
+    Tag: changeRelation,
   }
   for (let model of globals.WithsDict.WithTag) {
     toReturn[model] = simularTagOPs

@@ -1389,6 +1389,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             } = relationInfo
             if (raw_tag_query.to) raw_tag_query.to_id = to_id
             if (raw_tag_query.from) raw_tag_query.from_id = from_id
+            raw_tag_query.aorb = aorb
             other_entry = await Models[other_model].find({id: other_id}).session(session)
             if (other_entry.length !== 1) {
               throw Error(`can not get unique entry for ${other_model} by id:${other_id}, ${JSON.stringify(full_tag_query,null,2)}, ${JSON.stringify(relationInfo,null,2)}`)
@@ -1473,6 +1474,8 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
 
           if (raw_tag_query.to) raw_tag_query.to_id = new_sub_relation.to_id
           if (raw_tag_query.from) raw_tag_query.from_id = new_sub_relation.from_id
+          if (raw_tag_query.other) raw_tag_query.other_id = new_sub_relation.other_id
+          raw_tag_query.aorb = new_sub_relation.aorb
 
           other_entry = await Models[new_sub_relation.other_model].find({id: new_sub_relation.other_id}).session(session) // process this later, so use the global name
           if (other_entry.length !== 1) {

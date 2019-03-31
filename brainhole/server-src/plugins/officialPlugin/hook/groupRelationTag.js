@@ -264,7 +264,6 @@ async function gen(parameters) {
       } else {
         return []
       }
-    } else if (operation === '*') {
     } else if (operation === '-') {
       if (!hookData.oldMap.has(session)) return []
       let groupResults = hookData.oldMap.get(session)
