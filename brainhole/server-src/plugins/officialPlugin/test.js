@@ -1141,6 +1141,7 @@ test.serial.only('Plugin: officialPlugin', async t => {
             {relation: {name: 'simular'}, other:{name: 'awful'}},
           ]},
           {name: 'awful'},
+          {name: 'anyway'},
 
           // test translation
           {name: 'foo(en)', relations:[
@@ -1256,7 +1257,209 @@ test.serial.only('Plugin: officialPlugin', async t => {
       }
     }
     if(tname='add and delete by field'){
-
+      // 1: good => nice, great, fine
+      //    great => good, nice
+      // 2: evil => bad, awful
+      // 3: foo(en) => foo(zh), foo(jp), foo(fr)
+      // 4: bar(zh) => bar(en), bar(jp)
+      // 5: a => abcd
+      //    c => abcd
+      // 6: x => xyz
+      result = await globals.api({
+        operation: '+',
+        model: 'Article',
+        query: {title: '1'},
+        field: 'tags',
+        data: {
+          tags: [
+            {tag: {name: 'nice'}}
+          ]
+        }
+      })
+      // 1: good => nice, great, fine
+      //    great => good, nice
+      //    nice => good, great
+      // 2: evil => bad, awful
+      // 3: foo(en) => foo(zh), foo(jp), foo(fr)
+      // 4: bar(zh) => bar(en), bar(jp)
+      // 5: a => abcd
+      //    c => abcd
+      // 6: x => xyz
+      await testTagCount([
+        ['1', 4],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 3],
+        ['6', 2],
+      ])
+      result = await globals.api({
+        operation: '+',
+        model: 'Article',
+        query: {title: '1'},
+        field: 'tags',
+        data: {
+          tags: [
+            {tag: {name: 'evil'}},
+            {tag: {name: 'a'}},
+            {tag: {name: 'b'}},
+            {tag: {name: 'c'}},
+          ]
+        }
+      })
+      // 1: good => nice, great, fine
+      //    great => good
+      //    nice => good
+      //    evil => bad, awful
+      //    a => abcd
+      //    b => abcd
+      //    c => abcd
+      // 2: evil => bad, awful
+      // 3: foo(en) => foo(zh), foo(jp), foo(fr)
+      // 4: bar(zh) => bar(en), bar(jp)
+      // 5: a => abcd
+      //    c => abcd
+      // 6: x => xyz
+      await testTagCount([
+        ['1', 11],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 3],
+        ['6', 2],
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        query: {title: '1'},
+        field: 'tags',
+        data: {
+          tags: [
+            {__query__:{tag: {name: 'evil'}}},
+          ]
+        }
+      })
+      // 1: good => nice, great, fine
+      //    great => good
+      //    nice => good
+      //    a => abcd
+      //    b => abcd
+      //    c => abcd
+      // 2: evil => bad, awful
+      // 3: foo(en) => foo(zh), foo(jp), foo(fr)
+      // 4: bar(zh) => bar(en), bar(jp)
+      // 5: a => abcd
+      //    c => abcd
+      // 6: x => xyz
+      await testTagCount([
+        ['1', 8],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 3],
+        ['6', 2],
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        query: {title: '1'},
+        field: 'tags',
+        data: {
+          tags: [
+            {__query__:{tag: {name: 'a'}}},
+            {__query__:{tag: {name: 'b'}}},
+            {__query__:{tag: {name: 'c'}}},
+          ]
+        }
+      })
+      // 1: good => nice, great, fine
+      //    great => good
+      //    nice => good
+      // 2: evil => bad, awful
+      // 3: foo(en) => foo(zh), foo(jp), foo(fr)
+      // 4: bar(zh) => bar(en), bar(jp)
+      // 5: a => abcd
+      //    c => abcd
+      // 6: x => xyz
+      await testTagCount([
+        ['1', 4],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 3],
+        ['6', 2],
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        query: {title: '1'},
+        field: 'tags',
+        data: {
+          tags: [
+            {__query__:{tag: {name: 'good'}}},
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        query: {title: '3'},
+        field: 'tags',
+        data: {
+          tags: [
+            {__query__:{tag: {name: 'foo(en)'}}},
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '+',
+        model: 'Article',
+        query: {title: '3'},
+        field: 'tags',
+        data: {
+          tags: [
+            {tag: {name: 'anyway'}},
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        query: {title: '4'},
+        field: 'tags',
+        data: {
+          tags: [
+            {__query__:{tag: {name: 'bar(en)'}}},
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '-',
+        model: 'Article',
+        query: {title: '6'},
+        field: 'tags',
+        data: {
+          tags: [
+            {__query__:{tag: {name: 'x'}}},
+          ]
+        }
+      })
+      // 1: great => good
+      //    nice => good
+      // 2: evil => bad, awful
+      // 3:
+      // 4: bar(zh) => bar(en), bar(jp)
+      // 5: a => abcd
+      //    c => abcd
+      // 6: x => xyz
+      await testTagCount([
+        ['1', 3],
+        ['2', 3],
+        ['3', 1],
+        ['4', 3],
+        ['5', 3],
+        ['6', 0],
+      ])
     }
     if(tname='modify with field, raise error'){
 
