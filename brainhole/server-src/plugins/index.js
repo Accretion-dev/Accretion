@@ -71,8 +71,14 @@ async function pluginAPI({operation, uid, component, componentUID}) {
     if (component === 'hook') {
       let hook
       if (operation === 'on') {
+        // test priority
+        //let OHs = globa.pluginsData.orderedHooks
+        //if (OHs.length && OHs[OHs.length-1].priority >= thiscomponent.priority) {
+        //  throw Error(`Priority of this hook is ${thiscomponent.priority}, if you want to turn on it, you must firstly turn off all other plugins which have priority larger that it`)
+        //}
         try {
           thiscomponent.active = true
+          // if add data error, you should clear it by yourself
           if (thiscomponent.data) {
             result.hookData = await bulkAdd({data: thiscomponent.data, componentUID, meta, type:'hook-data'})
           }

@@ -1,7 +1,7 @@
 // because the ava test package DO NOT have a global 'before' and 'after' hook
 // i had to concat all test scripts into test-final.js
 // see test-final.js for all the imports
-test.serial('Plugin: officialPlugin', async t => {
+test.serial.only('Plugin: officialPlugin', async t => {
   let tname, result, refetch
   async function testData({r, componentUID, op, type}) {
     for (let each of r.data) {
@@ -71,7 +71,7 @@ test.serial('Plugin: officialPlugin', async t => {
     r = await globals.pluginAPI({operation:'off', uid, component, componentUID})
     await testData({r, componentUID, op:'off', type:'data'})
   }
-  if((tname='test hook groupRelations')) {
+  if(1&&(tname='test hook groupRelations')) {
     component = 'hook'
     componentUID = `${uid}[${component}]groupRelationTag`
     if(tname='add unitttest data') {
@@ -663,9 +663,9 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.Models.Relation.deleteMany({})
     }
   }
-  if((tname='test hook addAncesotrTags')) {
+  if(1&&(tname='test hook ancestorTags')) {
     component = 'hook'
-    componentUID = `${uid}[${component}]addAncestorTags`
+    componentUID = `${uid}[${component}]ancestorTags`
     if(tname='add unitttest data') {
       data = [
         {model: "Tag", data: [
@@ -1112,7 +1112,7 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.Models.Article.deleteMany({})
     }
   }
-  if((tname='test hook simularTags')) {
+  if(1&&(tname='test hook simularTags')) {
     component = 'hook'
     componentUID = `${uid}[${component}]simularTags`
     let hook = plugin.hook.find(_ => _.uid === componentUID)
@@ -1769,7 +1769,6 @@ test.serial('Plugin: officialPlugin', async t => {
       // 4: bar(zh)
       // 5: a
       // 6: c
-      return
       await testTagCount([
         ['1', 2],
         ['2', 1],
@@ -1782,7 +1781,252 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.Models.Relation.deleteMany({})
       await globals.Models.Article.deleteMany({})
     }
+  }
+  if((tname='test hook groupRelations, AncestorTags and simularTas at the same time')) {
+    if(tname='add unitttest data') {
+      data = [
+        {model: "Relation", data: [
+          {name: 'simular', symmetric: true},
+          {name: 'translation', symmetric: true},
+          {name: 'disambiguation', symmetric: false},
+          {name: 'blabla', symmetric: false},
+        ]},
+        {model: "Tag", data: [
+          // test simular
+          {name: 'good', relations: [
+            {relation: {name: 'simular'}, other:{name: 'nice'}},
+          ]},
+          {name: 'nice', relations: [
+            {relation: {name: 'simular'}, other:{name: 'great'}},
+          ]},
+          {name: 'great', relations: [
+            {relation: {name: 'simular'}, other:{name: 'fine'}},
+          ]
+          },
+          {name: 'fine'},
 
+          // test translation
+          {name: 'foo(en)', relations:[
+            {relation: {name: 'translation'}, other:{name: 'foo(zh)'}},
+          ]},
+          {name: 'foo(zh)', relations:[
+            {relation: {name: 'translation'}, other:{name: 'foo(jp)'}},
+          ]},
+          {name: 'foo(jp)', relations:[
+            {relation: {name: 'translation'}, other:{name: 'foo(fr)'}},
+          ]},
+          {name: 'foo(fr)'},
+
+          {name: 'bar(en)', relations:[
+            {relation: {name: 'translation'}, other:{name: 'bar(zh)'}},
+          ]},
+          {name: 'bar(zh)', relations:[
+            {relation: {name: 'translation'}, other:{name: 'bar(jp)'}},
+          ]},
+          {name: 'bar(jp)'},
+          {name: 'bar(fr)'},
+
+          {name: 'abcd', relations:[
+            {relation: {name: 'disambiguation'}, to:{name: 'a'}},
+            {relation: {name: 'disambiguation'}, to:{name: 'b'}},
+          ]},
+          {name: 'a'}, {name: 'b'},
+
+          {name: 'xyz', relations:[
+            {relation: {name: 'disambiguation'}, to:{name: 'x'}},
+            {relation: {name: 'disambiguation'}, to:{name: 'y'}},
+          ]},
+          {name: 'x'}, {name: 'y'},
+
+          {name: '1', children:[{name: '1.1'},{name: '1.2'},{name: '1.3'}]},
+          {name: '1.1', children:[{name:'1.1.1'}]},
+          {name: '1.1.1', children:[{name:'1.1.1.1'}]},
+          {name: '1.1.1.1', children:[{name:'1.1.1.1.1'}]},
+          {name: '1.1.1.1.1', fathers:[{name:'1.1.1'}]},
+          {name: '1.2', children:[{name:'1.2.1'},{name:'1.2.2'}]},
+          {name: '1.2.1'},
+          {name: '1.2.2', children:[{name:'1.2.2.1'}]},
+          {name: '1.2.2.1'},
+          {name: '1.3', children:[{name:'1.3.1'}]},
+          {name: '1.3.1', children:[{name:'1.3.1.1'},{name:'1.3.1.2'}]},
+          {name: '1.3.1.1'},
+          {name: '1.3.1.2'},
+        ]},
+        {model: "Article", data: [
+          {title: '1', tags:[
+            {tag: {name:'1.2.2.1'}},
+            {tag: {name:'1.3.1'}},
+            {tag: {name:'1.1.1.1.1'}},
+            {tag: {name:'1.1.1'}},
+            {tag:{name: 'good'}}, {tag:{name: 'great'}},
+          ]},
+          {title: '2', tags: [
+            {tag: {name:'1.3.1.2'}},
+            {tag: {name:'1.2'}},
+            {tag:{name: 'fine'}},
+          ]},
+          {title: '3', tags: [
+            {tag: {name:'1.3.1.2'}},
+            {tag: {name:'1.2.2'}},
+            {tag:{name: 'foo(en)'}},
+          ]},
+          {title: '4', tags: [
+            {tag: {name:'1.1.1.1'}},
+            {tag:{name: 'bar(zh)'}},
+          ]},
+          {title: '5', tags: [
+            {tag: {name:'1.2.1'}},
+            {tag: {name:'1.3.1.1'}},
+            {tag:{name: 'a'}}, {tag:{name: 'b'}},
+          ]},
+          {title: '6', tags: [
+            {tag: {name:'1.3.1.1'}},
+            {tag:{name: 'x'}},
+          ]},
+        ]},
+      ]
+      await globals.bulkOP({operation: '+', data})
+      /* Tags:(relations)
+        good:       s|good<->nice,
+        nice:       s|good<->nice, s|nice<->great
+        great:      s|nice<->great, s|great<->fine
+        fine:       s|great<->fine
+        foo(en):    t|foo(en)<->foo(zh)
+        foo(zh):    t|foo(en)<->foo(zh), t|foo(zh)<->foo(jp)
+        foo(jp):    t|foo(zh)<->foo(jp), t|foo(jp)<->foo(fr),
+        foo(fr):    t|foo(jp)<->foo(fr),
+        bar(en):   t|bar(en)<->bar(zh)
+        bar(zh):   t|bar(en)<->bar(zh), t|bar(zh)<->bar(jp)
+        bar(jp):   t|bar(zh)<->bar(jp)
+        bar(fr):
+        abcd:       d|abcd->a, d|abcd->b
+        a:          d|abcd->a
+        b:          d|abcd->b
+        xyz:        d|xyz->x, d|xyz->y
+        x:          d|xyz->x
+        y:          d|xyz->y
+        1:
+        1.1;
+        1.1.1:
+        1.1.1.1:
+        1.1.1.1.1:
+        1.2:
+        1.2.1:
+        1.2.2:
+        1.2.2.1:
+        1.3:
+        1.3.1:
+        1.3.1.1:
+        1.3.1.2:
+      */
+      await testTagRelationCount([
+        ['good',      1],
+        ['nice',      2],
+        ['great',     2],
+        ['fine',      1],
+        ['foo(en)',   1],
+        ['foo(zh)',   2],
+        ['foo(jp)',   2],
+        ['foo(fr)',   1],
+        ['bar(en)',  1],
+        ['bar(zh)',  2],
+        ['bar(jp)',  1],
+        ['bar(fr)',  0],
+        ['abcd',      2],
+        ['a',         1],
+        ['b',         1],
+        ['xyz',       2],
+        ['x',         1],
+        ['y',         1],
+        ['1',         0],
+        ['1.1',       0],
+        ['1.1.1',     0],
+        ['1.1.1.1',   0],
+        ['1.1.1.1.1', 0],
+        ['1.2',       0],
+        ['1.2.1',     0],
+        ['1.2.2',     0],
+        ['1.2.2.1',   0],
+        ['1.3',       0],
+        ['1.3.1',     0],
+        ['1.3.1.1',   0],
+        ['1.3.1.2',   0],
+      ])
+      /* Tags:(family)
+        good:
+        nice:
+        great:
+        fine:
+        foo(en):
+        foo(zh):
+        foo(jp):
+        foo(fr):
+        bar(en):
+        bar(zh):
+        bar(jp):
+        bar(fr):
+        abcd:
+        a:
+        b:
+        xyz:
+        x:
+        y:
+        1:         C: 1.1, 1.2, 1.3 F:
+        1.1;       C: 1.1.1 F: 1
+        1.1.1:     C: 1.1.1.1 F:1.1
+        1.1.1.1:   C: 1.1.1.1.1 F:1.1.1
+        1.1.1.1.1: C: F: 1.1.1.1, 1.1.1
+        1.2:       C: 1.2.1, 1.2.2, F: 1
+        1.2.1:     C: F: 1.2
+        1.2.2:     C: 1.2.2.1 F:1.2
+        1.2.2.1:   C: F: 1.2.2
+        1.3:       C: 1.3.1 F: 1
+        1.3.1:     C: 1.3.1.1, 1.3.1.2 F: 1.3
+        1.3.1.1:   C: F: 1.3.1
+        1.3.1.2:   C: F: 1.3.1
+      */
+      /* Articles:(tags)
+        1: 1.2.2.1
+           1.3.1
+           1.1.1.1
+           1.1.1
+           good
+           great
+        2: 1.3.1.2
+           1.2
+           1.3.1.2
+           1.2.2
+           fine
+        3: 1.3.1.2
+           1.2.2
+           foo(en)
+        4: 1.1.1.1
+           bar(zh)
+        5: 1.2.1
+           1.3.1.1
+           a
+           b
+        6: 1.3.1.1
+           x
+    */
+      await testTagCount([
+        ['1', 6],
+        ['2', 3],
+        ['3', 3],
+        ['4', 2],
+        ['5', 4],
+        ['6', 2],
+      ])
+    }
+    return
+    if(tname='three hooks turn on and turn off') {
+      component = 'hook'; componentUID = `${uid}[${component}]groupRelationTag`
+      await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      component = 'hook'; componentUID = `${uid}[${component}]ancestorTags`
+      await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      component = 'hook'; componentUID = `${uid}[${component}]simularTas`
+      await globals.pluginAPI({operation:'on', uid, component, componentUID})
+    }
   }
   t.pass()
 })

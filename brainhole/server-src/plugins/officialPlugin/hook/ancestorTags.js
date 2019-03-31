@@ -218,8 +218,8 @@ async function gen(parameters) {
   return result
 }
 let hook = {
-  uid: "addAncestorTags",
-  name: "addAncestorTags",
+  uid: "ancestorTags",
+  name: "ancestorTags",
   description: "When a tag is added for a model, automatically add all its ancestor as tag",
   priority: 0,
   parameters: {},
