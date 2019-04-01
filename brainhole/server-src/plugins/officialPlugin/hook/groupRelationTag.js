@@ -223,7 +223,7 @@ let data = [{model: 'Relation', data:[
 
 // this is a function generator, it return the real hook function with parameters
 async function gen(parameters) {
-  let hookData = {
+  hook.runtimeData = {
     oldMap: new Map()
   }
   let groups = parameters.groups
@@ -265,9 +265,9 @@ async function gen(parameters) {
         return []
       }
     } else if (operation === '-') {
-      if (!hookData.oldMap.has(session)) return []
-      let groupResults = hookData.oldMap.get(session)
-      hookData.oldMap.delete(session)
+      if (!hook.runtimeData.oldMap.has(session)) return []
+      let groupResults = hook.runtimeData.oldMap.get(session)
+      hook.runtimeData.oldMap.delete(session)
       let groups = Object.keys(groupResults)
       for (let id of groups) {
         let __ = groupResults[id]
@@ -299,7 +299,7 @@ async function gen(parameters) {
         let {tags, thisGroupMap} = await getGroupMap({groupRelation, session})
         r[id] = {tags, oldGroupMap: thisGroupMap, groupRelation}
       }
-      hookData.oldMap.set(session, r)
+      hook.runtimeData.oldMap.set(session, r)
     }
   }
   return {

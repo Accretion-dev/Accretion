@@ -3,6 +3,7 @@ import fs from 'fs'
 import _ from 'lodash'
 import path from 'path'
 import globals from "../globals"
+import clone from 'clone-deep'
 globals.pluginsData = {}
 
 let components = ["hook", 'task', 'model', 'data']
@@ -67,7 +68,8 @@ async function pluginAPI({operation, uid, component, componentUID}) {
     history = await history.save()
     // if meta.hookAction is true, api will not process any hook
     // useful when what to make a 'clean' api operation
-    let meta = {history_stack: [{id: history._id, type: 'pluginAPI'}], noHook: true}
+    // let meta = {history_stack: [{id: history._id, type: 'pluginAPI'}], noHook: true}
+    let meta = {history_stack: [{id: history._id, type: 'pluginAPI'}]}
     if (component === 'hook') {
       let hook
       if (operation === 'on') {
@@ -95,9 +97,10 @@ async function pluginAPI({operation, uid, component, componentUID}) {
             let fieldOrigin = _.sum(result.initData.map(_ => _.goodWiths[_.field].origin))
             result.statistic = {total, field, fieldEntry, fieldOrigin}
           }
+          let toSave = plugin.hook.map(__ => _.omit(__, ['runtimeData', 'turnOn', 'turnOff']))
           await globals.Models.Plugins.findOneAndUpdate(
             {uid},
-            {$set: plugin},
+            {hook: toSave},
           )
         } catch (e) {
           thiscomponent.active = false
@@ -123,10 +126,10 @@ async function pluginAPI({operation, uid, component, componentUID}) {
           if (thiscomponent.data) {
             result.hookData = await bulkDel({componentUID, meta, rawdata: thiscomponent.data, type: 'hook-data'})
           }
-          delete thiscomponent.hookData
+          let toSave = plugin.hook.map(__ => _.omit(__, ['runtimeData', 'turnOn', 'turnOff']))
           await globals.Models.Plugins.findOneAndUpdate(
             {uid},
-            {$set: plugin},
+            {hook: toSave},
           )
         } catch (e) {
           thiscomponent.active = true

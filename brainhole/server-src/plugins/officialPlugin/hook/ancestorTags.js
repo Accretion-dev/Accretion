@@ -26,7 +26,8 @@ async function addAllAncestorTags () {
               tag_id: add,
               origin: [{
                 id: `${hook.uid}-${tag.id}`,
-                hook: `${hook.uid}`
+                hook: `${hook.uid}`,
+                ancestorOf: tag.tag_id,
               }]
             })
           }
@@ -64,7 +65,7 @@ async function delAllAncestorTags () {
         if (thisorigins.length) {
           thistagdata.push({
             id: tag.id,
-            origin: thisorigins.map(_ => ({id:_.id}))
+            origin: thisorigins
           })
         }
       }
@@ -128,14 +129,16 @@ async function gen(parameters) {
             return {
               tag_id: __, origin:[{
                 id: `${hook.uid}-${sub_tag_id}`,
-                hook: `${hook.uid}`
+                hook: `${hook.uid}`,
+                ancestorOf: this_sub_entry.tag_id,
               }]
             }
           } else {
             return {
               __query__:{tag_id: __}, origin:[{
                 id: `${hook.uid}-${sub_tag_id}`,
-                hook: `${hook.uid}`
+                hook: `${hook.uid}`,
+                ancestorOf: this_sub_entry.tag_id,
               }]
             }
           }
@@ -191,14 +194,16 @@ async function gen(parameters) {
                     tag_id: __,
                     origin:[{
                       id: `${hook.uid}-${that_sub_entry.id}`,
-                      hook: `${hook.uid}`
+                      hook: `${hook.uid}`,
+                      ancestorOf: offspring,
                   }]}))
                   :
                   ancestors.map(__ => ({
                     __query__: {tag_id: __},
                     origin:[{
                       id: `${hook.uid}-${that_sub_entry.id}`,
-                      hook: `${hook.uid}`
+                      hook: `${hook.uid}`,
+                      ancestorOf: offspring,
                   }]}))
           }
         })
