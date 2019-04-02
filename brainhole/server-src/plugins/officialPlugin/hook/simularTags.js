@@ -11,7 +11,10 @@ async function addAllSimularTags() {
   let resultEntryDict = {}
   for (let model of globals.WithsDict.WithTag) {
     let eachmodel = {
-      model, field: 'tags', data: []
+      model, field: 'tags', data: [],
+      meta: {
+        [hook.uid]:hook.runtimeData.relationIDs
+      }
     }
     result.push(eachmodel)
     resultDict[model] = eachmodel
@@ -121,7 +124,10 @@ async function delAllSimularTags() {
   let resultEntryDict = {}
   for (let model of globals.WithsDict.WithTag) {
     let eachmodel = {
-      model, field: 'tags', data: []
+      model, field: 'tags', data: [],
+      meta: {
+        [hook.uid]:hook.runtimeData.relationIDs
+      }
     }
     result.push(eachmodel)
     resultDict[model] = eachmodel
@@ -167,14 +173,18 @@ async function turnOn ({meta}) {
   console.log(`turn on ${hook.uid}`)
   let origin = { id: hook.uid, hook: hook.uid }
   let toAdd = await addAllSimularTags()
-  let result = await globals.bulkOP({operation:"+", data: toAdd, meta, origin})
+  // this will block simularTagOPs hook
+  let thismeta = Object.assign({}, meta, {[`${hook.uid}-operation`]: true})
+  let result = await globals.bulkOP({operation:"+", data: toAdd, meta: thismeta, origin})
   return result
 }
 async function turnOff ({meta}) {
   console.log(`turn off ${hook.uid}`)
   let origin = { id: hook.uid, hook: hook.uid }
   let toDel = await delAllSimularTags()
-  let result = await globals.bulkOP({operation:"-", data: toDel, meta, origin})
+  // this will block simularTagOPs hook
+  let thismeta = Object.assign({}, meta, {[`${hook.uid}-operation`]: true})
+  let result = await globals.bulkOP({operation:"-", data: toDel, meta: thismeta, origin})
   return result
 }
 
@@ -214,13 +224,23 @@ async function gen(parameters) {
   async function simularTagOPs({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session}) {
     if (!withs.tags) return []
     let tags, tagIDs, tagsDict
+    let entry_model = entry.schema.options.collection
     let todotags = []
+    let thisMetaHookData = []
+    let metaHookData
 
     if (operation === '-') {
       tagsDict = hook.runtimeData.tagsDict.get(session)
       if (!tagsDict) return []
       hook.runtimeData.tagsDict.delete(session)
     }
+
+    if (meta&&meta[hook.uid]) {
+      metaHookData = meta[hook.uid]
+    } else {
+      metaHookData = []
+    }
+
     for (let relationID of hook.runtimeData.relationIDs) {
       let {symmetric, aorbAdd, relation} = hook.runtimeData.relations[relationID]
       tagIDs = withs.tags.map(_ => _.tag_id)
@@ -245,7 +265,7 @@ async function gen(parameters) {
                 relations: 1
               }
             }
-          ])
+          ]).session(session)
         } else {
           tags = await globals.Models.Tag.aggregate([
             {
@@ -267,13 +287,12 @@ async function gen(parameters) {
                 relations: 1
               }
             }
-          ])
+          ]).session(session)
         }
-        if (!tags.length) continue // exit hook
       } else if (operation === '-') {
         tags = tagsDict[relationID]
       }
-      if (!tags) continue
+      if (!tags ||(tags&&!tags.length)) continue // exit hook
       let Tags = {}
 
       for (let tag of tags) {
@@ -294,6 +313,13 @@ async function gen(parameters) {
           if (!Tags[subtag.tag_id]) continue
           for (let eachtodo of Tags[subtag.tag_id].todo) {
             let {id, other_id, this_id} = eachtodo
+            if (metaHookData.length) {
+              if (!subtag.origin_flags.entry) continue
+              if (metaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
+              thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
+            } else {
+              thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
+            }
             todotags.push({
               tag_id: other_id,
               origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
@@ -307,6 +333,13 @@ async function gen(parameters) {
           if (!Tags[subtag.tag_id]) continue
           for (let eachtodo of Tags[subtag.tag_id].todo) {
             let {id, other_id, this_id} = eachtodo
+            if (metaHookData.length) {
+              if (!subtag.modify_flags.entry) continue
+              if (metaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
+              thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
+            } else {
+              thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
+            }
             todotags.push({
               tag_id: other_id,
               origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
@@ -318,6 +351,13 @@ async function gen(parameters) {
           if (!Tags[subtag.tag_id]) continue
           for (let eachtodo of Tags[subtag.tag_id].todo) {
             let {id, other_id, this_id} = eachtodo
+            if (metaHookData.length) {
+              if (!subtag.origin_flags.entry) continue
+              if (metaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
+              thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
+            } else {
+              thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
+            }
             todotags.push({
               __query__: {tag_id: other_id},
               origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
@@ -331,30 +371,31 @@ async function gen(parameters) {
     if (operation === "+" || operation === '*') {
       operation = "+"
     }
+
+    thisMetaHookData = [...metaHookData, ...thisMetaHookData]
+    thisMetaHookData = Array.from(new Set(thisMetaHookData))
+
+    let outputMeta = Object.assign({}, meta, {[hook.uid]: thisMetaHookData})
+
     let final = {
       operation, data: [{
         model, field: 'tags', data:[{
           id: entry.id, tags: todotags
         }]
-      }], meta, origin: [{
+      }], meta: outputMeta, origin: [{
         id: `${hook.uid}-should-not-exists`
       }]
     }
     return [final]
   }
   simularTagOPs.test = ({operation, meta, origin, model, data, field, entry, session}) => {
-    let bad
-    // prevent for self hookAction loop
-    if (Array.isArray(origin)) {
-      if (origin.length) { // origin = [] means delete all origins
-        bad = origin.some(_ => _.id.startsWith(hook.uid))
-      } else {
-        bad = false
-      }
+    // when turn on or turn off, we will meet large number of entries, no need to process them because all of them are included
+    // but for operation for single entry, we need do it recursively
+    if (meta[`${hook.uid}-operation`]) {
+      return false
     } else {
-      bad = origin.id.startsWith(hook.uid)
+      return true
     }
-    return !bad
   }
   simularTagOPs.preDelete = async ({operation, meta, origin, model, data, field, entry, session}) => {
     if (!entry.tags.length) return []
@@ -385,7 +426,7 @@ async function gen(parameters) {
               relations: 1
             }
           }
-        ])
+        ]).session(session)
       } else {
         tags = await globals.Models.Tag.aggregate([
           {
@@ -407,7 +448,7 @@ async function gen(parameters) {
               relations: 1
             }
           }
-        ])
+        ]).session(session)
       }
       if (!tags.length) continue // exit hook
       tagsDict[relationID] = tags
@@ -421,6 +462,7 @@ async function gen(parameters) {
     let final = []
     // resultDict['modelName']
     let resultDict = {}
+    let thisMetaHookData = []
     // resultDict['modelName'][entryID]
     let resultEntryDict = {}
     for (let model of globals.WithsDict.WithTag) {
@@ -477,7 +519,7 @@ async function gen(parameters) {
             'tags.tag_id': { $in: tagIDs }
           }},
           {$project: {id: 1, tags: 1}}
-        ])
+        ]).session(session)
         for (let entry of entries) {
           if (!resultEntryDict[model][entry.id]) {
             let toAdd = {
@@ -498,6 +540,7 @@ async function gen(parameters) {
                 let toDelete = entry.tags.find(_ => _.tag_id === other_id)
                 if (toDelete) {
                   //console.log(`delete because of relation:${subrelation.relation_id}, ${toDelete.id}, tagid: ${toDelete.tag_id}(auto add by ${subtag.tag_id})`)
+                  thisMetaHookData.push(`${relation.name}-${model}-${entry.id}-${this_id}-${toDelete.id}`)
                   toPush = {
                     id: toDelete.id,
                     origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
@@ -505,6 +548,7 @@ async function gen(parameters) {
                   toAddTags.push(toPush)
                 }
               } else {
+                thisMetaHookData.push(`${relation.name}-${model}-${entry.id}-${this_id}-${other_id}`)
                 toPush = {
                   tag_id: other_id,
                   origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
@@ -519,8 +563,20 @@ async function gen(parameters) {
     if (operation === "*") operation = '+'
     final = final.filter(_ => _.data.length)
     // this origin is only used to skip nested hook
+
+    if (!meta) {
+      meta = {[hook.uid]: thisMetaHookData}
+    } else {
+      if (!meta[hook.uid]) {
+        meta[hook.uid] = thisMetaHookData
+      } else {
+        meta[hook.uid] = [...meta[hook.uid], ...thisMetaHookData]
+        meta[hook.uid] = Array.from(new Set(meta[hook.uid]))
+      }
+    }
+
     origin = {id: `${hook.uid}-should-never-exists`, hook: hook.uid}
-    let toReturn = { operation, data:final, origin }
+    let toReturn = { operation, data:final, origin, meta}
     //if (operation === '-') {
     //  console.log('changing relation of tag:', entry.id, entry.name, 'withs:', withs, toReturn)
     //  debugger
@@ -528,18 +584,7 @@ async function gen(parameters) {
     return [toReturn]
   }
   changeRelation.test = async ({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session}) => {
-    let bad
-    // prevent for self hookAction loop
-    if (Array.isArray(origin)) {
-      if (origin.length) { // origin = [] means delete all origins
-        bad = origin.some(_ => _.id.startsWith(hook.uid))
-      } else {
-        bad = false
-      }
-    } else {
-      bad = origin.id.startsWith(hook.uid)
-    }
-    return !bad
+    return true
   }
 
   let toReturn = {

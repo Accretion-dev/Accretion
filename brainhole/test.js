@@ -52,12 +52,12 @@ test.before('init database', async t => {
   console.log('all models:', globals.All)
   console.log('Setup complete, init database, enable all plugins')
 })
-test('after init database', async t => {
+test.serial('after init database', async t => {
   t.true(!!globals.plugins)
   t.pass()
 })
 
-test('transaction-base', async t => {
+test.serial('transaction-base', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -93,7 +93,7 @@ test('transaction-base', async t => {
   t.pass()
 })
 
-test('basic', async t => { // create, modify and delete for All model
+test.serial('basic', async t => { // create, modify and delete for All model
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
@@ -269,7 +269,7 @@ test('basic', async t => { // create, modify and delete for All model
   }
   t.pass()
 })
-test('flags', async t => {
+test.serial('flags', async t => {
   let Models = globals.Models
   let WithsDict = globals.WithsDict
   let All = globals.All
