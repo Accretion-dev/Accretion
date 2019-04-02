@@ -199,6 +199,7 @@ function initModels () {
     let withName = `With${ModelName}`
     schemaData = {
       [type+"_id"]: { type: Number },
+      [type+"_name"]: { type: String },
     }
     subSchema[type] = new Schema(schemaData)
     WithsDict[withName].forEach(key => {
@@ -210,6 +211,7 @@ function initModels () {
   // relations
   schemaData = {
     relation_id: { type: Number },
+    relation_name: { type: String },
     parameter: { type: Schema.Types.Mixed },
     from_model: { type: String },
     from_id: { type: Number },
@@ -244,6 +246,7 @@ function initModels () {
   // metadatas (for WithMetadata and subSchema)
   schemaData = {
     metadata_id: { type: Number },
+    metadata_name: { type: String },
     value: { type: Schema.Types.Mixed },
   }
   subSchema.metadata = new Schema(schemaData)
@@ -1258,6 +1261,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
   let Models = globals.Models
   // tags, catalogues, metadatas, relations
   let hooks = globals.pluginsData.hook[name]
+  const taglike_name = name.slice(0,-1)+'_name' // key to query subdocument array, e.g. tag_id in tags field
   const query_key = name.slice(0,-1)+'_id' // key to query subdocument array, e.g. tag_id in tags field
   let tpath = prefield
   let tmodel = name[0].toUpperCase() + name.slice(1,-1)
@@ -1404,6 +1408,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           }
 
           full_tag_query.origin = thisorigin
+          full_tag_query[taglike_name] = tag_query_entry.name
           let index = entry[name].push(full_tag_query)
           this_sub_entry = entry[name][index - 1]
 
@@ -1531,6 +1536,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
             await newTag.save()
           }
           changeTaglike = true
+          full_tag_query[taglike_name] = newTag.name
         }
 
         simple = full_tag_query
@@ -2102,7 +2108,6 @@ async function getOffsprings ({model, query, offspringIDs}) {
   return Array.from(offspringIDs)
 }
 
-//
 Object.assign(globals, {
   api,
   apiSessionWrapper,
@@ -2116,5 +2121,4 @@ Object.assign(globals, {
   flattenData,
 })
 
-// export
 export default {api, initModels, getRequire, bulkOP}
