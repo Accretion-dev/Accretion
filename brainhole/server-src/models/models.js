@@ -694,7 +694,7 @@ async function processEntryHooks({hookActions, history, result, meta, origin, or
       if (!thisHookAction.meta.history_stack) {
         thisHookAction.meta.history_stack = [{id: history._id, type: 'api'}]
       } else {
-        thisHookAction.meta.history_stack.push({id: history._id, type: 'api'})
+        thisHookAction.meta.history_stack = [...thisHookAction.meta.history_stack, {id: history._id, type: 'api'}]
       }
     }
     // await apiSessionWrapper(thisHookAction)
