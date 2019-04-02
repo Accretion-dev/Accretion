@@ -194,9 +194,95 @@ let data = [{model: 'Relation', data:[
   {name: 'disambiguation', symmetric: false},
 ]}]
 
-
-async function deleteNullLoopTags () {
-
+async function deleteSingleNullLoopTags ({model, query}) {
+  let result = {
+    model,
+    field: 'tags',
+    data: [],
+  }
+  let thisquery = Object.assign({}, query, {
+    tags: {
+      $elemMatch: {
+        $and: [
+          {'origin.hook': hook.uid},
+          {$not:{'origin.id': 'manual'}}
+        ]
+      }
+    }
+  })
+  let entries = await globals.Models[model].find(query)
+  let todo = {}
+  for (let entry of entries) {
+    let derive= {}
+    let tags = entry._doc.tags
+    for (let tag of tags) {
+      let fathers = tag.origin.filter(_ => _.hook === hook.uid).map(_ => _.other_id)
+      fathers = Array.from(new Set(fathers))
+      for (let father of fathers) {
+        if (!derive[father]) derive[father] = []
+        derive[father].push(tag.tag_id)
+      }
+    }
+    let manualTags = new Set(tags.filter(_ => _.origin.some(_ => _.id === 'manual')).map(_ => _.tag_id))
+    let newManualTags = [...manualTags]
+    while (true) {
+      let thisNewManualTags = []
+      for (let id of newManualTags) {
+        for (let eachnew of derive[id]) {
+          if (!manualTags.has(eachnew)) {
+            manualTags.add(eachnew)
+            thisNewManualTags.push(eachnew)
+          }
+        }
+      }
+      if (!thisNewManualTags.length) {
+        newManualTags = thisNewManualTags
+      } else {
+        break
+      }
+    }
+    let nullLoopTags = [...tags.map(_ => _.tag_id).filter(_ => !manualTags.has(_))] // from _doc to Array
+    if (nullLoopTags.length) {
+      result.data.push({
+        id: entry.id,
+        tags: nullLoopTags.map(_ => ({
+          __query__: {tag_id: _}
+        }))
+      })
+    }
+  }
+  return result
+}
+async function deleteNullLoopTags ({model, query}) {
+  let thisresult
+  let data = []
+  let todos = {
+    operation: '-',
+    origin: [],
+    // no recursive hook
+    meta: {[`${hook.uid}-operation`]: true, noHook: true, deleteNullLoopTags: true},
+    data,
+  }
+  if (model) {
+    if (!query) {
+      query = {}
+    }
+    thisresult = await deleteSingleNullLoopTags({model, query})
+    if (thisresult.data.length) {
+      data.push(thisresult)
+    }
+  } else {
+    for (let model of globals.WithsDict.WithTag) {
+      if (!query) {
+        query = {}
+      }
+      thisresult = await deleteSingleNullLoopTags({model, query})
+      if (thisresult.data.length) {
+        data.push(thisresult)
+      }
+    }
+  }
+  await globals.bulkOP(todos)
 }
 let functions = {
   deleteNullLoopTags

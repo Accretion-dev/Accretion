@@ -1143,6 +1143,7 @@ test.serial('Plugin: officialPlugin', async t => {
           ]},
           {name: 'awful'},
           {name: 'anyway'},
+          {name: 'anyway2'},
 
           // test translation
           {name: 'foo(en)', relations:[
@@ -1610,7 +1611,6 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 10],
         ['6', 2],
       ])
-      return
       result = await globals.api({
         operation: '-',
         model: 'Tag',
@@ -1630,22 +1630,71 @@ test.serial('Plugin: officialPlugin', async t => {
           ]
         }
       })
-      // 1: great => good
-      //    nice => good
-      // 2: evil => bad, awful
-      // 3: good => great, nice, fine
-      // 4: bar(zh) => bar(en), bar(jp)
-      // 5: a => abcd
-      // 6: c => abcd
+      /*
+        1: great => good
+             good => evil
+               evil => awful, bad
+           nice => good
+             good => evil
+               evil => awful, bad
+             good => c
+               c => abcd
+        2: evil => bad, awful
+             evil=> good
+               good => nice, fine, great
+                 nice  => great
+                 great => nice
+               good => c
+                 c => abcd
+           --:
+           evil => good
+             good => nice, fine, great
+               nice  => great
+               great => nice
+             good => c
+               c => abcd
+        3: good => great, nice, fine
+             good => evil
+               evil => awful, bad
+             good => c
+               c => abcd
+        4: bar(zh) => bar(en), bar(jp)
+        5: a => abcd
+             a => good
+               good => nice, fine, great
+               good => evil
+                 evil => awful, bad
+               good => c
+                 c => abcd
+        6: c => abcd
+
+
+        1: great => good
+           nice => good
+        2: evil => bad, awful
+        3: good => great, nice, fine
+        4: bar(zh) => bar(en), bar(jp)
+        5: a => abcd
+        6: c => abcd
+      */
       await testTagCount([
         ['1', 3],
-        ['2', 3],
+        ['2', 5], // two null loop tags (nice, great)
         ['3', 4],
         ['4', 3],
-        ['5', 2],
+        ['5', 4], // two null loop tags (nice, great)
         ['6', 2],
       ])
-      // delete good <==> great
+      await globals.pluginsData.functions.deleteNullLoopTags({})
+      await testTagCount([
+        ['1', 3],
+        ['2', 3], // two null loop tags (nice, great)
+        ['3', 4],
+        ['4', 3],
+        ['5', 2], // two null loop tags (nice, great)
+        ['6', 2],
+      ])
+      // delete some relations
       result = await globals.api({
         operation: '-',
         model: 'Tag',
@@ -1653,9 +1702,8 @@ test.serial('Plugin: officialPlugin', async t => {
         field: 'relations',
         data: {
           relations: [
-            {
-              __query__:{ relation: {name: 'simular'}, other: {name: 'great'}},
-            },
+            { __query__:{ relation: {name: 'simular'}, other: {name: 'great'}}, },
+            { __query__:{ relation: {name: 'simular'}, other: {name: 'nice'}}, },
           ]
         }
       })
@@ -1685,22 +1733,33 @@ test.serial('Plugin: officialPlugin', async t => {
           ]
         }
       })
-      // 1: great
-      //    nice => good
-      // 2: evil => bad, awful
-      // 3: good => nice, fine
-      // 4: bar(zh) => bar(jp)
-      // 5: a
-      // 6: c => abcd
+      /*
+        1: great => good
+           nice => good
+        2: evil => bad, awful
+        3: good => great, nice, fine
+        4: bar(zh) => bar(en), bar(jp)
+        5: a => abcd
+        6: c => abcd
+
+        1: great
+           nice
+        2: evil => bad, awful
+        3: good => nice, fine
+           nice => great
+        4: bar(zh) => bar(jp)
+        5: a
+        6: c => abcd
+      */
       await testTagCount([
-        ['1', 3],
+        ['1', 2],
         ['2', 3],
-        ['3', 3],
+        ['3', 4],
         ['4', 2],
         ['5', 1],
         ['6', 2],
       ])
-      // test modify
+      // test modify (add the deleted relations back)
       result = await globals.api({
         operation: '+',
         model: 'Tag',
@@ -1709,6 +1768,7 @@ test.serial('Plugin: officialPlugin', async t => {
         data: {
           relations: [
             { relation: {name: 'blabla'}, other: {name: 'anyway'}},
+            { relation: {name: 'blabla'}, from: {name: 'anyway2'}},
           ]
         }
       })
@@ -1745,6 +1805,10 @@ test.serial('Plugin: officialPlugin', async t => {
               __query__:{ relation: {name: 'blabla'}, other: {name: 'anyway'}},
               relation: {name: 'simular'}, other: {name: 'great'},
             },
+            {
+              __query__:{ relation: {name: 'blabla'}, other: {name: 'anyway2'}},
+              relation: {name: 'simular'}, other: {name: 'nice'},
+            },
           ]
         }
       })
@@ -1776,8 +1840,16 @@ test.serial('Plugin: officialPlugin', async t => {
           ]
         }
       })
+      /*
+        1: great
+           nice
+             great => good
+               good => fine
+             nice => good
+               good => fine
+      */
       await testTagCount([
-        ['1', 3],
+        ['1', 4],
         ['2', 3],
         ['3', 4],
         ['4', 3],
@@ -1785,7 +1857,6 @@ test.serial('Plugin: officialPlugin', async t => {
         ['6', 2],
       ])
     }
-    return
     if(tname='turn off and delete unittest data'){
       await globals.pluginAPI({operation:'off', uid, component, componentUID})
       // 1: great
