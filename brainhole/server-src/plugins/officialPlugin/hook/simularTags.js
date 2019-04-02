@@ -194,8 +194,16 @@ let data = [{model: 'Relation', data:[
   {name: 'disambiguation', symmetric: false},
 ]}]
 
+
+async function deleteNullLoopTags () {
+
+}
+let functions = {
+  deleteNullLoopTags
+}
+
 // this is a function generator, it return the real hook function with parameters
-async function gen(parameters) {
+async function hookGenerator(parameters) {
   hook.runtimeData = {
     tagsDict: new Map(),
     beforeDeleteRelationDict: new Map(),
@@ -540,9 +548,9 @@ async function gen(parameters) {
                 let toDelete = entry.tags.find(_ => _.tag_id === other_id)
                 if (toDelete) {
                   //console.log(`delete because of relation:${subrelation.relation_id}, ${toDelete.id}, tagid: ${toDelete.tag_id}(auto add by ${subtag.tag_id})`)
-                  thisMetaHookData.push(`${relation.name}-${model}-${entry.id}-${this_id}-${toDelete.id}`)
+                  thisMetaHookData.push(`${relation.name}-${model}-${entry.id}-${this_id}-${other_id}`)
                   toPush = {
-                    id: toDelete.id,
+                    __query__: {tag_id: other_id},
                     origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
                   }
                   toAddTags.push(toPush)
@@ -611,8 +619,10 @@ let hook = {
     // for the relation a => b, b is auto added when a is added, not the reverse
     {name: 'disambiguation', aorbAdd: 'b'},
   ]},
-  function: gen,
+  hookGenerator,
   turnOn,
-  turnOff
+  turnOff,
+  data,
+  functions,
 }
 export default hook

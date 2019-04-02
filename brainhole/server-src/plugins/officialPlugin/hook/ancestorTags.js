@@ -93,7 +93,7 @@ async function turnOff ({meta}) {
 }
 
 // this is a function generator, it return the real hook function with parameters
-async function gen(parameters) {
+async function hookGenerator(parameters) {
   // test
   // this function will be injected into the taglikeAPI
   async function ancestorTags({name, operation, meta, origin, origin_flags, entry, old_sub_entry, new_sub_entry, session, full_delete}) {
@@ -228,7 +228,7 @@ let hook = {
   description: "When a tag is added for a model, automatically add all its ancestor as tag",
   priority: 0,
   parameters: {},
-  function: gen,
+  hookGenerator,
   turnOn,
   turnOff
 }

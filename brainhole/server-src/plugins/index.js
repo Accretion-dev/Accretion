@@ -215,6 +215,7 @@ async function updateHooks (plugins) {
     fathers: [],
     children: [],
   }
+  let thisFunctions = {}
   let orderedHookData = []
   let orderedHooks = []
   let initHookErrors = []
@@ -236,7 +237,10 @@ async function updateHooks (plugins) {
     let {uid, parameters, eachHook} = each
     orderedHooks.push(eachHook)
     try {
-      let thishook = await eachHook.function(parameters)
+      let thishook = await eachHook.hookGenerator(parameters)
+      if (eachHook.functions) {
+        Object.assign(thisFunctions, eachHook.functions)
+      }
       for (let hooktype of Object.keys(thishook)) {
         if (!HookAction[hooktype]) HookAction[hooktype] = []
         HookAction[hooktype].push(thishook[hooktype])
@@ -247,6 +251,7 @@ async function updateHooks (plugins) {
   }
   globals.pluginsData.hook = HookAction
   globals.pluginsData.orderedHooks = orderedHooks
+  globals.pluginsData.functions = thisFunctions
   return initHookErrors
 }
 async function initPlugins ({allActive}) {
@@ -315,9 +320,7 @@ async function initPlugins ({allActive}) {
           })
         }
         pluginDict[component].push(componentDict)
-        let withoutFunction = Object.assign({}, componentDict)
-        delete withoutFunction.function
-        pluginDictModel[component].push(withoutFunction)
+        pluginDictModel[component].push(componentDict)
       })
     }
     plugins.push(pluginDict)

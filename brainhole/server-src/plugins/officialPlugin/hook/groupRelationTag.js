@@ -222,7 +222,7 @@ let data = [{model: 'Relation', data:[
 ]}]
 
 // this is a function generator, it return the real hook function with parameters
-async function gen(parameters) {
+async function hookGenerator(parameters) {
   hook.runtimeData = {
     oldMap: new Map()
   }
@@ -316,7 +316,7 @@ let hook = {
     'simular',
     'translation',
   ]},
-  function: gen,
+  hookGenerator,
   data,
   turnOn,
   turnOff
