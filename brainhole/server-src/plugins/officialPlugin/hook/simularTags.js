@@ -9,12 +9,10 @@ async function addAllSimularTags() {
   let resultDict = {}
   // resultDict['modelName'][entryID]
   let resultEntryDict = {}
+  let thisMetaHookData = []
   for (let model of globals.WithsDict.WithTag) {
     let eachmodel = {
       model, field: 'tags', data: [],
-      meta: {
-        [hook.uid]:hook.runtimeData.relationIDs
-      }
     }
     result.push(eachmodel)
     resultDict[model] = eachmodel
@@ -102,9 +100,10 @@ async function addAllSimularTags() {
           if (!Tags[subtag.tag_id]) continue
           for (let eachtodo of Tags[subtag.tag_id].todo) {
             let {id, other_id, this_id} = eachtodo
+            thisMetaHookData.push(`${relation.name}-${model}-${entry.id}-${this_id}-${other_id}`)
             toAddTags.push({
               tag_id: other_id,
-              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
             })
           }
         }
@@ -112,7 +111,7 @@ async function addAllSimularTags() {
     }
   }
   result = result.filter(_ => _.data.length)
-  return result
+  return {result, thisMetaHookData}
 }
 async function delAllSimularTags() {
   let todo = {}
@@ -124,10 +123,7 @@ async function delAllSimularTags() {
   let resultEntryDict = {}
   for (let model of globals.WithsDict.WithTag) {
     let eachmodel = {
-      model, field: 'tags', data: [],
-      meta: {
-        [hook.uid]:hook.runtimeData.relationIDs
-      }
+      model, field: 'tags', data: []
     }
     result.push(eachmodel)
     resultDict[model] = eachmodel
@@ -172,10 +168,10 @@ async function delAllSimularTags() {
 async function turnOn ({meta}) {
   console.log(`turn on ${hook.uid}`)
   let origin = { id: hook.uid, hook: hook.uid }
-  let toAdd = await addAllSimularTags()
+  let {result, thisMetaHookData} = await addAllSimularTags()
   // this will block simularTagOPs hook
-  let thismeta = Object.assign({}, meta, {[`${hook.uid}-operation`]: true})
-  let result = await globals.bulkOP({operation:"+", data: toAdd, meta: thismeta, origin})
+  let thismeta = Object.assign({}, meta, {[hook.uid]: thisMetaHookData})
+  result = await globals.bulkOP({operation:"+", data: result, meta: thismeta, origin})
   return result
 }
 async function turnOff ({meta}) {
@@ -324,6 +320,7 @@ async function hookGenerator(parameters) {
     let metaHookData
 
     if (operation === '-') {
+      if (!field) return [] // topModel is deleted, no need to make hookActions
       tagsDict = hook.runtimeData.tagsDict.get(session)
       if (!tagsDict) return []
       hook.runtimeData.tagsDict.delete(session)
@@ -410,13 +407,14 @@ async function hookGenerator(parameters) {
             if (metaHookData.length) {
               if (!subtag.origin_flags.entry) continue
               if (metaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
+              if (thisMetaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
               thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
             } else {
               thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
             }
             todotags.push({
               tag_id: other_id,
-              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
             })
           }
         }
@@ -430,13 +428,14 @@ async function hookGenerator(parameters) {
             if (metaHookData.length) {
               if (!subtag.modify_flags.entry) continue
               if (metaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
+              if (thisMetaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
               thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
             } else {
               thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
             }
             todotags.push({
               tag_id: other_id,
-              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
             })
           }
         }
@@ -448,13 +447,14 @@ async function hookGenerator(parameters) {
             if (metaHookData.length) {
               if (!subtag.origin_flags.entry) continue
               if (metaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
+              if (thisMetaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
               thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
             } else {
               thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
             }
             todotags.push({
               __query__: {tag_id: other_id},
-              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
             })
           }
         }
@@ -577,6 +577,7 @@ async function hookGenerator(parameters) {
       }
       let {symmetric, aorbAdd, relation} = hook.runtimeData.relations[subrelation.relation_id]
       let this_id = entry.id
+      let this_name = entry.name
       // if have from_id, another_id is from_id, same for the 'to_id'
       let other_key = subrelation.other_id ? "other_id" : (subrelation.to_id ? "to_id" : 'from_id')
       let that_id = subrelation[other_key]
@@ -637,7 +638,7 @@ async function hookGenerator(parameters) {
                   thisMetaHookData.push(`${relation.name}-${model}-${entry.id}-${this_id}-${other_id}`)
                   toPush = {
                     __query__: {tag_id: other_id},
-                    origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
+                    origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
                   }
                   toAddTags.push(toPush)
                 }
@@ -645,7 +646,7 @@ async function hookGenerator(parameters) {
                 thisMetaHookData.push(`${relation.name}-${model}-${entry.id}-${this_id}-${other_id}`)
                 toPush = {
                   tag_id: other_id,
-                  origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id}]
+                  origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
                 }
                 toAddTags.push(toPush)
               }

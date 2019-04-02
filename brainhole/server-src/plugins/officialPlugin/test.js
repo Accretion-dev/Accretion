@@ -39,6 +39,19 @@ test.serial('Plugin: officialPlugin', async t => {
     }
     t.deepEqual(datacal, datas)
   }
+  async function testTagOriginCount(datas) {
+    let datacal = []
+    for (let data of datas) {
+      let obj = await globals.Models.Article.findOne({title: data[0]})
+      if (!obj) t.fail(`Article title ${data[0]} not exists`)
+      let r = {}
+      for (let tag of obj.tags) {
+        if (tag.tag_name in data[1]) r[tag.tag_name] = tag.origin.length
+      }
+      datacal.push([data[0], r])
+    }
+    t.deepEqual(datacal, datas)
+  }
   async function testTagArticleRevCount(datas) {
     let datacal = []
     for (let data of datas) {
@@ -632,6 +645,64 @@ test.serial('Plugin: officialPlugin', async t => {
         ['ha(fr)', 0,],
       ])
     }
+    if(tname='delete tags'){
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: 'bar(fr)'},
+      })
+      await testTagRelationCount([
+        ['good', 2,],
+        ['nice', 2,],
+        ['great', 1,],
+        ['fine', 1,],
+        ['veryGood', 2,],
+        ['bad', 2,],
+        ['evil', 2,],
+        ['awful', 2,],
+        ['hungry', 0,],
+        ['starve', 0,],
+        ['famish', 0,],
+        ['foo(en)', 0,],
+        ['foo(zh)', 2,],
+        ['foo(jp)', 2,],
+        ['foo(fr)', 2,],
+        ['bar(en)', 2,],
+        ['bar(zh)', 2,],
+        ['bar(jp)', 2,],
+        ['ha(zh)', 0,],
+        ['ha(jp)', 0,],
+        ['ha(fr)', 0,],
+      ])
+      result = await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: 'bar(jp)'},
+      })
+      await testTagRelationCount([
+        ['good', 2,],
+        ['nice', 2,],
+        ['great', 1,],
+        ['fine', 1,],
+        ['veryGood', 2,],
+        ['bad', 2,],
+        ['evil', 2,],
+        ['awful', 2,],
+        ['hungry', 0,],
+        ['starve', 0,],
+        ['famish', 0,],
+        ['foo(en)', 0,],
+        ['foo(zh)', 2,],
+        ['foo(jp)', 2,],
+        ['foo(fr)', 2,],
+        ['bar(en)', 1,],
+        ['bar(zh)', 1,],
+        ['ha(zh)', 0,],
+        ['ha(jp)', 0,],
+        ['ha(fr)', 0,],
+      ])
+    }
+
     if('turn off and delete unittest data'){
       // turn off and test last
       result = await globals.pluginAPI({operation:'off', uid, component, componentUID})
@@ -652,9 +723,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['foo(jp)', 2,],
         ['foo(fr)', 1,],
         ['bar(en)', 1,],
-        ['bar(zh)', 2,],
-        ['bar(jp)', 2,],
-        ['bar(fr)', 1,],
+        ['bar(zh)', 1,],
         ['ha(zh)', 0,],
         ['ha(jp)', 0,],
         ['ha(fr)', 0,],
@@ -1213,6 +1282,16 @@ test.serial('Plugin: officialPlugin', async t => {
         ]}
       ]
       await globals.bulkOP({operation: '+', data})
+      /*
+         1: good
+            great
+         2: evil
+         3: foo(en)
+         4: bar(zh)
+         5: a
+            c
+         6: x
+      */
       await testTagCount([
         ['1', 2],
         ['2', 1],
@@ -1221,9 +1300,50 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 2],
         ['6', 1],
       ])
+      await testTagOriginCount([
+        ['1', {
+          good: 1,
+          great: 1
+        }],
+        ['2', {
+          evil: 1
+        }],
+        ['3', {
+          'foo(en)': 1
+        }],
+        ['4', {
+          'bar(zh)': 1
+        }],
+        ['5', {
+          a:1,
+          c:1
+        }],
+        ['6', {
+          x:1
+        }],
+      ])
     }
     if(tname='turn on and turn off'){
       await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      /*
+         1: good
+            great
+              good => nice, great, fine
+              great => good, nice
+         2: evil
+              evil => awful, bad
+         3: foo(en)
+              foo(en) => foo(zh), foo(jp), foo(fr)
+                foo(zh) => foo(jp)
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5: a
+            c
+              a => abcd
+              c => abcd
+         6: x
+              x => xyz
+      */
       await testTagCount([
         ['1', 4],
         ['2', 3],
@@ -1231,6 +1351,39 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 3],
         ['5', 3],
         ['6', 2],
+      ])
+      await testTagOriginCount([
+        ['1', {
+          good: 2,
+          great: 2,
+          nice: 2,
+          fine: 1,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          'foo(en)': 1,
+          'foo(zh)': 1,
+          'foo(jp)': 2,
+          'foo(fr)': 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          c:1,
+          abcd:2,
+        }],
+        ['6', {
+          x:1,
+          xyz:1,
+        }],
       ])
       await globals.pluginAPI({operation:'off', uid, component, componentUID})
       await testTagCount([
@@ -1241,7 +1394,70 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 2],
         ['6', 1],
       ])
+      await testTagOriginCount([
+        ['1', {
+          good: 1,
+          great: 1
+        }],
+        ['2', {
+          evil: 1
+        }],
+        ['3', {
+          'foo(en)': 1
+        }],
+        ['4', {
+          'bar(zh)': 1
+        }],
+        ['5', {
+          a:1,
+          c:1
+        }],
+        ['6', {
+          x:1
+        }],
+      ])
       await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      await testTagCount([
+        ['1', 4],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 3],
+        ['6', 2],
+      ])
+      await testTagOriginCount([
+        ['1', {
+          good: 2,
+          great: 2,
+          nice: 2,
+          fine: 1,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          'foo(en)': 1,
+          'foo(zh)': 1,
+          'foo(jp)': 2,
+          'foo(fr)': 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          c:1,
+          abcd:2,
+        }],
+        ['6', {
+          x:1,
+          xyz:1,
+        }],
+      ])
     }
     if(tname='test delete the related relations, throw errors'){
       let componentObj = plugin[component].find(_ => _.uid === componentUID)
@@ -1259,14 +1475,25 @@ test.serial('Plugin: officialPlugin', async t => {
       }
     }
     if(tname='add and delete by field'){
-      // 1: good => nice, great, fine
-      //    great => good, nice
-      // 2: evil => bad, awful
-      // 3: foo(en) => foo(zh), foo(jp), foo(fr)
-      // 4: bar(zh) => bar(en), bar(jp)
-      // 5: a => abcd
-      //    c => abcd
-      // 6: x => xyz
+      /*
+         1: good
+            great
+              good => nice, great, fine
+              great => good, nice
+         2: evil
+              evil => awful, bad
+         3: foo(en)
+              foo(en) => foo(zh), foo(jp), foo(fr)
+                foo(zh) => foo(jp)
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5: a
+            c
+              a => abcd
+              c => abcd
+         6: x
+              x => xyz
+      */
       result = await globals.api({
         operation: '+',
         model: 'Article',
@@ -1278,15 +1505,27 @@ test.serial('Plugin: officialPlugin', async t => {
           ]
         }
       })
-      // 1: good => nice, great, fine
-      //    great => good, nice
-      //    nice => good, great
-      // 2: evil => bad, awful
-      // 3: foo(en) => foo(zh), foo(jp), foo(fr)
-      // 4: bar(zh) => bar(en), bar(jp)
-      // 5: a => abcd
-      //    c => abcd
-      // 6: x => xyz
+      /*
+         1: good
+            great
+              good => nice, great, fine
+              great => good, nice
+            nice
+              nice => good, great
+         2: evil
+              evil => awful, bad
+         3: foo(en)
+              foo(en) => foo(zh), foo(jp), foo(fr)
+                foo(zh) => foo(jp)
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5: a
+            c
+              a => abcd
+              c => abcd
+         6: x
+              x => xyz
+      */
       await testTagCount([
         ['1', 4],
         ['2', 3],
@@ -1294,6 +1533,39 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 3],
         ['5', 3],
         ['6', 2],
+      ])
+      await testTagOriginCount([
+        ['1', {
+          good: 3,
+          great: 3,
+          nice: 3,
+          fine: 1,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          'foo(en)': 1,
+          'foo(zh)': 1,
+          'foo(jp)': 2,
+          'foo(fr)': 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          c:1,
+          abcd:2,
+        }],
+        ['6', {
+          x:1,
+          xyz:1,
+        }],
       ])
       result = await globals.api({
         operation: '+',
@@ -1309,19 +1581,35 @@ test.serial('Plugin: officialPlugin', async t => {
           ]
         }
       })
-      // 1: good => nice, great, fine
-      //    great => good
-      //    nice => good
-      //    evil => bad, awful
-      //    a => abcd
-      //    b => abcd
-      //    c => abcd
-      // 2: evil => bad, awful
-      // 3: foo(en) => foo(zh), foo(jp), foo(fr)
-      // 4: bar(zh) => bar(en), bar(jp)
-      // 5: a => abcd
-      //    c => abcd
-      // 6: x => xyz
+      /*
+         1: good
+            great
+              good => nice, great, fine
+              great => good, nice
+            nice
+              nice => good, great
+            evil
+            a
+            b
+            c
+              evil => awful, bad
+              a => abcd
+              b => abcd
+              c => abcd
+         2: evil
+              evil => awful, bad
+         3: foo(en)
+              foo(en) => foo(zh), foo(jp), foo(fr)
+                foo(zh) => foo(jp)
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5: a
+            c
+              a => abcd
+              c => abcd
+         6: x
+              x => xyz
+      */
       await testTagCount([
         ['1', 11],
         ['2', 3],
@@ -1329,6 +1617,46 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 3],
         ['5', 3],
         ['6', 2],
+      ])
+      await testTagOriginCount([
+        ['1', {
+          good: 3,
+          great: 3,
+          nice: 3,
+          fine: 1,
+          evil: 1,
+          a: 1,
+          b: 1,
+          c: 1,
+          awful: 1,
+          bad: 1,
+          abcd: 3,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          'foo(en)': 1,
+          'foo(zh)': 1,
+          'foo(jp)': 2,
+          'foo(fr)': 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          c:1,
+          abcd:2,
+        }],
+        ['6', {
+          x:1,
+          xyz:1,
+        }],
       ])
       result = await globals.api({
         operation: '-',
@@ -1341,18 +1669,33 @@ test.serial('Plugin: officialPlugin', async t => {
           ]
         }
       })
-      // 1: good => nice, great, fine
-      //    great => good
-      //    nice => good
-      //    a => abcd
-      //    b => abcd
-      //    c => abcd
-      // 2: evil => bad, awful
-      // 3: foo(en) => foo(zh), foo(jp), foo(fr)
-      // 4: bar(zh) => bar(en), bar(jp)
-      // 5: a => abcd
-      //    c => abcd
-      // 6: x => xyz
+      /*
+         1: good
+            great
+              good => nice, great, fine
+              great => good, nice
+            nice
+              nice => good, great
+            a
+            b
+            c
+              a => abcd
+              b => abcd
+              c => abcd
+         2: evil
+              evil => awful, bad
+         3: foo(en)
+              foo(en) => foo(zh), foo(jp), foo(fr)
+                foo(zh) => foo(jp)
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5: a
+            c
+              a => abcd
+              c => abcd
+         6: x
+              x => xyz
+      */
       await testTagCount([
         ['1', 8],
         ['2', 3],
@@ -1361,6 +1704,44 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 3],
         ['6', 2],
       ])
+      await testTagOriginCount([
+        ['1', {
+          good: 3,
+          great: 3,
+          nice: 3,
+          fine: 1,
+          a: 1,
+          b: 1,
+          c: 1,
+          abcd: 3,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          'foo(en)': 1,
+          'foo(zh)': 1,
+          'foo(jp)': 2,
+          'foo(fr)': 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          c:1,
+          abcd:2,
+        }],
+        ['6', {
+          x:1,
+          xyz:1,
+        }],
+      ])
+
       result = await globals.api({
         operation: '-',
         model: 'Article',
@@ -1374,15 +1755,27 @@ test.serial('Plugin: officialPlugin', async t => {
           ]
         }
       })
-      // 1: good => nice, great, fine
-      //    great => good
-      //    nice => good
-      // 2: evil => bad, awful
-      // 3: foo(en) => foo(zh), foo(jp), foo(fr)
-      // 4: bar(zh) => bar(en), bar(jp)
-      // 5: a => abcd
-      //    c => abcd
-      // 6: x => xyz
+      /*
+         1: good
+            great
+              good => nice, great, fine
+              great => good, nice
+            nice
+              nice => good, great
+         2: evil
+              evil => awful, bad
+         3: foo(en)
+              foo(en) => foo(zh), foo(jp), foo(fr)
+                foo(zh) => foo(jp)
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5: a
+            c
+              a => abcd
+              c => abcd
+         6: x
+              x => xyz
+      */
       await testTagCount([
         ['1', 4],
         ['2', 3],
@@ -1391,6 +1784,40 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 3],
         ['6', 2],
       ])
+      await testTagOriginCount([
+        ['1', {
+          good: 3,
+          great: 3,
+          nice: 3,
+          fine: 1,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          'foo(en)': 1,
+          'foo(zh)': 1,
+          'foo(jp)': 2,
+          'foo(fr)': 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          c:1,
+          abcd:2,
+        }],
+        ['6', {
+          x:1,
+          xyz:1,
+        }],
+      ])
+
       result = await globals.api({
         operation: '-',
         model: 'Article',
@@ -1468,13 +1895,21 @@ test.serial('Plugin: officialPlugin', async t => {
           ]
         }
       })
-      // 1: great => good
-      //    nice => good
-      // 2: evil => bad, awful
-      // 3: anyway
-      // 4: bar(zh) => bar(en), bar(jp)
-      // 5: a => abcd
-      // 6: c => abcd
+      /*
+         1: great
+              great => good, nice
+            nice
+              nice => good, great
+         2: evil
+              evil => awful, bad
+         3: anyway
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5: a
+              a => abcd
+         6: c
+              c => abcd
+      */
       await testTagCount([
         ['1', 3],
         ['2', 3],
@@ -1482,6 +1917,34 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 3],
         ['5', 2],
         ['6', 2],
+      ])
+      await testTagOriginCount([
+        ['1', {
+          good: 2,
+          great: 2,
+          nice: 2,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          anyway: 1
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          abcd:1,
+        }],
+        ['6', {
+          c:1,
+          abcd:1,
+        }],
       ])
       // modify to add
       result = await globals.api({
@@ -1498,14 +1961,23 @@ test.serial('Plugin: officialPlugin', async t => {
           ]
         }
       })
-      // 1: great => good
-      //    nice => good
-      // 2: evil => bad, awful
-      // 3: good => great, nice, fine
-      // 4: bar(zh) => bar(en), bar(jp)
-      // 5: a => abcd
-      //    c => abcd
-      // 6:
+      /*
+         1: great
+              great => good, nice
+            nice
+              nice => good, great
+         2: evil
+              evil => awful, bad
+         3: good
+              good => nice, great, fine
+                nice => great
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5: a
+              a => abcd
+         6: c
+              c => abcd
+      */
       await testTagCount([
         ['1', 3],
         ['2', 3],
@@ -1513,6 +1985,37 @@ test.serial('Plugin: officialPlugin', async t => {
         ['4', 3],
         ['5', 2],
         ['6', 2],
+      ])
+      await testTagOriginCount([
+        ['1', {
+          good: 2,
+          great: 2,
+          nice: 2,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          good: 1,
+          nice: 1,
+          great: 2,
+          fine: 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          abcd:1,
+        }],
+        ['6', {
+          c:1,
+          abcd:1,
+        }],
       ])
     }
     if(tname='modify with field, raise error'){
@@ -1537,22 +2040,22 @@ test.serial('Plugin: officialPlugin', async t => {
     }
     if(tname='add and delete tag relation, refresh all related entries'){
       /*
-        1: great => good
-           nice => good
-        2: evil => bad, awful
-        3: good => great, nice, fine
-        4: bar(zh) => bar(en), bar(jp)
-        5: a => abcd
-        6: c => abcd
+         1: great
+              great => good, nice
+            nice
+              nice => good, great
+         2: evil
+              evil => awful, bad
+         3: good
+              good => nice, great, fine
+                nice => great
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5: a
+              a => abcd
+         6: c
+              c => abcd
       */
-      await testTagCount([
-        ['1', 3],
-        ['2', 3],
-        ['3', 4],
-        ['4', 3],
-        ['5', 2],
-        ['6', 2],
-      ])
       result = await globals.api({
         operation: '+',
         model: 'Tag',
@@ -1573,36 +2076,97 @@ test.serial('Plugin: officialPlugin', async t => {
         }
       })
       /*
-        1: great => good
-             good => evil
-               evil => awful, bad
-           nice => good
-             good => evil
-               evil => awful, bad
-             good => c
-               c => abcd
-        2: evil => bad, awful
-             evil=> good
-               good => nice, fine, great
-                 nice  => great
-                 great => nice
-               good => c
-                 c => abcd
-        3: good => great, nice, fine
-             good => evil
-               evil => awful, bad
-             good => c
-               c => abcd
-        4: bar(zh) => bar(en), bar(jp)
-        5: a => abcd
-             a => good
-               good => nice, fine, great
-               good => evil
-                 evil => awful, bad
-               good => c
-                 c => abcd
-        6: c => abcd
+         1: great
+              great => good, nice
+            nice
+              nice => good, great
+
+              good => evil
+              good => c
+                evil => awful, bad
+                c => abcd
+         2: evil
+              evil => awful, bad
+
+              evil => good
+                good => nice, great, fine, c
+                  nice => great
+                  c => abcd
+         3: good
+              good => nice, great, fine
+                nice => great
+
+              good => evil, c
+                evil => awful, bad
+                c => abcd
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5: a
+              a => abcd
+
+              a => good
+                good => nice, great, fine, evil, c
+                  nice => great
+                  evil => awful, bad
+                  c => abcd
+         6: c
+              c => abcd
       */
+      await testTagOriginCount([
+        ['1', {
+          good: 2,
+          great: 2,
+          nice: 2,
+          evil: 1,
+          c: 1,
+          awful: 1,
+          bad: 1,
+          abcd: 1,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+          good: 1,
+          nice: 1,
+          great: 2,
+          fine: 1,
+          c: 1,
+          abcd: 1,
+        }],
+        ['3', {
+          good: 1,
+          nice: 1,
+          great: 2,
+          fine: 1,
+          evil: 1,
+          awful: 1,
+          bad: 1,
+          c: 1,
+          abcd: 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          abcd:2,
+          good:1,
+          nice:1,
+          great:2,
+          fine:1,
+          evil:1,
+          c:1,
+          awful:1,
+          bad:1,
+        }],
+        ['6', {
+          c:1,
+          abcd:1,
+        }],
+      ])
       await testTagCount([
         ['1', 8],
         ['2', 9],
@@ -1631,61 +2195,161 @@ test.serial('Plugin: officialPlugin', async t => {
         }
       })
       /*
-        1: great => good
-             good => evil
-               evil => awful, bad
-           nice => good
-             good => evil
-               evil => awful, bad
-             good => c
-               c => abcd
-        2: evil => bad, awful
-             evil=> good
-               good => nice, fine, great
-                 nice  => great
-                 great => nice
-               good => c
-                 c => abcd
-           --:
-           evil => good
-             good => nice, fine, great
-               nice  => great
-               great => nice
-             good => c
-               c => abcd
-        3: good => great, nice, fine
-             good => evil
-               evil => awful, bad
-             good => c
-               c => abcd
-        4: bar(zh) => bar(en), bar(jp)
-        5: a => abcd
-             a => good
-               good => nice, fine, great
-               good => evil
-                 evil => awful, bad
-               good => c
-                 c => abcd
-        6: c => abcd
+         1:
+            great
+              great => good, nice
+            nice
+              nice => good, great
 
+              good => evil
+              good => c
+                evil => awful, bad
+                c => abcd
+          --:
+            good => evil, c
+            evil => good
+              evil => awful, bad
+              c => abcd
+              good => nice, great, fine
+                nice => great
+          ==:
+            great
+              great => good, nice
+            nice
+              nice => good, great
+         2:
+            evil
+              evil => awful, bad
 
-        1: great => good
-           nice => good
-        2: evil => bad, awful
-        3: good => great, nice, fine
-        4: bar(zh) => bar(en), bar(jp)
-        5: a => abcd
-        6: c => abcd
+              evil => good
+                good => nice, great, fine, c
+                  nice => great
+                  c => abcd
+          --:
+            good => evil, c
+            evil => good
+              evil => awful, bad
+              c => abcd
+              good => nice, great, fine
+                nice => great
+          ==:
+            evil
+              evil => awful, bad
+         3:
+            good
+              good => nice, great, fine
+                nice => great
+
+              good => evil, c
+                evil => awful, bad
+                c => abcd
+          --:
+            good => evil, c
+            evil => good
+              evil => awful, bad
+              c => abcd
+              good => nice, great, fine
+                nice => great
+          ==:
+            good
+              good => nice, great, fine
+                nice => great
+         4: bar(zh)
+              bar(zh) => bar(jp), bar(en)
+         5:
+            a
+              a => abcd
+
+              a => good
+                good => nice, great, fine, evil, c
+                  nice => great
+                  evil => awful, bad
+                  c => abcd
+          --:
+            good => evil, c
+            evil => good
+            a => good
+              evil => awful, bad
+              c => abcd
+              good => nice, great, fine
+                nice => great
+          ==:
+            a
+              a => abcd
+         6: c
+              c => abcd
       */
+      await testTagOriginCount([
+        ['1', {
+          good: 2,
+          great: 2,
+          nice: 2,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          good: 1,
+          nice: 1,
+          great: 2,
+          fine: 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          abcd:1,
+        }],
+        ['6', {
+          c:1,
+          abcd:1,
+        }],
+      ])
       await testTagCount([
         ['1', 3],
-        ['2', 5], // two null loop tags (nice, great)
+        ['2', 3],
         ['3', 4],
         ['4', 3],
-        ['5', 4], // two null loop tags (nice, great)
+        ['5', 2],
         ['6', 2],
       ])
       await globals.pluginsData.functions.deleteNullLoopTags({})
+      await testTagOriginCount([
+        ['1', {
+          good: 2,
+          great: 2,
+          nice: 2,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          good: 1,
+          nice: 1,
+          great: 2,
+          fine: 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          abcd:1,
+        }],
+        ['6', {
+          c:1,
+          abcd:1,
+        }],
+      ])
       await testTagCount([
         ['1', 3],
         ['2', 3], // two null loop tags (nice, great)
@@ -1734,30 +2398,78 @@ test.serial('Plugin: officialPlugin', async t => {
         }
       })
       /*
-        1: great => good
-           nice => good
-        2: evil => bad, awful
-        3: good => great, nice, fine
-        4: bar(zh) => bar(en), bar(jp)
-        5: a => abcd
-        6: c => abcd
-
-        1: great
-           nice
-        2: evil => bad, awful
-        3: good => nice, fine
-           nice => great
-        4: bar(zh) => bar(jp)
-        5: a
-        6: c => abcd
+         1:
+            great
+              great => good, nice
+            nice
+              nice => good, great
+           --:
+            great => good
+            nice => good
+           ==:
+            great
+              great => nice
+            nice
+              nice => great
+         2:
+            evil
+              evil => awful, bad
+         3:
+            good
+              good => nice, great, fine
+                nice => great
+           --:
+            good => nice, great
+              nice => great
+           ==:
+            good
+              good => fine
+         4:
+           bar(zh)
+              bar(zh) => bar(jp), bar(en)
+           --:
+            bar(zh) => bar(en)
+           ==:
+            bar(zh)
+              bar(zh) => bar(jp)
+         5:
+            a
+         6: c
+              c => abcd
       */
       await testTagCount([
         ['1', 2],
         ['2', 3],
-        ['3', 4],
+        ['3', 2],
         ['4', 2],
         ['5', 1],
         ['6', 2],
+      ])
+      await testTagOriginCount([
+        ['1', {
+          great: 2,
+          nice: 2,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          good: 1,
+          fine: 1,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+        }],
+        ['5', {
+          a:1,
+        }],
+        ['6', {
+          c:1,
+          abcd:1,
+        }],
       ])
       // test modify (add the deleted relations back)
       result = await globals.api({
@@ -1841,13 +2553,67 @@ test.serial('Plugin: officialPlugin', async t => {
         }
       })
       /*
-        1: great
-           nice
-             great => good
-               good => fine
-             nice => good
-               good => fine
+         1:
+            great
+              great => nice
+            nice
+              nice => great
+
+              great => good
+              nice => good
+                good => fine
+         2:
+            evil
+              evil => awful, bad
+         3:
+            good
+              good => fine
+
+              good => great, nice
+                great => nice
+         4:
+            bar(zh)
+              bar(zh) => bar(jp)
+
+              bar(zh) => bar(en)
+         5:
+            a
+              a => abcd
+         6: c
+              c => abcd
       */
+      await testTagOriginCount([
+        ['1', {
+          great: 2,
+          nice: 2,
+          good: 2,
+          fine: 1,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          good: 1,
+          fine: 1,
+          great: 1,
+          nice: 2,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          abcd:1,
+        }],
+        ['6', {
+          c:1,
+          abcd:1,
+        }],
+      ])
       await testTagCount([
         ['1', 4],
         ['2', 3],
@@ -1857,22 +2623,201 @@ test.serial('Plugin: officialPlugin', async t => {
         ['6', 2],
       ])
     }
-    if(tname='turn off and delete unittest data'){
-      await globals.pluginAPI({operation:'off', uid, component, componentUID})
-      // 1: great
-      //    nice
-      // 2: evil
-      // 3: good
-      // 4: bar(zh)
-      // 5: a
-      // 6: c
+    if(tname='delete Tag and Article'){
+      // add more before delete tag and article
+      result = await globals.api({
+        operation: '+',
+        model: 'Article',
+        query: {title: '5'},
+        field: 'tags',
+        data: {
+          tags: [
+            { tag: {name: 'fine'}},
+            { tag: {name: 'bad'}},
+            { tag: {name: 'x'}},
+          ]
+        }
+      })
+      result = await globals.api({
+        operation: '+',
+        model: 'Article',
+        query: {title: '6'},
+        field: 'tags',
+        data: {
+          tags: [
+            { tag: {name: 'fine'}},
+            { tag: {name: 'bad'}},
+            { tag: {name: 'x'}},
+          ]
+        }
+      })
+      /*
+         5:
+            a
+              a => abcd
+            fine
+            bad
+            x
+              fine => good
+              bad => evil
+              x => xyz
+                good => great, nice
+                evil => awful
+                  great => nice
+         6: c
+              c => abcd
+            fine
+            bad
+            x
+              fine => good
+              bad => evil
+              x => xyz
+                good => great, nice
+                evil => awful
+                  great => nice
+      */
+      await testTagOriginCount([
+        ['1', {
+          great: 2,
+          nice: 2,
+          good: 2,
+          fine: 1,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+          bad: 1,
+        }],
+        ['3', {
+          good: 1,
+          fine: 1,
+          great: 1,
+          nice: 2,
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          abcd:1,
+          fine: 1,
+          bad: 1,
+          x: 1,
+          good: 1,
+          evil: 1,
+          xyz: 1,
+          nice: 2,
+          great: 1,
+          awful: 1,
+        }],
+        ['6', {
+          c:1,
+          abcd:1,
+          fine: 1,
+          bad: 1,
+          x: 1,
+          good: 1,
+          evil: 1,
+          xyz: 1,
+          nice: 2,
+          great: 1,
+          awful: 1,
+        }],
+      ])
+      await testTagCount([
+        ['1', 4],
+        ['2', 3],
+        ['3', 4],
+        ['4', 3],
+        ['5', 11],
+        ['6', 11],
+      ])
+      // delete Tags
+      await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: 'good'},
+      })
+      await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: 'bad'},
+      })
+      await globals.api({
+        operation: '-',
+        model: 'Tag',
+        query: {name: 'x'},
+      })
+      /*
+         1:
+            great
+              great => nice
+            nice
+              nice => great
+         2:
+            evil
+              evil => awful
+         3:
+         4:
+            bar(zh)
+              bar(zh) => bar(jp)
+
+              bar(zh) => bar(en)
+         5:
+            a
+              a => abcd
+            fine
+         6: c
+              c => abcd
+            fine
+      */
+      await testTagOriginCount([
+        ['1', {
+          great: 2,
+          nice: 2,
+        }],
+        ['2', {
+          evil: 1,
+          awful: 1,
+        }],
+        ['3', {
+        }],
+        ['4', {
+          'bar(zh)': 1,
+          'bar(jp)': 1,
+          'bar(en)': 1,
+        }],
+        ['5', {
+          a:1,
+          abcd:1,
+          fine: 1,
+        }],
+        ['6', {
+          c:1,
+          abcd:1,
+          fine: 1,
+        }],
+      ])
       await testTagCount([
         ['1', 2],
-        ['2', 1],
-        ['3', 1],
-        ['4', 1],
-        ['5', 1],
-        ['6', 1],
+        ['2', 2],
+        ['3', 0],
+        ['4', 3],
+        ['5', 3],
+        ['6', 3],
+      ])
+      await globals.api({ operation: '-', model: 'Article', query: {title: '1'}, })
+      await globals.api({ operation: '-', model: 'Article', query: {title: '2'}, })
+      await globals.api({ operation: '-', model: 'Article', query: {title: '3'}, })
+      await globals.api({ operation: '-', model: 'Article', query: {title: '4'}, })
+      await globals.api({ operation: '-', model: 'Article', query: {title: '5'}, })
+    }
+    if(tname='turn off and delete unittest data'){
+      await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      await testTagCount([
+        ['6', 2],
       ])
       await globals.Models.Tag.deleteMany({})
       await globals.Models.Relation.deleteMany({})
@@ -2434,30 +3379,31 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 9],
         ['6', 7],
       ])
-
-      return
-
       component = 'hook'; componentUID = `${uid}[${component}]simularTags`
       await globals.pluginAPI({operation:'off', uid, component, componentUID})
       await testTagRelationCount([
         ['good',      3],
         ['nice',      3],
-        ['great',     3],
+        ['great',     7],
         ['fine',      3],
-        ['foo(en)',   3],
-        ['foo(zh)',   3],
-        ['foo(jp)',   3],
-        ['foo(fr)',   3],
+        ['foo(en)',   4],
+        ['foo(zh)',   4],
+        ['foo(jp)',   4],
+        ['foo(fr)',   4],
         ['bar(en)',   2],
         ['bar(zh)',   2],
         ['bar(jp)',   2],
         ['bar(fr)',   0],
-        ['abcd',      2],
+        ['barbar(fr)',0],
+        ['abcd',      4],
         ['a',         1],
         ['b',         1],
-        ['xyz',       2],
+        ['c',         1],
+        ['d',         1],
+        ['xyz',       3],
         ['x',         1],
         ['y',         1],
+        ['z',         1],
         ['1',         0],
         ['1.1',       0],
         ['1.1.1',     0],
@@ -2473,34 +3419,38 @@ test.serial('Plugin: officialPlugin', async t => {
         ['1.3.1.2',   0],
       ])
       await testTagCount([
-        ['1', 12],
-        ['2', 6],
-        ['3', 7],
+        ['1', 16],
+        ['2', 8],
+        ['3', 8],
         ['4', 5],
         ['5', 8],
-        ['6', 5],
+        ['6', 6],
       ])
       component = 'hook'; componentUID = `${uid}[${component}]ancestorTags`
       await globals.pluginAPI({operation:'off', uid, component, componentUID})
       await testTagRelationCount([
         ['good',      3],
         ['nice',      3],
-        ['great',     3],
+        ['great',     7],
         ['fine',      3],
-        ['foo(en)',   3],
-        ['foo(zh)',   3],
-        ['foo(jp)',   3],
-        ['foo(fr)',   3],
+        ['foo(en)',   4],
+        ['foo(zh)',   4],
+        ['foo(jp)',   4],
+        ['foo(fr)',   4],
         ['bar(en)',   2],
         ['bar(zh)',   2],
         ['bar(jp)',   2],
         ['bar(fr)',   0],
-        ['abcd',      2],
+        ['barbar(fr)',0],
+        ['abcd',      4],
         ['a',         1],
         ['b',         1],
-        ['xyz',       2],
+        ['c',         1],
+        ['d',         1],
+        ['xyz',       3],
         ['x',         1],
         ['y',         1],
+        ['z',         1],
         ['1',         0],
         ['1.1',       0],
         ['1.1.1',     0],
@@ -2528,9 +3478,9 @@ test.serial('Plugin: officialPlugin', async t => {
       await testTagRelationCount([
         ['good',      1],
         ['nice',      2],
-        ['great',     2],
+        ['great',     3],
         ['fine',      1],
-        ['foo(en)',   1],
+        ['foo(en)',   2],
         ['foo(zh)',   2],
         ['foo(jp)',   2],
         ['foo(fr)',   1],
@@ -2538,12 +3488,16 @@ test.serial('Plugin: officialPlugin', async t => {
         ['bar(zh)',   2],
         ['bar(jp)',   1],
         ['bar(fr)',   0],
-        ['abcd',      2],
+        ['barbar(fr)',0],
+        ['abcd',      4],
         ['a',         1],
         ['b',         1],
-        ['xyz',       2],
+        ['c',         1],
+        ['d',         1],
+        ['xyz',       3],
         ['x',         1],
         ['y',         1],
+        ['z',         1],
         ['1',         0],
         ['1.1',       0],
         ['1.1.1',     0],
@@ -2567,6 +3521,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['6', 2],
       ])
     }
+    return
     if(1&&(tname='three hooks turn on and turn off sequence 2')) {
       // use different order
       component = 'hook'; componentUID = `${uid}[${component}]simularTags`
@@ -2576,8 +3531,11 @@ test.serial('Plugin: officialPlugin', async t => {
            1.3.1
            1.1.1.1.1
            1.1.1
-           good => nice
+           good
            great => fine
+             good => nice
+             great => fine
+               nice =>
         2: 1.3.1.2
            1.2
            fine => great
@@ -2634,6 +3592,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 5],
         ['6', 3],
       ])
+      return
       component = 'hook'; componentUID = `${uid}[${component}]groupRelationTag`
       await globals.pluginAPI({operation:'on', uid, component, componentUID})
       /* Tags:(relations)
