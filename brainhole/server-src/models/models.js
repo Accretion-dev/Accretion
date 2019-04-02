@@ -1124,6 +1124,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
     for (let eachdata of fulldata) {
       let origin_flags = {}
       let {anotherEntry, origin} = eachdata
+      let thismeta = Object.assign({}, meta, eachdata.meta)
 
       let subentry = entry[type].find(_ => _.id === anotherEntry.id)
       if (subentry) { // only add origin
@@ -1148,12 +1149,6 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
         await anotherEntry.save()
         let thisresult = {id: anotherEntry.id, origin, origin_flags}
 
-        hookActions = await processSubEntryHooks({
-          hooks, name:type, operation, meta, origin, entry, origin_flags,
-          new_sub_entry: thisresult, session, raw_origin
-        })
-        if (hookActions.length) thisresult.hookActions = hookActions
-
         result.push(thisresult)
       } else { // add entry
         origin_flags.origin = origin
@@ -1164,7 +1159,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
         let thisresult = {id: anotherEntry.id, origin, origin_flags}
 
         hookActions = await processSubEntryHooks({
-          hooks, name:type, operation, meta, origin, entry, origin_flags,
+          hooks, name:type, operation, meta: thismeta, origin, entry, origin_flags,
           new_sub_entry: thisresult, session, raw_origin
         })
         if (hookActions.length) thisresult.hookActions = hookActions
@@ -1181,6 +1176,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
     for (let eachdata of fulldata) {
       let origin_flags = {}
       let {anotherEntry, origin} = eachdata
+      let thismeta = Object.assign({}, meta, eachdata.meta)
       let subentry = entry[type].find(_ => _.id === anotherEntry.id)
       if (!subentry) {
         origin_flags.entry = false
@@ -1207,12 +1203,6 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
           await anotherEntry.save()
           let thisresult = {id: anotherEntry.id, origin: subentry.origin, origin_flags}
 
-          hookActions = await processSubEntryHooks({
-            hooks, name:type, operation, meta, origin, entry, origin_flags,
-            old_sub_entry: thisresult, session, raw_origin
-          })
-          if (hookActions.length) thisresult.hookActions = hookActions
-
           result.push(thisresult)
           continue
         }
@@ -1227,7 +1217,7 @@ async function familyAPI ({operation, prefield, field, entry, data, type, sessio
       let thisresult = {id: anotherEntry.id, origin: subentry.origin, origin_flags}
 
       hookActions = await processSubEntryHooks({
-        hooks, name:type, operation, meta, origin, entry, origin_flags,
+        hooks, name:type, operation, meta: thismeta, origin, entry, origin_flags,
         old_sub_entry: thisresult, session, raw_origin
       })
       if (hookActions.length) thisresult.hookActions = hookActions
@@ -1277,6 +1267,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
     let result = []
     for (let eachdata of data) {
       let thisorigin
+      let thismeta = Object.assign({}, meta, eachdata.meta)
       if (eachdata.origin) {
         thisorigin = eachdata.origin
         eachdata = clone(eachdata)
@@ -1299,7 +1290,8 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         entry: this_sub_entry,
         data: newdata,
         session,
-        origin: thisorigin
+        origin: thisorigin,
+        meta: thismeta
       })
       let this_result = {[fieldPrefix]: thisresult, id: this_sub_entry.id}
       result.push(this_result)
@@ -1325,6 +1317,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
       for (let eachdata of data) {
         eachdata = Object.assign({}, eachdata)
         let thisorigin
+        let thismeta = Object.assign({}, meta, eachdata.meta)
         if (eachdata.origin) {
           thisorigin = eachdata.origin
           eachdata = clone(eachdata)
@@ -1356,7 +1349,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           thisresult.origin_flags = origin_flags
 
           hookActions = await processSubEntryHooks({
-            hooks, name, operation, meta, origin: thisorigin, entry, origin_flags, session,
+            hooks, name, operation, meta: thismeta, origin: thisorigin, entry, origin_flags, session,
             old_sub_entry: this_sub_entry, raw_origin
           })
           if (hookActions.length) thisresult.hookActions = hookActions
@@ -1417,7 +1410,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           thisresult.origin_flags = origin_flags
 
           hookActions = await processSubEntryHooks({
-            hooks, name, operation, meta, origin: thisorigin, entry, origin_flags,
+            hooks, name, operation, meta: thismeta, origin: thisorigin, entry, origin_flags,
             new_sub_entry: this_sub_entry._doc, session, raw_origin
           })
           if (hookActions.length) thisresult.hookActions = hookActions
@@ -1452,6 +1445,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
     } else if (operation === '*') {
       for (let eachdata of data) {
         eachdata = Object.assign({}, eachdata)
+        let thismeta = Object.assign({}, meta, eachdata.meta)
         let thisorigin
         if (eachdata.origin) {
           thisorigin = eachdata.origin
@@ -1563,7 +1557,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         thisresult.modify_flags = {changeTaglike}
 
         hookActions = await processSubEntryHooks({
-          hooks, name, operation, meta, origin: thisorigin, entry,
+          hooks, name, operation, meta: thismeta, origin: thisorigin, entry,
           old_sub_entry, new_sub_entry: this_sub_entry._doc, session,
           changeTaglike, raw_origin
         })
@@ -1599,6 +1593,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
       let full_delete = false
       let this_tag_model = name[0].toUpperCase() + name.slice(1, -1)
       let entries = []
+      let toPush
       if (data) {
         for (let eachdata of data) {
           let this_sub_entry = await querySub({entry, data: eachdata, field: name, session, entry_model, test:true})
@@ -1607,17 +1602,19 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
           }
           this_sub_entry = this_sub_entry[0]
           if (eachdata.origin) {
-            entries.push({this_sub_entry, origin: eachdata.origin})
+            toPush = {this_sub_entry, origin: eachdata.origin}
           } else {
-            entries.push({this_sub_entry, origin})
+            toPush = {this_sub_entry, origin}
           }
+          toPush.meta = Object.assign({}, meta, eachdata.meta)
+          entries.push(toPush)
         }
       } else {
         // must write with .map(_ => _), or will cause bug... don't know why
         full_delete = true
-        entries = entry[name].map(_ => ({this_sub_entry:_, origin}))
+        entries = entry[name].map(_ => ({this_sub_entry:_, origin, meta}))
       }
-      for (let {this_sub_entry, origin} of entries) {
+      for (let {this_sub_entry, origin, meta} of entries) {
         let origin_flags = {}
         if (!this_sub_entry) {
           origin_flags.entry = false
@@ -1880,7 +1877,7 @@ async function bulkOPSessionWrapper({operation, model, data, session, meta, orig
       eachmodel = eachdata.model || model
       eachfield = eachdata.field || field
       eachmeta = eachdata.meta || meta
-      if (meta) eachmeta = Object.assign({}, eachmeta, meta)
+      if (meta) eachmeta = Object.assign({}, meta, eachmeta)
       eachorigin = eachdata.origin || origin
       eachdata = eachdata.data
 
@@ -1952,7 +1949,7 @@ async function bulkOPSessionWrapper({operation, model, data, session, meta, orig
       eachmodel = eachdata.model || model
       eachfield = eachdata.field || field
       eachmeta = eachdata.meta || meta
-      if (meta) eachmeta = Object.assign({}, eachmeta, meta)
+      if (meta) eachmeta = Object.assign({}, meta, eachmeta)
       eachorigin = eachdata.origin || origin
       eachdata = eachdata.data
       if (eachfield) {
