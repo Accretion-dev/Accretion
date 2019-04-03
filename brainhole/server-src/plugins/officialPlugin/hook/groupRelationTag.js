@@ -157,6 +157,7 @@ async function addGroupRelations (newdata) {
   }
   return result
 }
+/* calculate toDelete based on old and new group map*/
 async function delGroupRelations ({r, field, id}) {
   let thisData = []
   let result = {
@@ -171,14 +172,15 @@ async function delGroupRelations ({r, field, id}) {
     for (let key of oldKeys) {
       if (Number(key) === id && !field) {
         // delete the tag (and all its relations)
-        // do not need hook action for this taa
+        // do not need hook action for this tag
         continue
       }
       let oldIDs, newIDs
       oldIDs = oldGroupMap[key].data
-      if (!newGroupMap[key]) {
+      // calculate the fullids for this relation and for this tag
+      if (!newGroupMap[key]) { // tag leave group
         newIDs = []
-      } else {
+      } else { // tag stay in group,
         newIDs = newGroupMap[key].data
       }
       let toDels = oldIDs.filter(_ => !newIDs.includes(_))
@@ -295,11 +297,13 @@ async function hookGenerator(parameters) {
       let groupResults = hook.runtimeData.oldMap.get(session)
       hook.runtimeData.oldMap.delete(session)
       let groups = Object.keys(groupResults)
-      for (let id of groups) { // delete relations of tag => other tag in this group
+      for (let id of groups) {
         let __ = groupResults[id]
         let {tags, thisGroupMap} = await getGroupMap({groupRelation: __.groupRelation, session})
         __.newGroupMap = thisGroupMap
       }
+      // calculate modified based on old and new group map
+      // non-zero if this tag actully leave the group
       let modified = await delGroupRelations({r: groupResults, field, id:entry.id})
       if (modified.data.length) {
         final = {operation, data: [modified], meta, origin}

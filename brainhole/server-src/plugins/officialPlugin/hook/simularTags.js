@@ -410,6 +410,7 @@ async function hookGenerator(parameters) {
               if (thisMetaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
               thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
             } else {
+              // in loop 0, force add relation for eachother
               thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
             }
             todotags.push({
@@ -450,6 +451,7 @@ async function hookGenerator(parameters) {
               if (thisMetaHookData.includes(`${relation.name}-${entry_model}-${entry.id}-${other_id}-${this_id}`)) continue
               thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
             } else {
+              // in loop 0, force delete relation for eachother
               thisMetaHookData.push(`${relation.name}-${entry_model}-${entry.id}-${this_id}-${other_id}`)
             }
             todotags.push({
@@ -570,6 +572,7 @@ async function hookGenerator(parameters) {
     let thisRelationIDs, groups, thiswiths
     for (let subrelation of withs.relations) {
       if (!hook.runtimeData.relationIDs.includes(subrelation.relation_id)) continue
+      // active this hook only when the relation actually change
       if (operation === '*') {
         if (!subrelation.modify_flags.changeTaglike) continue
       } else {
