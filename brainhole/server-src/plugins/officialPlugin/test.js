@@ -1,7 +1,7 @@
 // because the ava test package DO NOT have a global 'before' and 'after' hook
 // i had to concat all test scripts into test-final.js
 // see test-final.js for all the imports
-test.serial('Plugin: officialPlugin', async t => {
+test.serial.only('Plugin: officialPlugin', async t => {
   let tname, result, refetch
   async function testData({r, componentUID, op, type}) {
     for (let each of r.data) {
@@ -84,7 +84,7 @@ test.serial('Plugin: officialPlugin', async t => {
     r = await globals.pluginAPI({operation:'off', uid, component, componentUID})
     await testData({r, componentUID, op:'off', type:'data'})
   }
-  if(1&&(tname='test hook groupRelations')) {
+  if(0&&(tname='test hook groupRelations')) {
     component = 'hook'
     componentUID = `${uid}[${component}]groupRelationTag`
     if(tname='add unitttest data') {
@@ -732,7 +732,7 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.Models.Relation.deleteMany({})
     }
   }
-  if(1&&(tname='test hook ancestorTags')) {
+  if(0&&(tname='test hook ancestorTags')) {
     component = 'hook'
     componentUID = `${uid}[${component}]ancestorTags`
     if(tname='add unitttest data') {
@@ -1181,7 +1181,7 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.Models.Article.deleteMany({})
     }
   }
-  if(1&&(tname='test hook simularTags')) {
+  if(0&&(tname='test hook simularTags')) {
     component = 'hook'
     componentUID = `${uid}[${component}]simularTags`
     let hook = plugin.hook.find(_ => _.uid === componentUID)
@@ -3091,7 +3091,7 @@ test.serial('Plugin: officialPlugin', async t => {
         ['6', 2],
       ])
     }
-    if(1&&(tname='three hooks turn on and turn off sequence 1')) {
+    if(0&&(tname='three hooks turn on and turn off sequence 1')) {
       await testTagRelationCount([
         ['good',      1],
         ['nice',      2],
@@ -4116,7 +4116,7 @@ test.serial('Plugin: officialPlugin', async t => {
         }],
       ])
     }
-    if(1&&(tname='three hooks turn on and turn off sequence 2')) {
+    if(0&&(tname='three hooks turn on and turn off sequence 2')) {
       await testTagRelationCount([
         ['good',      1],
         ['nice',      2],
@@ -5205,7 +5205,7 @@ test.serial('Plugin: officialPlugin', async t => {
         }],
       ])
     }
-    if(1&&(tname='three hooks turn on and turn off sequence 3')) {
+    if(0&&(tname='three hooks turn on and turn off sequence 3')) {
       await testTagRelationCount([
         ['good',      1],
         ['nice',      2],
@@ -6299,7 +6299,269 @@ test.serial('Plugin: officialPlugin', async t => {
         }],
       ])
     }
+    if(tname='three hooks turn on') {
+      component = 'hook'; componentUID = `${uid}[${component}]groupRelationTag`
+      await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      component = 'hook'; componentUID = `${uid}[${component}]ancestorTags`
+      await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      component = 'hook'; componentUID = `${uid}[${component}]simularTags`
+      await globals.pluginAPI({operation:'on', uid, component, componentUID})
+      /* Tags:(relations) simple
+        good:       nice, great, fine
+        nice:       good, great, fine
+        great:      nice, fine, foo(en), good, foo(zh), foo(jp), foo(fr)
+        fine:       great, good, nice
+        foo(en):    great, foo(zh), foo(jp), foo(fr)
+        foo(zh):    foo(en), foo(jp), great, foo(fr)
+        foo(jp):    foo(zh), foo(fr), great, foo(en)
+        foo(fr):    foo(jp), great, foo(en), foo(zh)
+        bar(en):    bar(zh), bar(jp)
+        bar(zh):    bar(en), bar(jp)
+        bar(jp):    bar(zh), bar(en)
+        bar(fr):
+        barbar(fr):
+        abcd:       a,b,c,d
+        a:          abcd
+        b:          abcd
+        c:          abcd
+        d:          abcd
+        xyz:        xyz
+        x:          x
+        y:          y
+        z:          z
+      */
+      /* Articles:(tags)
+        1: 1.2.2.1
+           1.3.1
+           1.1.1.1.1
+           1.1.1
+           good
+           great
+             1.2.2.1   => bar(fr),barbar(fr), 1.2.2, 1.2, 1
+             1.3.1     => 1.3, 1
+             1.1.1.1.1 => 1.1.1.1, 1.1.1, 1.1, 1
+             1.1.1     => 1.1, 1
+             good      => c
+             great     => bar(en)
 
+             good => nice, great, fine
+             great => nice, fine, foo(en), good, foo(zh), foo(jp), foo(fr)
+             c => abcd
+             bar(en) => bar(zh), bar(jp)
+               nice => fine
+               foo(en) => foo(zh), foo(jp), foo(fr)
+               foo(zh) => foo(jp), foo(fr)
+               foo(jp) => foo(fr)
+               bar(zh) => bar(jp)
+        2: 1.3.1.2
+           1.2
+           fine
+             1.3.1.2   => z, 1.3.1, 1.3, 1
+             1.2       => 1
+             fine      => d
+
+             fine => great, good, nice
+             z => xyz
+             d => abcd
+               great => nice, foo(en), good, foo(zh), foo(jp), foo(fr)
+               good => nice
+                 foo(en) => foo(zh), foo(jp), foo(fr)
+                 foo(zh) => foo(jp), foo(fr)
+                 foo(jp) => foo(fr)
+        3: 1.3.1.2
+           1.2.2
+           foo(en)
+             1.3.1.2   => z, 1.3.1, 1.3, 1
+             1.2.2     => 1.2, 1
+
+             foo(en) => great, foo(zh), foo(jp), foo(fr)
+             z => xyz
+               great => nice, fine, good, foo(jp), foo(fr)
+               foo(zh) => foo(jp), foo(fr)
+               foo(jp) => foo(fr)
+                 nice => good, fine
+                 fine => good
+        4: 1.1.1.1
+           bar(zh)
+             1.1.1.1 => 1.1.1, 1.1, 1
+
+             bar(zh) => bar(en), bar(jp)
+               bar(en) => bar(jp)
+        5: 1.2.1
+           1.3.1.1
+           a
+           b
+             1.2.1     => 1.2, 1
+             1.3.1.1   => 1.3.1, 1.3, 1
+
+             a => abcd
+             b => abcd
+        6: 1.3.1.2
+           x
+             1.3.1.2   => z, 1.3.1, 1.3, 1
+
+             x => xyz
+             z => xyz
+      */
+      await testTagRelationCount([
+        ['good',      3],
+        ['nice',      3],
+        ['great',     7],
+        ['fine',      3],
+        ['foo(en)',   4],
+        ['foo(zh)',   4],
+        ['foo(jp)',   4],
+        ['foo(fr)',   4],
+        ['bar(en)',   2],
+        ['bar(zh)',   2],
+        ['bar(jp)',   2],
+        ['bar(fr)',   0],
+        ['barbar(fr)',0],
+        ['abcd',      4],
+        ['a',         1],
+        ['b',         1],
+        ['c',         1],
+        ['d',         1],
+        ['xyz',       3],
+        ['x',         1],
+        ['y',         1],
+        ['z',         1],
+        ['1',         0],
+        ['1.1',       0],
+        ['1.1.1',     0],
+        ['1.1.1.1',   0],
+        ['1.1.1.1.1', 0],
+        ['1.2',       0],
+        ['1.2.1',     0],
+        ['1.2.2',     0],
+        ['1.2.2.1',   0],
+        ['1.3',       0],
+        ['1.3.1',     0],
+        ['1.3.1.1',   0],
+        ['1.3.1.2',   0],
+      ])
+      await testTagOriginCount([
+        ['1', {
+          '1.2.2.1': 1,
+          '1.3.1': 1,
+          '1.1.1.1.1': 1,
+          '1.1.1': 2,
+          good: 2,
+          great: 2,
+          'bar(fr)': 1,
+          'barbar(fr)': 1,
+          '1.2.2': 1,
+          '1.2': 1,
+          '1': 4,
+          '1.3': 1,
+          '1.1.1.1': 1,
+          '1.1': 2,
+          c: 1,
+          'bar(en)': 1,
+
+          nice:2,
+          fine:3,
+          'foo(en)':1,
+          'foo(zh)':2,
+          'foo(jp)':3,
+          'foo(fr)':4,
+          'abcd':1,
+          'bar(zh)':1,
+          'bar(jp)':2,
+        }],
+        ['2', {
+          '1.3.1.2': 1,
+          '1.2': 1,
+          fine: 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 2,
+          d: 1,
+
+          great:1,
+          good:2,
+          nice:3,
+          xyz:1,
+          abcd:1,
+          'foo(en)':1,
+          'foo(zh)':2,
+          'foo(jp)':3,
+          'foo(fr)':4,
+        }],
+        ['3', {
+          '1.3.1.2': 1,
+          '1.2.2': 1,
+          'foo(en)': 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 2,
+          '1.2': 1,
+
+          great:1,
+          'foo(zh)':2,
+          'foo(jp)':3,
+          'foo(fr)':4,
+          xyz:1,
+          nice:1,
+          fine:2,
+          good:3,
+        }],
+        ['4', {
+          '1.1.1.1': 1,
+          'bar(zh)': 1,
+          '1.1.1': 1,
+          '1.1': 1,
+          '1': 1,
+
+          'bar(en)': 1,
+          'bar(jp)': 2,
+        }],
+        ['5', {
+          '1.2.1': 1,
+          '1.3.1.1': 1,
+          a: 1,
+          b: 1,
+          '1.2': 1,
+          '1': 2,
+          '1.3.1': 1,
+          '1.3': 1,
+
+          abcd:2
+        }],
+        ['6', {
+          '1.3.1.2': 1,
+          x: 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 1,
+
+          xyz: 2,
+        }],
+      ])
+      await testTagCount([
+        ['1', 25],
+        ['2', 17], // 17
+        ['3', 16],
+        ['4', 7],
+        ['5', 9],
+        ['6', 7],
+      ])
+    }
+    if(1&&(tname="add and delete tags")){
+
+    }
+    if(1&&(tname="add and delete relations")){
+
+    }
+    if(1&&(tname="add and delete Tags and Articles")){
+
+    }
+    if('turn off and clean') {
+
+    }
   }
   t.pass()
 })
