@@ -1,6 +1,15 @@
 import globals from "../../../globals"
 import _ from 'lodash'
 
+/* Calculate all groups given groupRelation and session
+@return
+  {tags, thisGroupMap}
+    tags: all tags that involved in these groups
+    thisGroupMap: {
+      tag_id: [...id of tags in the group]
+      ...
+    }
+*/
 async function getGroupMap({groupRelation, session}) {
   let thisGroupMatching = []
   let thisGroupMap = {}
@@ -34,21 +43,25 @@ async function getGroupMap({groupRelation, session}) {
     let thatids = tag.relations.filter(
       _ => _.relation_id === groupRelation.id && _.origin.find(__ => __.id==='manual')
     ).map(_ => _.other_id)
+    // group ids build from a single tag
     let fullids = [thisid, ...thatids]
-    let done = false
+    let merged = false
     let thisMatch
     for (let each of thisGroupMatching) {
       let {data} = each
+      // test whether this is a new group
       let intersection = _.intersection(data, fullids)
-      if (intersection.length) {
-        done = true
+      if (intersection.length) { // merge these two groups into one large group
+        merged = true
         let __ = _.union(data, fullids)
-        each.data = __
+        // make sure the final map is sorted
+        // this will effect the order of relations for a tag
+        each.data = __.sort()
         thisMatch = each
         break
       }
     }
-    if (!done) {
+    if (!merged) {
       let __ = {data: fullids}
       thisGroupMatching.push(__)
       thisMatch = __
@@ -57,11 +70,24 @@ async function getGroupMap({groupRelation, session}) {
   }
   return {tags, thisGroupMap}
 }
+/* Calculate all api actions to add relations for tags in same group
+for each tag
+  force add all the relatoins within same group (thanks to the origin system)
+  but filter deplicated addition operation
+*/
 async function getSingleGroupAdd ({groupRelation, session, thisid}) {
   let {tags, thisGroupMap} = await getGroupMap({groupRelation, session})
   let thisResult = {}
   let thisAddData = []
   let exists = []
+  /* if thisid, this func is called in groupRelationTagOPs
+       return relations of
+        a tag => other tags in the same group
+       is enough
+     else, this func is called in turnOn
+      we should return relations
+        tags => other tags in the same group
+  */
   if (thisid) tags = tags.filter(_ => thisGroupMap[_.id].data.includes(thisid))
   for (let tag of tags) {
     let thisid = tag.id
@@ -70,11 +96,10 @@ async function getSingleGroupAdd ({groupRelation, session, thisid}) {
       _.relation_id === groupRelation.id && ((_.origin.find(__ => __.id === hook.uid)))
     ).map(_ => _.other_id)
     let fullids = thisGroupMap[thisid].data
-    let newids = fullids = fullids.filter(_ => !thatids.includes(_))
     let thisRelations = []
     let thisExists
+    // force add all relations (thanks to the origin features)
     for (let newid of fullids) {
-      // force all all groups (thanks to the origin features)
       if (newid > thisid) {
         thisExists = `${thisid}-${newid}`
         if (exists.includes(thisExists)) continue
@@ -169,6 +194,7 @@ async function delGroupRelations ({r, field, id}) {
   }
   return result
 }
+/* delete all relations with origin id: hook.uid */
 async function deleteAllGroupRelations () {
   let tags = await globals.Models.Tag.aggregate([
     {
@@ -229,7 +255,6 @@ async function hookGenerator(parameters) {
   let groups = parameters.groups
   let relationIDs = await globals.Models.Relation.find({name: {$in: groups}})
   relationIDs = relationIDs.map(_ => _.id)
-  // this function will be injected into the taglikeAPI
   async function preventRelationDelete ({operation, result, meta, origin, origin_flags, model, withs, data, field, entry}) {
     return []
   }
@@ -242,19 +267,19 @@ async function hookGenerator(parameters) {
       }
     }
   }
+  /* run when +*- relations of a Tag */
   async function groupRelationTagOPs({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session}) {
     let doc = entry._doc
     if (!doc.relations) return
     origin = { id: hook.uid, hook: hook.uid }
     let thisRelationIDs, groups, final
-    if (operation === "+" || operation === "*") {
+    if (operation === "+" || operation === "*") { // add new relations for this tag
       thisRelationIDs = doc.relations.map(_ => _.relation_id)
       groups = _.intersection(thisRelationIDs, relationIDs)
-      if (!groups.length) return
-      // now we have least one new added group relation
+      if (!groups.length) return // no groupRelations in the added relations, return
       let groupRelations = doc.relations.filter(_ => relationIDs.includes(_.relation_id))
       let r = { }
-      for (let id of groups) {
+      for (let id of groups) {// add relations of tag => other tag in this groups
         let groupRelation = await globals.Models.Relation.findOne({id}).session(session)
         r[id] = await getSingleGroupAdd({groupRelation, session, thisid: entry.id})
       }
@@ -264,12 +289,13 @@ async function hookGenerator(parameters) {
       } else {
         return []
       }
-    } else if (operation === '-') {
+    } else if (operation === '-') { // delete relations from this tag
+      // we should get presaved groupMap before this tag is deleted
       if (!hook.runtimeData.oldMap.has(session)) return []
       let groupResults = hook.runtimeData.oldMap.get(session)
       hook.runtimeData.oldMap.delete(session)
       let groups = Object.keys(groupResults)
-      for (let id of groups) {
+      for (let id of groups) { // delete relations of tag => other tag in this group
         let __ = groupResults[id]
         let {tags, thisGroupMap} = await getGroupMap({groupRelation: __.groupRelation, session})
         __.newGroupMap = thisGroupMap
