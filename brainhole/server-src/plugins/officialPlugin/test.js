@@ -2824,7 +2824,6 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.Models.Article.deleteMany({})
     }
   }
-  return
   if((tname='test hook groupRelations, AncestorTags and simularTas at the same time')) {
     if(tname='add unitttest data') {
       data = [
@@ -3073,28 +3072,45 @@ test.serial('Plugin: officialPlugin', async t => {
       await globals.pluginAPI({operation:'on', uid, component, componentUID})
       /* Tags:(relations)
         good:       s|good<->nice
-                      great, fine
-        nice:       s|good<->nice, s|nice<->great
-                      fine
-        great:      s|nice<->great, s|great<->fine,
-                      good
+                      => great, fine
+                    (nice, great, fine)
+        nice:       s|good<->nice
+                    s|nice<->great
+                      => fine
+                    (good, great, fine)
+        great:      s|nice<->great
+                    s|great<->fine,
                     t|great<->foo(en)
-                      foo(zh), foo(jp), foo(fr)
+                      => good
+                      => foo(zh), foo(jp), foo(fr)
+                    (nice, fine, foo(en), good, foo(zh), foo(jp), foo(fr))
         fine:       s|great<->fine
-                      good, nice
-        foo(en):    t|foo(en)<->foo(zh), t|great<->foo(en)
-                      foo(jp), foo(fr), great
-        foo(zh):    t|foo(en)<->foo(zh), t|foo(zh)<->foo(jp)
-                      foo(fr), great
-        foo(jp):    t|foo(zh)<->foo(jp), t|foo(jp)<->foo(fr),
-                      foo(en), great
+                      => good, nice
+                    (great, good, nice)
+        foo(en):    t|great<->foo(en)
+                    t|foo(en)<->foo(zh)
+                      => foo(jp), foo(fr)
+                    (great, foo(zh), foo(jp), foo(fr))
+        foo(zh):    t|foo(en)<->foo(zh)
+                    t|foo(zh)<->foo(jp)
+                      => great, foo(fr)
+                    (foo(en), foo(jp), great, foo(fr))
+        foo(jp):    t|foo(zh)<->foo(jp)
+                    t|foo(jp)<->foo(fr),
+                      => great, foo(en)
+                    (foo(zh), foo(fr), great, foo(en))
         foo(fr):    t|foo(jp)<->foo(fr),
-                      foo(en), foo(zh), great
+                      => great, foo(en), foo(zh)
+                    (foo(jp), great, foo(en), foo(zh))
         bar(en):    t|bar(en)<->bar(zh)
-                      bar(jp)
-        bar(zh):    t|bar(en)<->bar(zh), t|bar(zh)<->bar(jp)
+                      => bar(jp)
+                    (bar(zh), bar(jp))
+        bar(zh):    t|bar(en)<->bar(zh)
+                    t|bar(zh)<->bar(jp)
+                    (bar(en), bar(jp))
         bar(jp):    t|bar(zh)<->bar(jp)
-                      bar(en)
+                      => bar(en)
+                    (bar(zh), bar(en))
         bar(fr):
         barbar(fr):
         abcd:       d|abcd->a, d|abcd->b, d|abcd->c, d|abcd->d
@@ -3106,6 +3122,37 @@ test.serial('Plugin: officialPlugin', async t => {
         x:          d|xyz->x
         y:          d|xyz->y
         z:          d|xyz->z
+      */
+      /* Tags:(relations) simple
+        good:       nice, great, fine
+        nice:       good, great, fine
+        great:      nice, fine, foo(en), good, foo(zh), foo(jp), foo(fr)
+        fine:       great, good, nice
+        foo(en):    great, foo(zh), foo(jp), foo(fr)
+        foo(zh):    foo(en), foo(jp), great, foo(fr)
+        foo(jp):    foo(zh), foo(fr), great, foo(en)
+        foo(fr):    foo(jp), great, foo(en), foo(zh)
+        bar(en):    bar(zh), bar(jp)
+        bar(zh):    bar(en), bar(jp)
+        bar(jp):    bar(zh), bar(en)
+        bar(fr):
+        barbar(fr):
+        abcd:       a,b,c,d
+        a:          abcd
+        b:          abcd
+        c:          abcd
+        d:          abcd
+        xyz:        xyz
+        x:          x
+        y:          y
+        z:          z
+      */
+      /* Tag groups
+        simular:
+          * good, nice, great, fine
+        translation:
+          * foo(en), foo(zh), foo(jp), foo(fr), great
+          * bar(en), bar(zh), bar(jp)
       */
       await testTagRelationCount([
         ['good',      3],
@@ -3152,6 +3199,41 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 4],
         ['6', 2],
       ])
+      await testTagOriginCount([
+        ['1', {
+          '1.2.2.1': 1,
+          '1.3.1': 1,
+          '1.1.1.1.1': 1,
+          '1.1.1': 1,
+          good: 1,
+          great: 1,
+        }],
+        ['2', {
+          '1.3.1.2': 1,
+          '1.2': 1,
+          fine: 1,
+        }],
+        ['3', {
+          '1.3.1.2': 1,
+          '1.2.2': 1,
+          'foo(en)': 1,
+        }],
+        ['4', {
+          '1.1.1.1': 1,
+          'bar(zh)': 1,
+        }],
+        ['5', {
+          '1.2.1': 1,
+          '1.3.1.1': 1,
+          a: 1,
+          b: 1,
+        }],
+        ['6', {
+          '1.3.1.2': 1,
+          x: 1,
+        }],
+      ])
+
       component = 'hook'; componentUID = `${uid}[${component}]ancestorTags`
       await globals.pluginAPI({operation:'on', uid, component, componentUID})
       /* Tags:(family)
@@ -3192,26 +3274,41 @@ test.serial('Plugin: officialPlugin', async t => {
         1.3.1.2:   C: F: 1.3.1, z
       */
       /* Articles:(tags)
-        1: 1.2.2.1   => bar(fr),barbar(fr), 1.2.2, 1.2, 1
-           1.3.1     => 1.3, 1
-           1.1.1.1.1 => 1.1.1.1, 1.1.1, 1.1, 1
-           1.1.1     => 1.1, 1
-           good      => c
-           great     => bar(en)
-        2: 1.3.1.2   => z, 1.3.1, 1.3, 1
-           1.2       => 1
-           fine      => d
-        3: 1.3.1.2   => z, 1.3.1, 1.3, 1
-           1.2.2     => 1.2, 1
+        1: 1.2.2.1
+           1.3.1
+           1.1.1.1.1
+           1.1.1
+           good
+           great
+             1.2.2.1   => bar(fr),barbar(fr), 1.2.2, 1.2, 1
+             1.3.1     => 1.3, 1
+             1.1.1.1.1 => 1.1.1.1, 1.1.1, 1.1, 1
+             1.1.1     => 1.1, 1
+             good      => c
+             great     => bar(en)
+        2: 1.3.1.2
+           1.2
+           fine
+             1.3.1.2   => z, 1.3.1, 1.3, 1
+             1.2       => 1
+             fine      => d
+        3: 1.3.1.2
+           1.2.2
            foo(en)
-        4: 1.1.1.1   => 1.1.1, 1.1, 1
+             1.3.1.2   => z, 1.3.1, 1.3, 1
+             1.2.2     => 1.2, 1
+        4: 1.1.1.1
            bar(zh)
-        5: 1.2.1     => 1.2, 1
-           1.3.1.1   => 1.3.1, 1.3, 1
+             1.1.1.1 => 1.1.1, 1.1, 1
+        5: 1.2.1
+           1.3.1.1
            a
            b
-        6: 1.3.1.2   => z, 1.3.1, 1.3, 1
+             1.2.1     => 1.2, 1
+             1.3.1.1   => 1.3.1, 1.3, 1
+        6: 1.3.1.2
            x
+             1.3.1.2   => z, 1.3.1, 1.3, 1
       */
       await testTagRelationCount([
         ['good',      3],
@@ -3258,81 +3355,170 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 8],
         ['6', 6],
       ])
+      await testTagOriginCount([
+        ['1', {
+          '1.2.2.1': 1,
+          '1.3.1': 1,
+          '1.1.1.1.1': 1,
+          '1.1.1': 2,
+          good: 1,
+          great: 1,
+          'bar(fr)': 1,
+          'barbar(fr)': 1,
+          '1.2.2': 1,
+          '1.2': 1,
+          '1': 4,
+          '1.3': 1,
+          '1.1.1.1': 1,
+          '1.1': 2,
+          c: 1,
+          'bar(en)': 1,
+        }],
+        ['2', {
+          '1.3.1.2': 1,
+          '1.2': 1,
+          fine: 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 2,
+          d: 1,
+        }],
+        ['3', {
+          '1.3.1.2': 1,
+          '1.2.2': 1,
+          'foo(en)': 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 2,
+          '1.2': 1,
+        }],
+        ['4', {
+          '1.1.1.1': 1,
+          'bar(zh)': 1,
+          '1.1.1': 1,
+          '1.1': 1,
+          '1': 1,
+        }],
+        ['5', {
+          '1.2.1': 1,
+          '1.3.1.1': 1,
+          a: 1,
+          b: 1,
+          '1.2': 1,
+          '1': 2,
+          '1.3.1': 1,
+          '1.3': 1,
+        }],
+        ['6', {
+          '1.3.1.2': 1,
+          x: 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 1,
+        }],
+      ])
+
       component = 'hook'; componentUID = `${uid}[${component}]simularTags`
       await globals.pluginAPI({operation:'on', uid, component, componentUID})
-      /* Tags:(relations)
-        good:       s|good<->nice
-                      great, fine
-        nice:       s|good<->nice, s|nice<->great
-                      fine
-        great:      s|nice<->great, s|great<->fine,
-                      good
-                    t|great<->foo(en)
-                      foo(zh), foo(jp), foo(fr)
-        fine:       s|great<->fine
-                      good, nice
-        foo(en):    t|foo(en)<->foo(zh), t|great<->foo(en)
-                      foo(jp), foo(fr), great
-        foo(zh):    t|foo(en)<->foo(zh), t|foo(zh)<->foo(jp)
-                      foo(fr), great
-        foo(jp):    t|foo(zh)<->foo(jp), t|foo(jp)<->foo(fr),
-                      foo(en), great
-        foo(fr):    t|foo(jp)<->foo(fr),
-                      foo(en), foo(zh), great
-        bar(en):    t|bar(en)<->bar(zh)
-                      bar(jp)
-        bar(zh):    t|bar(en)<->bar(zh), t|bar(zh)<->bar(jp)
-        bar(jp):    t|bar(zh)<->bar(jp)
-                      bar(en)
+      /* Tags:(relations) simple
+        good:       nice, great, fine
+        nice:       good, great, fine
+        great:      nice, fine, foo(en), good, foo(zh), foo(jp), foo(fr)
+        fine:       great, good, nice
+        foo(en):    great, foo(zh), foo(jp), foo(fr)
+        foo(zh):    foo(en), foo(jp), great, foo(fr)
+        foo(jp):    foo(zh), foo(fr), great, foo(en)
+        foo(fr):    foo(jp), great, foo(en), foo(zh)
+        bar(en):    bar(zh), bar(jp)
+        bar(zh):    bar(en), bar(jp)
+        bar(jp):    bar(zh), bar(en)
         bar(fr):
         barbar(fr):
-        abcd:       d|abcd->a, d|abcd->b, d|abcd->c, d|abcd->d
-        a:          d|abcd->a
-        b:          d|abcd->b
-        c:          c|abcd->c
-        d:          d|abcd->d
-        xyz:        d|xyz->x, d|xyz->y, d|xyz->z
-        x:          d|xyz->x
-        y:          d|xyz->y
-        z:          d|xyz->z
+        abcd:       a,b,c,d
+        a:          abcd
+        b:          abcd
+        c:          abcd
+        d:          abcd
+        xyz:        xyz
+        x:          x
+        y:          y
+        z:          z
       */
       /* Articles:(tags)
-        1: 1.2.2.1   => bar(fr),barbar(fr), 1.2.2, 1.2, 1
-           1.3.1     => 1.3, 1
-           1.1.1.1.1 => 1.1.1.1, 1.1.1, 1.1, 1
-           1.1.1     => 1.1, 1
-           good      => c
-           great     => bar(en)
+        1: 1.2.2.1
+           1.3.1
+           1.1.1.1.1
+           1.1.1
+           good
+           great
+             1.2.2.1   => bar(fr),barbar(fr), 1.2.2, 1.2, 1
+             1.3.1     => 1.3, 1
+             1.1.1.1.1 => 1.1.1.1, 1.1.1, 1.1, 1
+             1.1.1     => 1.1, 1
+             good      => c
+             great     => bar(en)
+
+             good => nice, great, fine
+             great => nice, fine, foo(en), good, foo(zh), foo(jp), foo(fr)
              c => abcd
-             great => good, nice, fine
-             great => foo(en), foo(zh), foo(jp), foo(fr)
              bar(en) => bar(zh), bar(jp)
-        2: 1.3.1.2   => z, 1.3.1, 1.3, 1
-           1.2       => 1
-           fine      => d
+               nice => fine
+               foo(en) => foo(zh), foo(jp), foo(fr)
+               foo(zh) => foo(jp), foo(fr)
+               foo(jp) => foo(fr)
+               bar(zh) => bar(jp)
+        2: 1.3.1.2
+           1.2
+           fine
+             1.3.1.2   => z, 1.3.1, 1.3, 1
+             1.2       => 1
+             fine      => d
+
+             fine => great, good, nice
              z => xyz
              d => abcd
-             fine => good, nice, great,
-               great =>  foo(en), foo(zh), foo(jp), foo(fr)
-               great =>  good, nice, fine
-        3: 1.3.1.2   => z, 1.3.1, 1.3, 1
-           1.2.2     => 1.2, 1
+               great => nice, foo(en), good, foo(zh), foo(jp), foo(fr)
+               good => nice
+                 foo(en) => foo(zh), foo(jp), foo(fr)
+                 foo(zh) => foo(jp), foo(fr)
+                 foo(jp) => foo(fr)
+        3: 1.3.1.2
+           1.2.2
            foo(en)
+             1.3.1.2   => z, 1.3.1, 1.3, 1
+             1.2.2     => 1.2, 1
+
+             foo(en) => great, foo(zh), foo(jp), foo(fr)
              z => xyz
-             foo(en) => foo(zh), foo(jp), foo(fr), great
-        4: 1.1.1.1   => 1.1.1, 1.1, 1
+               great => nice, fine, good, foo(jp), foo(fr)
+               foo(zh) => foo(jp), foo(fr)
+               foo(jp) => foo(fr)
+                 nice => good, fine
+                 fine => good
+        4: 1.1.1.1
            bar(zh)
+             1.1.1.1 => 1.1.1, 1.1, 1
+
              bar(zh) => bar(en), bar(jp)
-        5: 1.2.1     => 1.2, 1
-           1.3.1.1   => 1.3.1, 1.3, 1
+               bar(en) => bar(jp)
+        5: 1.2.1
+           1.3.1.1
            a
            b
-            a => abcd
-            b => abcd
-        6: 1.3.1.2   => z, 1.3.1, 1.3, 1
+             1.2.1     => 1.2, 1
+             1.3.1.1   => 1.3.1, 1.3, 1
+
+             a => abcd
+             b => abcd
+        6: 1.3.1.2
            x
-             z => xyz
+             1.3.1.2   => z, 1.3.1, 1.3, 1
+
              x => xyz
+             z => xyz
       */
       await testTagRelationCount([
         ['good',      3],
@@ -3371,14 +3557,116 @@ test.serial('Plugin: officialPlugin', async t => {
         ['1.3.1.1',   0],
         ['1.3.1.2',   0],
       ])
+      await testTagOriginCount([
+        ['1', {
+          '1.2.2.1': 1,
+          '1.3.1': 1,
+          '1.1.1.1.1': 1,
+          '1.1.1': 2,
+          good: 2,
+          great: 2,
+          'bar(fr)': 1,
+          'barbar(fr)': 1,
+          '1.2.2': 1,
+          '1.2': 1,
+          '1': 4,
+          '1.3': 1,
+          '1.1.1.1': 1,
+          '1.1': 2,
+          c: 1,
+          'bar(en)': 1,
+
+          nice:2,
+          fine:3,
+          'foo(en)':1,
+          'foo(zh)':2,
+          'foo(jp)':3,
+          'foo(fr)':4,
+          'abcd':1,
+          'bar(zh)':1,
+          'bar(jp)':2,
+        }],
+        ['2', {
+          '1.3.1.2': 1,
+          '1.2': 1,
+          fine: 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 2,
+          d: 1,
+
+          great:1,
+          good:2,
+          nice:3,
+          xyz:1,
+          abcd:1,
+          'foo(en)':1,
+          'foo(zh)':2,
+          'foo(jp)':3,
+          'foo(fr)':4,
+        }],
+        ['3', {
+          '1.3.1.2': 1,
+          '1.2.2': 1,
+          'foo(en)': 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 2,
+          '1.2': 1,
+
+          great:1,
+          'foo(zh)':2,
+          'foo(jp)':3,
+          'foo(fr)':4,
+          xyz:1,
+          nice:1,
+          fine:2,
+          good:3,
+        }],
+        ['4', {
+          '1.1.1.1': 1,
+          'bar(zh)': 1,
+          '1.1.1': 1,
+          '1.1': 1,
+          '1': 1,
+
+          'bar(en)': 1,
+          'bar(jp)': 2,
+        }],
+        ['5', {
+          '1.2.1': 1,
+          '1.3.1.1': 1,
+          a: 1,
+          b: 1,
+          '1.2': 1,
+          '1': 2,
+          '1.3.1': 1,
+          '1.3': 1,
+
+          abcd:2
+        }],
+        ['6', {
+          '1.3.1.2': 1,
+          x: 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 1,
+
+          xyz: 2,
+        }],
+      ])
       await testTagCount([
         ['1', 25],
-        ['2', 13], // 17
-        ['3', 13],
+        ['2', 17], // 17
+        ['3', 16],
         ['4', 7],
         ['5', 9],
         ['6', 7],
       ])
+
       component = 'hook'; componentUID = `${uid}[${component}]simularTags`
       await globals.pluginAPI({operation:'off', uid, component, componentUID})
       await testTagRelationCount([
@@ -3426,6 +3714,72 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 8],
         ['6', 6],
       ])
+      await testTagOriginCount([
+        ['1', {
+          '1.2.2.1': 1,
+          '1.3.1': 1,
+          '1.1.1.1.1': 1,
+          '1.1.1': 2,
+          good: 1,
+          great: 1,
+          'bar(fr)': 1,
+          'barbar(fr)': 1,
+          '1.2.2': 1,
+          '1.2': 1,
+          '1': 4,
+          '1.3': 1,
+          '1.1.1.1': 1,
+          '1.1': 2,
+          c: 1,
+          'bar(en)': 1,
+        }],
+        ['2', {
+          '1.3.1.2': 1,
+          '1.2': 1,
+          fine: 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 2,
+          d: 1,
+        }],
+        ['3', {
+          '1.3.1.2': 1,
+          '1.2.2': 1,
+          'foo(en)': 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 2,
+          '1.2': 1,
+        }],
+        ['4', {
+          '1.1.1.1': 1,
+          'bar(zh)': 1,
+          '1.1.1': 1,
+          '1.1': 1,
+          '1': 1,
+        }],
+        ['5', {
+          '1.2.1': 1,
+          '1.3.1.1': 1,
+          a: 1,
+          b: 1,
+          '1.2': 1,
+          '1': 2,
+          '1.3.1': 1,
+          '1.3': 1,
+        }],
+        ['6', {
+          '1.3.1.2': 1,
+          x: 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 1,
+        }],
+      ])
+
       component = 'hook'; componentUID = `${uid}[${component}]ancestorTags`
       await globals.pluginAPI({operation:'off', uid, component, componentUID})
       await testTagRelationCount([
@@ -3473,6 +3827,41 @@ test.serial('Plugin: officialPlugin', async t => {
         ['5', 4],
         ['6', 2],
       ])
+      await testTagOriginCount([
+        ['1', {
+          '1.2.2.1': 1,
+          '1.3.1': 1,
+          '1.1.1.1.1': 1,
+          '1.1.1': 1,
+          good: 1,
+          great: 1,
+        }],
+        ['2', {
+          '1.3.1.2': 1,
+          '1.2': 1,
+          fine: 1,
+        }],
+        ['3', {
+          '1.3.1.2': 1,
+          '1.2.2': 1,
+          'foo(en)': 1,
+        }],
+        ['4', {
+          '1.1.1.1': 1,
+          'bar(zh)': 1,
+        }],
+        ['5', {
+          '1.2.1': 1,
+          '1.3.1.1': 1,
+          a: 1,
+          b: 1,
+        }],
+        ['6', {
+          '1.3.1.2': 1,
+          x: 1,
+        }],
+      ])
+
       component = 'hook'; componentUID = `${uid}[${component}]groupRelationTag`
       await globals.pluginAPI({operation:'off', uid, component, componentUID})
       await testTagRelationCount([
