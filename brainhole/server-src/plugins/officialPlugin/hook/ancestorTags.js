@@ -27,7 +27,8 @@ async function addAllAncestorTags () {
               origin: [{
                 id: `${hook.uid}-${tag.id}`,
                 hook: `${hook.uid}`,
-                ancestorOf: tag.tag_id,
+                other_id: tag.tag_id,
+                other_nam: tag.name,
               }]
             })
           }
@@ -130,7 +131,8 @@ async function hookGenerator(parameters) {
               tag_id: __, origin:[{
                 id: `${hook.uid}-${sub_tag_id}`,
                 hook: `${hook.uid}`,
-                ancestorOf: this_sub_entry.tag_id,
+                other_id: this_sub_entry.tag_id,
+                other_name: this_sub_entry.tag_name,
               }]
             }
           } else {
@@ -138,7 +140,8 @@ async function hookGenerator(parameters) {
               __query__:{tag_id: __}, origin:[{
                 id: `${hook.uid}-${sub_tag_id}`,
                 hook: `${hook.uid}`,
-                ancestorOf: this_sub_entry.tag_id,
+                other_id: this_sub_entry.tag_id,
+                other_name: this_sub_entry.tag_name,
               }]
             }
           }
@@ -195,7 +198,7 @@ async function hookGenerator(parameters) {
                     origin:[{
                       id: `${hook.uid}-${that_sub_entry.id}`,
                       hook: `${hook.uid}`,
-                      ancestorOf: offspring,
+                      other_id: offspring,
                   }]}))
                   :
                   ancestors.map(__ => ({
@@ -203,7 +206,7 @@ async function hookGenerator(parameters) {
                     origin:[{
                       id: `${hook.uid}-${that_sub_entry.id}`,
                       hook: `${hook.uid}`,
-                      ancestorOf: offspring,
+                      other_id: offspring,
                   }]}))
           }
         })

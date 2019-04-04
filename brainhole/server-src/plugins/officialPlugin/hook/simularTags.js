@@ -212,7 +212,7 @@ async function deleteSingleNullLoopTags ({model, query}) {
     let derive= {}
     let tags = entry._doc.tags
     for (let tag of tags) {
-      let fathers = tag.origin.filter(_ => _.hook === hook.uid).map(_ => _.other_id)
+      let fathers = tag.origin.filter(_ => _.other_id).map(_ => _.other_id)
       fathers = Array.from(new Set(fathers))
       for (let father of fathers) {
         if (!derive[father]) derive[father] = []
@@ -221,17 +221,22 @@ async function deleteSingleNullLoopTags ({model, query}) {
     }
     let manualTags = new Set(tags.filter(_ => _.origin.some(_ => _.id === 'manual')).map(_ => _.tag_id))
     let newManualTags = [...manualTags]
+    //console.log(`begin to calculate loops for ${entry.title}`)
+    //console.log(`seedTags: ${Array.from(manualTags)}`)
     while (true) {
+      //console.log('  new loop')
       let thisNewManualTags = []
       for (let id of newManualTags) {
+        if (!derive[id]) continue
         for (let eachnew of derive[id]) {
           if (!manualTags.has(eachnew)) {
+            // console.log(`  ${id} add ${eachnew}`)
             manualTags.add(eachnew)
             thisNewManualTags.push(eachnew)
           }
         }
       }
-      if (!thisNewManualTags.length) {
+      if (thisNewManualTags.length) {
         newManualTags = thisNewManualTags
       } else {
         break
@@ -278,7 +283,8 @@ async function deleteNullLoopTags ({model, query}) {
       }
     }
   }
-  await globals.bulkOP(todos)
+  let result = await globals.bulkOP(todos)
+  return result
 }
 let functions = {
   deleteNullLoopTags
@@ -554,7 +560,7 @@ async function hookGenerator(parameters) {
   async function changeRelation ({operation, result, meta, origin, origin_flags, model, withs, data, field, entry, oldEntry, session}) {
     let tags
     let doc = entry._doc
-    if (!doc.relations) return
+    if (!withs.relations) return []
     let final = []
     // resultDict['modelName']
     let resultDict = {}
