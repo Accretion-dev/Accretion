@@ -27,8 +27,8 @@ async function addAllAncestorTags () {
               origin: [{
                 id: `${hook.uid}-${tag.id}`,
                 hook: `${hook.uid}`,
-                other_id: tag.tag_id,
-                other_nam: tag.name,
+                origin_id: tag.tag_id,
+                origin_nam: tag.name,
               }]
             })
           }
@@ -131,8 +131,8 @@ async function hookGenerator(parameters) {
               tag_id: __, origin:[{
                 id: `${hook.uid}-${sub_tag_id}`,
                 hook: `${hook.uid}`,
-                other_id: this_sub_entry.tag_id,
-                other_name: this_sub_entry.tag_name,
+                origin_id: this_sub_entry.tag_id,
+                origin_name: this_sub_entry.tag_name,
               }]
             }
           } else {
@@ -140,8 +140,8 @@ async function hookGenerator(parameters) {
               __query__:{tag_id: __}, origin:[{
                 id: `${hook.uid}-${sub_tag_id}`,
                 hook: `${hook.uid}`,
-                other_id: this_sub_entry.tag_id,
-                other_name: this_sub_entry.tag_name,
+                origin_id: this_sub_entry.tag_id,
+                origin_name: this_sub_entry.tag_name,
               }]
             }
           }
@@ -198,7 +198,8 @@ async function hookGenerator(parameters) {
                     origin:[{
                       id: `${hook.uid}-${that_sub_entry.id}`,
                       hook: `${hook.uid}`,
-                      other_id: offspring,
+                      origin_id: offspring,
+                      changeFamily: true,
                   }]}))
                   :
                   ancestors.map(__ => ({
@@ -206,7 +207,8 @@ async function hookGenerator(parameters) {
                     origin:[{
                       id: `${hook.uid}-${that_sub_entry.id}`,
                       hook: `${hook.uid}`,
-                      other_id: offspring,
+                      origin_id: offspring,
+                      changeFamily: true,
                   }]}))
           }
         })

@@ -103,7 +103,7 @@ async function addAllSimularTags() {
             thisMetaHookData.push(`${relation.name}-${model}-${entry.id}-${this_id}-${other_id}`)
             toAddTags.push({
               tag_id: other_id,
-              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, origin_id: this_id, origin_name: Tags[this_id].name}]
             })
           }
         }
@@ -212,7 +212,7 @@ async function deleteSingleNullLoopTags ({model, query}) {
     let derive= {}
     let tags = entry._doc.tags
     for (let tag of tags) {
-      let fathers = tag.origin.filter(_ => _.other_id).map(_ => _.other_id)
+      let fathers = tag.origin.filter(_ => _.origin_id).map(_ => _.origin_id)
       fathers = Array.from(new Set(fathers))
       for (let father of fathers) {
         if (!derive[father]) derive[father] = []
@@ -421,7 +421,7 @@ async function hookGenerator(parameters) {
             }
             todotags.push({
               tag_id: other_id,
-              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, origin_id: this_id, origin_name: Tags[this_id].name}]
             })
           }
         }
@@ -442,7 +442,7 @@ async function hookGenerator(parameters) {
             }
             todotags.push({
               tag_id: other_id,
-              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, origin_id: this_id, origin_name: Tags[this_id].name}]
             })
           }
         }
@@ -462,7 +462,7 @@ async function hookGenerator(parameters) {
             }
             todotags.push({
               __query__: {tag_id: other_id},
-              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
+              origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, origin_id: this_id, origin_name: Tags[this_id].name}]
             })
           }
         }
@@ -647,7 +647,7 @@ async function hookGenerator(parameters) {
                   thisMetaHookData.push(`${relation.name}-${model}-${entry.id}-${this_id}-${other_id}`)
                   toPush = {
                     __query__: {tag_id: other_id},
-                    origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
+                    origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, origin_id: this_id, origin_name: Tags[this_id].name}]
                   }
                   toAddTags.push(toPush)
                 }
@@ -655,7 +655,7 @@ async function hookGenerator(parameters) {
                 thisMetaHookData.push(`${relation.name}-${model}-${entry.id}-${this_id}-${other_id}`)
                 toPush = {
                   tag_id: other_id,
-                  origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, other_id: this_id, other_name: Tags[this_id].name}]
+                  origin: [{id:`${hook.uid}-${id}`, hook:hook.uid, relation_name: relation.name, origin_id: this_id, origin_name: Tags[this_id].name}]
                 }
                 toAddTags.push(toPush)
               }
