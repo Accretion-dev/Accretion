@@ -1,1 +1,7 @@
-* all hooks features and their unittest
+* frontend:
+  * vue components:
+    * ac-table
+    * ac-horizon
+  * UI
+* backend:
+  * web part of brainhole
