@@ -8529,96 +8529,8 @@ test.serial('Plugin: officialPlugin', async t => {
         ['6', 7],
       ])
     }
-    return
     if(1&&(tname="delete Tags and Articles")){
-      /* Articles:(tags)
-        1: 1.2.2.1
-           1.3.1
-           1.1.1.1.1
-           1.1.1
-           good
-           great
-             1.2.2.1   => bar(fr),barbar(fr), 1.2.2, 1.2, 1
-             1.3.1     => 1.3, 1
-             1.1.1.1.1 => 1.1.1.1, 1.1.1, 1.1, 1
-             1.1.1     => 1.1, 1
-             good      => c
-             great     => bar(en)
-
-             good => nice, great, fine
-             great => nice, fine, foo(en), good, foo(zh), foo(jp), foo(fr)
-             c => abcd
-             bar(en) => bar(zh), bar(jp)
-               nice => fine
-               foo(en) => foo(zh), foo(jp), foo(fr)
-               foo(zh) => foo(jp), foo(fr)
-               foo(jp) => foo(fr)
-               bar(zh) => bar(jp)
-
-            1.1.1.1 => xyz
-
-        2: 1.3.1.2
-           1.2
-           fine
-             1.3.1.2   => z, 1.3.1, 1.3, 1
-             1.2       => 1
-             fine      => d
-
-             fine => great, good, nice
-             z => xyz
-             d => abcd
-               great => nice, foo(en), good, foo(zh), foo(jp), foo(fr)
-               good => nice
-                 foo(en) => foo(zh), foo(jp), foo(fr)
-                 foo(zh) => foo(jp), foo(fr)
-                 foo(jp) => foo(fr)
-
-             +1.1.1.1 => xyz
-        3: 1.3.1.2
-           1.2.2
-           foo(en)
-             1.3.1.2   => z, 1.3.1, 1.3, 1
-             1.2.2     => 1.2, 1
-
-             foo(en) => great, foo(zh), foo(jp), foo(fr)
-             z => xyz
-               great => nice, fine, good, foo(zh), foo(jp), foo(fr)
-               foo(zh) => foo(jp), foo(fr)
-               foo(jp) => foo(fr)
-                 nice => good, fine
-                 fine => good
-        4: 1.1.1.1
-             1.1.1.1 => 1.1.1, 1.1, 1
-
-             1.1.1.1 => good
-               good => nice, great, fine
-               nice => great, fine
-               great => fine
-             1.1.1.1 => great, foo(en), foo(zh), foo(jp), foo(fr)
-               good => nice, great, fine
-               nice => great, fine
-               great => fine
-               great => foo(en), foo(zh), foo(jp), foo(fr)
-               foo(en) => foo(zh), foo(jp), foo(fr)
-               foo(zh) => foo(jp), foo(fr)
-               foo(jp) => foo(fr)
-
-        5: 1.2.1
-           1.3.1.1
-           a
-           b
-             1.2.1     => 1.2, 1
-             1.3.1.1   => 1.3.1, 1.3, 1
-
-             a => abcd
-             b => abcd
-        6: 1.3.1.2
-           x
-             1.3.1.2   => z, 1.3.1, 1.3, 1
-
-             x => xyz
-             z => xyz
-      */
+      // delete great
       await globals.api({
         model: 'Tag',
         operation: '-',
@@ -8647,8 +8559,11 @@ test.serial('Plugin: officialPlugin', async t => {
                foo(zh) => foo(jp), foo(fr)
                foo(jp) => foo(fr)
                bar(zh) => bar(jp)
-
-            1.1.1.1 => xyz
+        --:
+          great => bar(en)
+            bra(en) => *
+          great => nice, fine, foo(en), foo(zh), foo(jp), foo(fr)
+            foo(en) => *
 
         2: 1.3.1.2
            1.2
@@ -8665,8 +8580,10 @@ test.serial('Plugin: officialPlugin', async t => {
                  foo(en) => foo(zh), foo(jp), foo(fr)
                  foo(zh) => foo(jp), foo(fr)
                  foo(jp) => foo(fr)
-
-             +1.1.1.1 => xyz
+        --:
+          fine => great, good, nice
+          great => *
+          foo(en) => *
         3: 1.3.1.2
            1.2.2
            foo(en)
@@ -8680,21 +8597,13 @@ test.serial('Plugin: officialPlugin', async t => {
                foo(jp) => foo(fr)
                  nice => good, fine
                  fine => good
+        --:
+           great => nice, fine, good, foo(zh), foo(jp), foo(fr)
+
+
+
         4: 1.1.1.1
              1.1.1.1 => 1.1.1, 1.1, 1
-
-             1.1.1.1 => good
-               good => nice, great, fine
-               nice => great, fine
-               great => fine
-             1.1.1.1 => great, foo(en), foo(zh), foo(jp), foo(fr)
-               good => nice, great, fine
-               nice => great, fine
-               great => fine
-               great => foo(en), foo(zh), foo(jp), foo(fr)
-               foo(en) => foo(zh), foo(jp), foo(fr)
-               foo(zh) => foo(jp), foo(fr)
-               foo(jp) => foo(fr)
 
         5: 1.2.1
            1.3.1.1
@@ -8713,9 +8622,9 @@ test.serial('Plugin: officialPlugin', async t => {
              z => xyz
       */
       await testTagRelationCount([
-        ['good',      2],
-        ['nice',      2],
-        ['fine',      2],
+        ['good',      1],
+        ['nice',      1],
+        ['fine',      0],
         ['foo(en)',   3],
         ['foo(zh)',   3],
         ['foo(jp)',   3],
@@ -8754,8 +8663,7 @@ test.serial('Plugin: officialPlugin', async t => {
           '1.3.1': 1,
           '1.1.1.1.1': 1,
           '1.1.1': 2,
-          good: 2,
-          great: 2,
+          good: 1,
           'bar(fr)': 1,
           'barbar(fr)': 1,
           '1.2.2': 1,
@@ -8765,17 +8673,9 @@ test.serial('Plugin: officialPlugin', async t => {
           '1.1.1.1': 1,
           '1.1': 2,
           c: 1,
-          'bar(en)': 1,
 
-          nice:2,
-          fine:3,
-          'foo(en)':1,
-          'foo(zh)':2,
-          'foo(jp)':3,
-          'foo(fr)':4,
           'abcd':1,
-          'bar(zh)':1,
-          'bar(jp)':2,
+          nice:1,
         }],
         ['2', {
           '1.3.1.2': 1,
@@ -8786,16 +8686,8 @@ test.serial('Plugin: officialPlugin', async t => {
           '1.3': 1,
           '1': 2,
           d: 1,
-
-          great:1,
-          good:2,
-          nice:3,
           xyz:1,
-          abcd:1,
-          'foo(en)':1,
-          'foo(zh)':2,
-          'foo(jp)':3,
-          'foo(fr)':4,
+          abcd:1
         }],
         ['3', {
           '1.3.1.2': 1,
@@ -8807,14 +8699,10 @@ test.serial('Plugin: officialPlugin', async t => {
           '1': 2,
           '1.2': 1,
 
-          great:1,
-          'foo(zh)':2,
-          'foo(jp)':3,
-          'foo(fr)':4,
+          'foo(zh)':1,
+          'foo(jp)':2,
+          'foo(fr)':3,
           xyz:1,
-          nice:1,
-          fine:2,
-          good:3,
         }],
         ['4', {
           '1.1.1.1': 1,
@@ -8846,17 +8734,249 @@ test.serial('Plugin: officialPlugin', async t => {
         }],
       ])
       await testTagCount([
-        ['1', 25],
-        ['2', 17], // 17
-        ['3', 16],
+        ['1', 16],
+        ['2', 10],
+        ['3', 12],
         ['4', 4],
         ['5', 9],
         ['6', 7],
       ])
 
+      // delete tag abcd
+      await globals.api({
+        model: 'Tag',
+        operation: '-',
+        query:{name: 'abcd'},
+      })
+      await testTagRelationCount([
+        ['good',      1],
+        ['nice',      1],
+        ['fine',      0],
+        ['foo(en)',   3],
+        ['foo(zh)',   3],
+        ['foo(jp)',   3],
+        ['foo(fr)',   3],
+        ['bar(en)',   2],
+        ['bar(zh)',   2],
+        ['bar(jp)',   2],
+        ['bar(fr)',   0],
+        ['barbar(fr)',0],
+        ['a',         0],
+        ['b',         0],
+        ['c',         0],
+        ['d',         0],
+        ['xyz',       3],
+        ['x',         1],
+        ['y',         1],
+        ['z',         1],
+        ['1',         0],
+        ['1.1',       0],
+        ['1.1.1',     0],
+        ['1.1.1.1',   0],
+        ['1.1.1.1.1', 0],
+        ['1.2',       0],
+        ['1.2.1',     0],
+        ['1.2.2',     0],
+        ['1.2.2.1',   0],
+        ['1.3',       0],
+        ['1.3.1',     0],
+        ['1.3.1.1',   0],
+        ['1.3.1.2',   0],
+      ])
+      await testTagOriginCount([
+        ['1', {
+          '1.2.2.1': 1,
+          '1.3.1': 1,
+          '1.1.1.1.1': 1,
+          '1.1.1': 2,
+          good: 1,
+          'bar(fr)': 1,
+          'barbar(fr)': 1,
+          '1.2.2': 1,
+          '1.2': 1,
+          '1': 4,
+          '1.3': 1,
+          '1.1.1.1': 1,
+          '1.1': 2,
+          c: 1,
+
+          nice:1,
+        }],
+        ['2', {
+          '1.3.1.2': 1,
+          '1.2': 1,
+          fine: 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 2,
+          d: 1,
+          xyz:1,
+        }],
+        ['3', {
+          '1.3.1.2': 1,
+          '1.2.2': 1,
+          'foo(en)': 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 2,
+          '1.2': 1,
+
+          'foo(zh)':1,
+          'foo(jp)':2,
+          'foo(fr)':3,
+          xyz:1,
+        }],
+        ['4', {
+          '1.1.1.1': 1,
+          '1.1.1': 1,
+          '1.1': 1,
+          '1': 1,
+        }],
+        ['5', {
+          '1.2.1': 1,
+          '1.3.1.1': 1,
+          a: 1,
+          b: 1,
+          '1.2': 1,
+          '1': 2,
+          '1.3.1': 1,
+          '1.3': 1,
+
+        }],
+        ['6', {
+          '1.3.1.2': 1,
+          x: 1,
+          z: 1,
+          '1.3.1': 1,
+          '1.3': 1,
+          '1': 1,
+
+          xyz: 2,
+        }],
+      ])
+      await testTagCount([
+        ['1', 15],
+        ['2', 9],
+        ['3', 12],
+        ['4', 4],
+        ['5', 8],
+        ['6', 7],
+      ])
+
+      // delete all articles
+      await globals.api({
+        model: 'Article',
+        operation: '-',
+        query:{title: '1'},
+      })
+      await globals.api({
+        model: 'Article',
+        operation: '-',
+        query:{title: '2'},
+      })
+      await globals.api({
+        model: 'Article',
+        operation: '-',
+        query:{title: '3'},
+      })
+      await globals.api({
+        model: 'Article',
+        operation: '-',
+        query:{title: '4'},
+      })
+      await globals.api({
+        model: 'Article',
+        operation: '-',
+        query:{title: '5'},
+      })
+      await globals.api({
+        model: 'Article',
+        operation: '-',
+        query:{title: '6'},
+      })
+      await testTagRelationCount([
+        ['good',      1],
+        ['nice',      1],
+        ['fine',      0],
+        ['foo(en)',   3],
+        ['foo(zh)',   3],
+        ['foo(jp)',   3],
+        ['foo(fr)',   3],
+        ['bar(en)',   2],
+        ['bar(zh)',   2],
+        ['bar(jp)',   2],
+        ['bar(fr)',   0],
+        ['barbar(fr)',0],
+        ['a',         0],
+        ['b',         0],
+        ['c',         0],
+        ['d',         0],
+        ['xyz',       3],
+        ['x',         1],
+        ['y',         1],
+        ['z',         1],
+        ['1',         0],
+        ['1.1',       0],
+        ['1.1.1',     0],
+        ['1.1.1.1',   0],
+        ['1.1.1.1.1', 0],
+        ['1.2',       0],
+        ['1.2.1',     0],
+        ['1.2.2',     0],
+        ['1.2.2.1',   0],
+        ['1.3',       0],
+        ['1.3.1',     0],
+        ['1.3.1.1',   0],
+        ['1.3.1.2',   0],
+      ])
     }
     if('turn off and clean') {
-
+      component = 'hook'; componentUID = `${uid}[${component}]groupRelationTag`
+      await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      await testTagRelationCount([
+        ['good',      1],
+        ['nice',      1],
+        ['fine',      0],
+        ['foo(en)',   1],
+        ['foo(zh)',   2],
+        ['foo(jp)',   2],
+        ['foo(fr)',   1],
+        ['bar(en)',   1],
+        ['bar(zh)',   2],
+        ['bar(jp)',   1],
+        ['bar(fr)',   0],
+        ['barbar(fr)',0],
+        ['a',         0],
+        ['b',         0],
+        ['c',         0],
+        ['d',         0],
+        ['xyz',       3],
+        ['x',         1],
+        ['y',         1],
+        ['z',         1],
+        ['1',         0],
+        ['1.1',       0],
+        ['1.1.1',     0],
+        ['1.1.1.1',   0],
+        ['1.1.1.1.1', 0],
+        ['1.2',       0],
+        ['1.2.1',     0],
+        ['1.2.2',     0],
+        ['1.2.2.1',   0],
+        ['1.3',       0],
+        ['1.3.1',     0],
+        ['1.3.1.1',   0],
+        ['1.3.1.2',   0],
+      ])
+      component = 'hook'; componentUID = `${uid}[${component}]ancestorTags`
+      await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      component = 'hook'; componentUID = `${uid}[${component}]simularTags`
+      await globals.pluginAPI({operation:'off', uid, component, componentUID})
+      await globals.Models.Tag.deleteMany({})
+      await globals.Models.Relation.deleteMany({})
+      await globals.Models.Article.deleteMany({})
     }
   }
   t.pass()
