@@ -87,3 +87,4 @@ configs
 common
 test
 !test-src/*
+test-final.js

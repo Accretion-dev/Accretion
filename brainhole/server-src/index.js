@@ -1,4 +1,5 @@
-import debugSettings from './debug-settings'
+// import debugSettings from './debug-settings'
+import buildTest from './buildTest'
 import 'babel-polyfill'
 import WebSocket from 'ws'
 import cookieParser from 'cookie-parser'
@@ -7,10 +8,12 @@ import serveStatic from 'serve-static'
 import passport from 'passport'
 import mongoose from 'mongoose'
 import mongodb from 'mongodb'
-import database_init from './models'
+import __ from './models'
+const {init:database_init} = __
 import globalConfig from "../configs/config.js"
 import yaml from 'node-yaml'
 import Subwss from './api/wsserver.js'
+import globals from './globals'
 
 const express = require('express')
 const session = require("express-session")
@@ -21,10 +24,12 @@ const app = express()
 const host = globalConfig.host
 const port = globalConfig.port
 
-d.app = app
-d.consola = consola
-d.m = mongoose
-d.mongodb = mongodb
+globals.isMain = true
+global.d = globals
+globals.app = app
+globals.consola = consola
+globals.mongoose = mongoose
+globals.mongodb = mongodb
 
 app.set('port', port)
 app.set('strict routing', true)
@@ -52,17 +57,16 @@ let mounted = require('./routes').default(app)
 let config = require('../nuxt.config.js')
 config.dev = !(process.env.NODE_ENV === 'production')
 
-d.nuxtConfig = config
-d.config = globalConfig
-d.yaml = yaml
-d.app = app
+globals.nuxtConfig = config
+globals.config = globalConfig
+globals.yaml = yaml
 let databaseConfig = yaml.readSync('../configs/mongod.yml')
-d.databaseConfig = databaseConfig
+globals.databaseConfig = databaseConfig
 
 // auth
 // let User = require('./models/models').default.User
-const {Models, api} = require('./models/models').default
-let User = Models.User
+console.log(globals)
+let User = globals.Models.User
 const LocalStrategy = require('passport-local').Strategy
 passport.use(new LocalStrategy(User.authenticate()))
 passport.serializeUser(User.serializeUser())
@@ -72,7 +76,7 @@ async function start() {
   // Init Nuxt.js
   await database_init({config: globalConfig, databaseConfig})
   const nuxt = new Nuxt(config)
-  global.d.nuxt = nuxt
+  globals.nuxt = nuxt
 
   // Build only in dev mode
   if (config.dev) {
@@ -128,7 +132,7 @@ async function start() {
       }))
     })
   })
-  global.d.subwss = subwss
+  globals.subwss = subwss
 
   consola.ready({
     message: `Server listening on http://${host}:${port}`,

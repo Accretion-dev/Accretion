@@ -7,6 +7,7 @@ watch=$(cat <<-EOF
 "echo 'task: brainhole-utils';npx babel -D --source-maps inline --watch ../utils --out-dir utils"
 "echo 'task: brainhole-configs';npx babel -D --source-maps inline --watch ../configs --out-dir configs"
 "echo 'task: brainhole-test';npx babel -D --source-maps inline --watch test-src --out-dir test"
+"echo 'task: watch-to-generate-test-file';node watch-for-test.js"
 EOF
 )
 brk=$(cat <<-EOF

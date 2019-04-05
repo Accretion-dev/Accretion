@@ -1,0 +1,7 @@
+* frontend:
+  * vue components:
+    * ac-table
+    * ac-horizon
+  * UI
+* backend:
+  * web part of brainhole

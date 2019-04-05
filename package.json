@@ -5,7 +5,11 @@
   "author": "Fmajor <wujinnnnn@gmail.com>",
   "private": true,
   "scripts": {},
-  "dependencies": {},
+  "dependencies": {
+    "clone-deep": "^4.0.1",
+    "require-glob": "^3.2.0",
+    "webpack-concat-plugin": "^3.0.0"
+  },
   "devDependencies": {
     "babel-core": "^6.22.1",
     "babel-eslint": "^8.2.1",
@@ -23,6 +27,7 @@
     "babel-preset-latest": "^6.24.1",
     "babel-preset-stage-2": "^6.24.1",
     "babel-register": "^6.22.0",
+    "concat-files": "^0.1.1",
     "eslint": "^4.15.0",
     "eslint-config-standard": "^10.2.1",
     "eslint-friendly-formatter": "^3.0.0",

@@ -1,4 +1,6 @@
 import mongoose from 'mongoose'
+import __ from '../plugins'
+const {components} = __
 const {Schema} = mongoose
 
 // most search can be done by searchKey
@@ -21,6 +23,33 @@ const User = {
     createTime: { type: Date, default: Date.now }
   }
 }
+const History = {
+  schema: {
+    time: { type: Date, default: Date.now },
+    operation: { type: String },
+    modelID: { type: Number },
+    model: { type: String },
+    field: { type: String },
+    query: { type: Schema.Types.Mixed },
+    data: { type: Schema.Types.Mixed },
+    simple:  { type: Schema.Types.Mixed },
+    withs:  { type: Schema.Types.Mixed },
+    meta: { type: Schema.Types.Mixed },
+    hookActions: { type: Schema.Types.Mixed },
+    origin: { type: Schema.Types.Mixed },
+    origin_flags: { type: Schema.Types.Mixed },
+  }
+}
+const Plugins = {
+  schema: {
+    uid: { type: String },
+    name: { type: String },
+    author: { type: String },
+    author_email: { type: String },
+    description: { type: String },
+  }
+}
+components.map(_ => Plugins.schema[_] = [{type: mongoose.Schema.Types.Mixed}])
 
 // four import meta info for all other model
 const Metadata = {
@@ -97,45 +126,6 @@ const File = {
     }
   }
 }
-const Book = {
-  projects: {
-    simple: {title: 1, author: 1, type: 1, comment: 1},
-  },
-  schema: {
-    title: { type: String, index: true, required: true },
-    author: { type: String, index: true },
-    editor: { type: String, index: true },
-    abstract: { type: String, index: true },
-    type: { type: String, index: true },
-    doi: { type: String, index: true },
-    timePublic: { type: Date, index: true },
-    bulk: {
-      content: { type: String },
-    }
-  }
-}
-const Snippet = {
-  projects: {
-    simple: {name: 1, type: 1, comment: 1},
-    nobulk: {content: 0},
-  },
-  schema: {
-    name: { type: String, index: true, required: true },
-    language: { type: String, index: true },
-    content: { type: String },
-  }
-}
-const Info = {
-  projects: {
-    simple: {name: 1, type: 1, comment: 1},
-    nobulk: {content: 0},
-  },
-  schema: {
-    name: { type: String, index: true, required: true },
-    type: { type: String, index: true },
-    content: { type: String },
-  }
-}
 
 // for light cone
 //   need more details
@@ -144,22 +134,6 @@ const Info = {
 //const EventPlans = { }
 
 // other models
-const History = {
-  schema: {
-    time: { type: Date, default: Date.now },
-    operation: { type: String, index: true },
-    modelID: { type: Number, index: true},
-    model: { type: String, index: true},
-    field: { type: String, index: true },
-    query: { type: Schema.Types.Mixed },
-    data: { type: Schema.Types.Mixed },
-    result: { type: Schema.Types.Mixed },
-    simple:  { type: Schema.Types.Mixed },
-    withs:  { type: Schema.Types.Mixed },
-    meta: { type: Schema.Types.Mixed },
-    other_result: { type: Schema.Types.Mixed },
-  }
-}
 const Config = {
   schema: {
     name: { type: String, index: true, required: true },
@@ -206,9 +180,9 @@ const Workspace = {
 }
 
 export default {
-  IDs, User,
+  IDs, User, History, Plugins,
   Metadata, Catalogue, Tag, Relation,
-  Article, Website, File, Book, Snippet, Info,
-  History, Config, UserConfig,
+  Article, Website, File,
+  Config, UserConfig,
   Editing, Workspace,
 }

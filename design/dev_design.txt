@@ -74,28 +74,28 @@
           * for each topModels that have this tag:
             * delete tag from that topModel
         * withs
-      * [ ] CatalogueAPI:
+      * [f] CatalogueAPI:
         * add:
         * modify:
         * delete:
           * for each topModels that have this catalogue:
             * delete catalogue from that topModel
         * withs
-      * [ ] RelationAPI:
+      * [f] RelationAPI:
         * add A=>B, auto add B=>A
-      * [ ] MetadataAPI:
+      * [f] MetadataAPI:
       * [ ] tagsAPI:
         * [ ] calculate tag diff
           * apply diff
             * make the 'level' meta > 1
             * no history, return it to parent
         * [ ] add/delete reverse
-      * [ ] cataloguesAPI:
-        * [ ] add/delete reverse
+      * [f] cataloguesAPI:
+        * [f] add/delete reverse
       * [f] metadatasAPI:
         * [f] add/delete reverse
-      * [ ] relationsAPI:
-        * [ ] add/delete reverse
+      * [f] relationsAPI:
+        * [f] add/delete reverse
         * if parent is tag:
           * if either old relations and new relations have hooks
             * for all topModels with this tag:
@@ -128,6 +128,44 @@
         * Catalogues
         * families:
   * hooks:
+    * [ ] delete all reverse of Taglike model, return other_models
+    * [ ] return 'with' give change diff
+    * design:
+      * tow kinds of model: articleLike and tagLike
+      * origin:
+        * can not delete relations
+        * have thisRelation with thatEntry:
+          * 'sync' relation:
+            * thisArticle add thisRelation
+              * auto_id: `relationName-subrelation_id`
+              * autocopy (tags, catalogue, metadatas) from thatEntry
+              * autocopy (tags, catalogue, metadatas)   to thatEntry
+            * thisArticle delete thisRelation
+              * auto_id: `relationName-subrelation_id`
+              * autodelete (tags, catalogue, metadatas) from thatEntry
+              * autodelete (tags, catalogue, metadatas)   to thatEntry
+            * delete thisRelation:
+              * delete relatons from thisArticles: known
+        * have thisRelation with thisTag
+          * 'similar' relation:
+            * thisTag add thisRelation
+              * auto_id: `relationName-subrelation_id`
+              * for all entrie that has thisTag or thatTag
+                * autocopy thisTag and thatTag to these entries
+            * thisTag delete thisRelation
+              * auto_id: `relationName-subrelation_id`
+              * for all entrie that has thisTag or thatTag
+                * autodelete thisTag and thatTag to these entries
+            * add thisTag with thisRelation
+              * auto_id: `relationName-subrelation_id`
+              * autocopy thatTag to these entries
+            * delete thisTag with thisRelation
+              * auto_id: `relationName-subrelation_id`
+              * autodelete thatTag to these entries
+            * delete thisRelation
+              * delete relations from thisTags: exists
+
+
     * [ ] about 'group' relation:
       * entry is tag or topModles
       * [ ] entry +-* relation:

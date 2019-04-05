@@ -365,5 +365,46 @@ db.prodcuts.find()
   $or: {}
 }
 
+# to debug article tags
+db.getCollection("Article").aggregate(
+	[
+		{
+		    $match: {
+
+		    }
+		},
+		{ $unwind: {path:'$tags', preserveNullAndEmptyArrays: true}, },
+    	{
+        	$lookup: {
+        		from: 'Tag',
+        		let: {tag_id: '$tags.tag_id'},
+        		pipeline: [
+        			{
+        			    $match: {
+        			        $expr: {$eq:["$id", "$$tag_id"]}
+        			    }
+        			},
+        			{
+        				$project: {name: 1, _id:0}
+        			}
+        		],
+        		as: 'tags.tag',
+        	}
+        },
+        { $unwind: {path:'$tags.tag' }},
+        {
+            $addFields: {
+            	'tags.tag_name': "$tags.tag.name"
+            }
+        },
+        {$group: {_id: "$_id", tags:{$push: "$tags"}, _full:{$first: "$$ROOT"}}},
+        {$replaceRoot: {newRoot: {$mergeObjects:["$_full", {tags: "$tags"}]}}},
+        {$project: {
+        	'tags.createdAt': 0, 'tags.modifiedAt': 0, 'tags._id':0, 'tags.origin.time':0, 'tags.tag': 0
+        }},
+        {$project: {title:1, tags:1}},
+        {$sort:{title:1}}
+    ]
+)
 
 ```

@@ -14,9 +14,23 @@
     "generate": "nuxt generate",
     "lint": "eslint --ext .js,.vue --ignore-path .gitignore .",
     "precommit": "npm run lint",
-    "test": "npx ava -v --watch --fail-fast test.js",
+    "test": "npx ava -v --watch --fail-fast",
     "test-inspect": "npx --node-arg=\"--inspect\" ava -v test.js",
     "test-profile": "inspect node_modules/ava/profile.js test.js "
+  },
+  "nodemonConfig": {
+    "ignore": [
+      "**/test.js"
+    ],
+    "delay": "2500"
+  },
+  "ava": {
+    "files": [
+      "test-final.js"
+    ],
+    "sources": [
+      "./server/**/*.js"
+    ]
   },
   "dependencies": {
     "@nuxtjs/axios": "^5.0.0",
@@ -26,6 +40,8 @@
     "cookie-parser": "^1.4.3",
     "cors": "^2.8.5",
     "cross-env": "^5.2.0",
+    "deep-equal": "^1.0.1",
+    "delay": "^4.1.0",
     "express": "^4.16.3",
     "express-session": "^1.15.6",
     "express-ws": "^4.0.0",
@@ -56,6 +72,8 @@
     "babel-preset-es2018": "^1.0.0",
     "babel-preset-latest": "^6.24.1",
     "babel-runtime": "^6.26.0",
+    "chokidar": "^2.1.2",
+    "concat": "^1.0.3",
     "concurrently": "^4.1.0",
     "eslint": "^5.0.1",
     "eslint-loader": "^2.0.0",

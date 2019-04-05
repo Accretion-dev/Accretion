@@ -2,11 +2,20 @@ import mongoose from 'mongoose'
 import mongodb from 'mongodb'
 import fillDemo from './fillDemo'
 import __ from './models'
-const {Models, api, Withs, All, getRequire} = __
+const {initModels, getRequire} = __
 const consola = require('consola')
-const User = Models.User
+let initPlugins = require('../plugins').default.initPlugins
+import globals from '../globals'
+
+console.log('in models/index.js:', {initModels, getRequire})
+
+//mongoose.set('debug', true)
+mongoose.set('useFindAndModify', false)
+mongoose.set('useCreateIndex', true)
 
 async function initIDs ({config}) {
+  let Models = globals.Models
+  let Withs = globals.Withs
   // set the init id for all models
   let names = Object.keys(Models)
   let offset = 1 // if unittest, models should have different offset
@@ -41,14 +50,8 @@ async function initIDs ({config}) {
   }
 }
 
-async function initTestDatabase ({config, databaseConfig}) {
-  if (config.demoData || config.unittest) {
-    consola.ready({
-      message: `clean database`,
-      badge: true
-    })
-    let dropResult = await mongoose.connection.db.dropDatabase()
-  }
+async function initTestDatabase ({config}) {
+  let User = globals.Models.User
   await initIDs({config})
   // create default user
   let exist = await User.findOne({username: 'accretion'})
@@ -60,11 +63,6 @@ async function initTestDatabase ({config, databaseConfig}) {
     await user.setPassword('cc')
     await user.save()
   }
-  // init with test data
-  if (config.demoData) {
-    console.log('fill with demoData')
-    let da = new fillDemo()
-  }
 }
 async function initProductDatabase () {
   await initIDs()
@@ -75,19 +73,38 @@ async function init ({config, databaseConfig}) {
   let databaseName = config.database
   try {
     await mongoose.connect(`mongodb://${ip}:${port}/accretion`, { useNewUrlParser: true })
-    global.debug.conn = await mongodb.connect(`mongodb://${ip}:${port}`, { useNewUrlParser: true })
-    global.debug.db = global.debug.conn.db('accretion')
-    global.debug.history = global.debug.db.collection('History')
+    globals.conn = await mongodb.connect(`mongodb://${ip}:${port}`, { useNewUrlParser: true })
+    globals.db = globals.conn.db('accretion')
+    globals.history = globals.db.collection('History')
   } catch (e) {
     console.error(e)
     let msg = 'Database connetion error, do you realy start the mongodb using the configs/mongod.yml config file???'
     console.error(msg)
     consola.error(msg)
   }
+
+  // clean database if test database and unittest
   if (databaseName === "test") {
-    await initTestDatabase({config, databaseConfig})
+    if (config.demoData || config.unittest) {
+      consola.ready({
+        message: `clean database`,
+        badge: true
+      })
+      let dropResult = await mongoose.connection.db.dropDatabase()
+    }
+    if (config.demoData) {
+      console.log('fill with demoData')
+      let da = new fillDemo()
+    }
+  }
+
+  // if unittest, active all plugin by default
+  await initPlugins({allActive: databaseName === "test" && config.unittest})
+  initModels()
+  if (databaseName === "test") {
+    await initTestDatabase({config})
   } else {
     await initProductDatabase()
   }
 }
-export default init
+export default {init}
