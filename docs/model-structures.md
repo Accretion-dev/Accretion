@@ -388,7 +388,7 @@ relations数组中每个元素的relation_id为这个数据添加的`Relation`�
 
 #总结
 
-以上为在用户视角可以进行的操作, 开发者视角会有更多的细节,参考(还没写的)dev-model-struct.md
+以上为在用户视角可以进行的操作, 开发者视角会有更多的细节,参考brainhole-design.md
 有了基本的`目标数据类`, 配合`Tag`, `Catalogue`, `Relation`, `Metadata`, 用户可自由的增删改所有的简单元数据和
 * tags
 * catalogues
