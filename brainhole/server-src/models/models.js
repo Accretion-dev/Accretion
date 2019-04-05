@@ -706,7 +706,7 @@ async function processEntryHooks({hookActions, history, result, meta, origin, or
     let fieldEntry = _.sum(__.map(_ => _.goodWiths[_.field].entry))
     let fieldOrigin = _.sum(__.map(_ => _.goodWiths[_.field].origin))
     let statistic = {total, field, fieldEntry, fieldOrigin}
-    done.push({input: thisHookAction, output: __, statistic})
+    done.push({input: thisHookAction, statistic})
   }
   return done
 }
@@ -858,7 +858,7 @@ async function apiSessionWrapper ({ operation, data, query, model, meta, field, 
 
     if (!field) {
       let {simple, withs} = extractWiths({data, model})
-      entry.set(simple)
+      entry.set(Object.assign({}, simple, {modifiedAt: new Date()}))
       let thisresult = await processWiths({operation, prefield: model, field, entry, withs, session, origin, meta})
       withs = thisresult
 
@@ -1534,7 +1534,7 @@ async function taglikeAPI ({name, operation, prefield, field, data, entry, sessi
         }
 
         simple = full_tag_query
-        this_sub_entry.set(simple)
+        this_sub_entry.set(Object.assign({}, simple, {modifiedAt: new Date()}))
         if (changeTaglike) { // test if it is duplicated with another taglike
           // can not use .find here, ... subSchema.find will not return null when not find
           if (this_sub_entry.origin.filter(_ => _.id !== 'manual').length) {
