@@ -579,3 +579,22 @@ await globals.api({
 
 // You can find more examples and results in the unittest file 'test.js'
 ```
+
+## Plugin system
+* you can add hooks to perform automatical metadata operations.
+* the origin of metadatas added by hooks are not manual, so hooks will not affect your raw data (added with manual origin) and can thus turn on and turn off at any time.
+* we have an official plugin with three hooks, then are
+  * groupRelationTag: collect tags as groups and add the groupRelation for each other
+    * example: we have an Relation 'translation', and have the relations
+      * foo(en)<=>foo(zh)
+      * foo(zh)<=>foo(jp)
+      * foo(jp)<=>foo(fr)
+      
+      Then hook will detect a group foo(en), foo(zh), foo(jp) and foo(fr) under the 'translation' relation and automatically add the missing relations
+      * foo(en)<=>foo(jp)
+      * foo(en)<=>foo(fr)
+      * foo(zh)<=>foo(fr)
+  * ancestorTags: when add a tag, also add its ancestor tags.
+  * simularTags: when add a tag, also add tags that have 'simular' relation with this tag.
+
+more details of these hooks are in the readme.md file of the officialPlugins.
