@@ -1,13 +1,13 @@
 import mongoose from 'mongoose'
 import mongodb from 'mongodb'
-import fillDemo from './fillDemo'
 import __ from './models'
 const {initModels, getRequire} = __
 const consola = require('consola')
 let initPlugins = require('../plugins').default.initPlugins
 import globals from '../globals'
+import delay from 'delay'
 
-console.log('in models/index.js:', {initModels, getRequire})
+// console.log('in models/index.js:', {initModels, getRequire})
 
 //mongoose.set('debug', true)
 mongoose.set('useFindAndModify', false)
@@ -72,14 +72,26 @@ async function init ({config, databaseConfig}) {
   let {bindIp: ip, port} = databaseConfig.net
   let databaseName = config.database
   try {
-    await mongoose.connect(`mongodb://${ip}:${port}/accretion`, { useNewUrlParser: true })
     globals.conn = await mongodb.connect(`mongodb://${ip}:${port}`, { useNewUrlParser: true })
+    let adminDB = globals.conn.db('admin')
+    let status
+    try {
+      status = await adminDB.command({replSetGetStatus:{}})
+    } catch (e) {
+      await adminDB.command({replSetInitiate: {}})
+      await globals.conn.close()
+      await delay(5000) // wait until the database replSet is initiated
+      globals.conn = await mongodb.connect(`mongodb://${ip}:${port}`, { useNewUrlParser: true })
+      adminDB = globals.conn.db('admin')
+      status = await adminDB.command({replSetGetStatus:{}})
+    }
     globals.db = globals.conn.db('accretion')
+
+    await mongoose.connect(`mongodb://${ip}:${port}/accretion`, { useNewUrlParser: true })
     globals.history = globals.db.collection('History')
   } catch (e) {
     console.error(e)
-    let msg = 'Database connetion error, do you realy start the mongodb using the configs/mongod.yml config file???'
-    console.error(msg)
+    let msg = 'Database connetion error, do you really start the mongodb using the configs/mongod.yml config file???'
     consola.error(msg)
   }
 
@@ -91,10 +103,6 @@ async function init ({config, databaseConfig}) {
         badge: true
       })
       let dropResult = await mongoose.connection.db.dropDatabase()
-    }
-    if (config.demoData) {
-      console.log('fill with demoData')
-      let da = new fillDemo()
     }
   }
 

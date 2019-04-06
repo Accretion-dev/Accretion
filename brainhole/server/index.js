@@ -1,6 +1,3 @@
-// import debugSettings from './debug-settings'
-import buildTest from './buildTest'
-import 'babel-polyfill'
 import WebSocket from 'ws'
 import cookieParser from 'cookie-parser'
 import bodyParser from 'body-parser'
@@ -65,7 +62,6 @@ globals.databaseConfig = databaseConfig
 
 // auth
 // let User = require('./models/models').default.User
-console.log(globals)
 let User = globals.Models.User
 const LocalStrategy = require('passport-local').Strategy
 passport.use(new LocalStrategy(User.authenticate()))

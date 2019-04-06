@@ -5,7 +5,7 @@
   "author": "Fmajor",
   "private": true,
   "scripts": {
-    "watch": "nodemon watch-for-test.js",
+    "watch": "cd test; node gen-final-test-watch.js",
     "run": "cross-env NODE_ENV=development nodemon server/index.js --watch server",
     "dev": "cross-env NODE_ENV=development nodemon --watch server --exec 'babel-node --inspect=\"localhost:12345\" server/index.js'",
     "build": "nuxt build",
@@ -13,8 +13,8 @@
     "generate": "nuxt generate",
     "lint": "eslint --ext .js,.vue --ignore-path .gitignore .",
     "precommit": "npm run lint",
-    "test": "node ava --fail-fast",
-    "test-inspect": "cross-env NODE_ENV=development nodemon --watch test-final.js --watch server --exec 'babel-node --inspect node_modules/ava/profile.js test-final.js --fail-fast'"
+    "test": "cd test; node gen-final-test.js; cd ..;ava --fail-fast",
+    "test-inspect": "cross-env NODE_ENV=development nodemon --watch test/test-final.js --watch server --exec 'babel-node --inspect node_modules/ava/profile.js test/test-final.js --fail-fast'"
   },
   "nodemonConfig": {
     "ignore": [
@@ -24,10 +24,9 @@
   },
   "ava": {
     "files": [
-      "test-final.js"
+      "test/test-final.js"
     ],
     "sources": [
-      "./configs/**/*.js",
       "./server/**/*.js"
     ],
     "require": [
@@ -87,6 +86,7 @@
     "eslint-plugin-vue": "^4.0.0",
     "node-sass": "^4.11.0",
     "nodemon": "^1.18.9",
+    "ps": "^1.0.0",
     "sass-loader": "^7.1.0"
   }
 }

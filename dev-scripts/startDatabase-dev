@@ -1,6 +1,6 @@
 #!/bin/bash
-configFile=brainhole/configs/config.js
-mongodConfigFile=brainhole/configs/mongod.yml
+configFile=configs/config.js
+mongodConfigFile=configs/mongod.yml
 database=`cat $configFile | grep '^\s"database"' | tail -n 1 | cut -d ':' -f2 | cut -d \" -f2`
 databaseDir=`cat $configFile | grep '^\s"databaseDir"' | tail -n 1 | cut -d ':' -f2 | cut -d \" -f2`
 if [[ -z "$database" || -z "$databaseDir" ]]; then

@@ -2,15 +2,15 @@
 import globalConfig from "./configs/config.js"
 import _ from 'lodash'
 import yaml from 'node-yaml'
-let config = require('./nuxt.config.js')
+let config = require('../nuxt.config.js')
 let databaseConfig = yaml.readSync('./configs/mongod.yml')
-import _models from './server/models'
+import _models from '../server/models'
 const {init: database_init} = _models
-import __ from './server/models/models'
+import __ from '../server/models/models'
 const {api, getRequire, bulkOP} = __
 import mongoose from 'mongoose'
 import test from 'ava'
-import globals from './server/globals'
+import globals from '../server/globals'
 import fs from 'fs'
 import path from 'path'
 import delay from 'delay'
@@ -33,6 +33,9 @@ if (globalConfig.database !== 'test') {
   throw Error(`you can only run unittest on test database!`)
 }
 
+test.before('start database', async t => {
+  // TODO
+})
 test.before('init database', async t => {
   globalConfig.demoData = false
   globalConfig.unittest = true
@@ -2361,7 +2364,7 @@ test.skip('test', async t => {
 
 // add test files in plugins
 test.serial('all plugin have test file', async t => {
-  const pluginRoot = path.join(__dirname, 'server', 'plugins')
+  const pluginRoot = path.join(__dirname, '..','server', 'plugins')
   let pluginNames = fs.readdirSync(pluginRoot)
   let testFiles = []
   let fileCount = 0

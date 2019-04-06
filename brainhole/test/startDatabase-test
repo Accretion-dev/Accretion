@@ -1,0 +1,20 @@
+#!/bin/bash
+configFile=configs/config.js
+mongodConfigFile=configs/mongod.yml
+database=`cat $configFile | grep '^\s"database"' | tail -n 1 | cut -d ':' -f2 | cut -d \" -f2`
+databaseDir=`cat $configFile | grep '^\s"databaseDir"' | tail -n 1 | cut -d ':' -f2 | cut -d \" -f2`
+if [[ -z "$database" || -z "$databaseDir" ]]; then
+  echo "unknown database:$database or databaseDir:$databaseDir, check the config file:$configFile"
+  exit 1
+fi
+
+version=`mongod --version | grep "db version"`
+if [[ "$version" < "db version v3.4.0" ]]; then
+	echo "you should use mongodb with the version >= 3.4"
+	echo "the current version is $version"
+	exit 1
+fi
+
+databasePath="$databaseDir/$database"
+mkdir -p $databasePath
+mongod --dbpath $databasePath --config $mongodConfigFile

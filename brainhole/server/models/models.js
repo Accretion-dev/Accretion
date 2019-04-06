@@ -340,7 +340,7 @@ function initModels () {
   globals.All = All
   globals.topModels = top
   if (globals.isMain) {
-    console.log('model info:', _.pick(globals, ['Withs', 'subSchema', 'structTree', 'Models', 'WithsDict']))
+    console.log('global variables:', Object.keys(globals))
   }
   return {Models, Schemas, structTree, globals, All, Withs, WithsDict}
 }

@@ -1,0 +1,8 @@
+storage:
+   journal:
+      enabled: true
+net:
+   bindIp: 127.0.0.1
+   port: 24666
+replication:
+  replSetName: 'test-Accretion-Cluster'

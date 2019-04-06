@@ -1,8 +1,7 @@
 *.swp
 *.swo
-database/
+database/*
 ./data/
 node_modules
 temp
 *.~*
-
