@@ -3,7 +3,7 @@ import globalConfig from "./configs/config.js"
 import _ from 'lodash'
 import yaml from 'node-yaml'
 let config = require('./nuxt.config.js')
-let databaseConfig = yaml.readSync('../configs/mongod.yml')
+let databaseConfig = yaml.readSync('./configs/mongod.yml')
 import _models from './server/models'
 const {init: database_init} = _models
 import __ from './server/models/models'
@@ -37,7 +37,7 @@ test.before('init database', async t => {
   globalConfig.demoData = false
   globalConfig.unittest = true
   await delay(1000)
-  console.log('delay 5000')
+  //console.log('delay 5000')
   await database_init({config: globalConfig, databaseConfig})
   for (let plugin of globals.plugins) {
     let entry = await globals.Models.Plugins.findOne({uid: plugin.uid})
@@ -49,8 +49,8 @@ test.before('init database', async t => {
     entry.markModified('data')
     await entry.save()
   }
-  console.log('all models:', globals.All)
-  console.log('Setup complete, init database, enable all plugins')
+  //console.log('all models:', globals.All)
+  //console.log('Setup complete, init database, enable all plugins')
 })
 test.serial('after init database', async t => {
   t.true(!!globals.plugins)
@@ -62,7 +62,7 @@ test.serial('transaction-base', async t => {
   let WithsDict = globals.WithsDict
   let All = globals.All
   // test simple add for Article
-  console.log('transaction-base test')
+  //console.log('transaction-base test')
   let session, start, end
   session = await mongoose.startSession()
   session.startTransaction()
@@ -404,7 +404,7 @@ test.serial('test all taglike api', async t => {
   const pstep = false
   for (let apiname of apis) {
     let {name, withname, model: tagModel} = apiname
-    console.log(`test ${name}`)
+    //console.log(`test ${name}`)
     let todos = WithsDict[withname]
     for (let each of todos) {
       if (pstep) console.log(`... ${each}`)
@@ -1316,7 +1316,7 @@ test.serial('tag origin system', async t => {
   const pstep = false
   for (let apiname of apis) {
     let {name, withname, model: tagModel} = apiname
-    console.log(`test ${name}`)
+    // console.log(`test ${name}`)
     let todos = WithsDict[withname]
     for (let model of todos) {
       if (pstep) console.log(`... ${model}`)
@@ -1561,10 +1561,9 @@ test.serial('tag origin system', async t => {
       if((tname='modify 6 to 0, should throw error(modification cause duplicated)')&&!isFamily){
         // after: 0:m; 6:m; 7:m; 1:m;
         let fn = async () => {
-          let toUpdate = {
+          let toUpdate = Object.assign({
             id: updated[0].id,
-            ...taglike[0]
-          }
+          }, taglike[0])
           await api({
             operation: '*',
             data: {[name]: [toUpdate]},
@@ -1580,10 +1579,9 @@ test.serial('tag origin system', async t => {
       if((tname='modify 7 to 0, should throw error(modification cause duplicated)')&&!isFamily){
         // after: 0:m; 6:m; 7:m; 1:m;
         let fn = async () => {
-          let toUpdate = {
+          let toUpdate = Object.assign({
             id: updated[3].id,
-            ...taglike[0]
-          }
+          }, taglike[0])
           await api({
             operation: '*',
             data: {[name]: [toUpdate]},
@@ -1630,10 +1628,9 @@ test.serial('tag origin system', async t => {
       if((tname='modify 2 to 7, should throw error(its origin is not only manual)')&&!isFamily){
         // after: 0:m; 1:m; 6:m; 7:m; 2:a1; 3:a1;
         let fn = async () => {
-          let toUpdate = {
+          let toUpdate = Object.assign({
             id: updated[0].id,
-            ...taglike[7]
-          }
+          }, taglike[7])
           await api({
             operation: '*',
             data: {[name]: [toUpdate]},
@@ -1943,7 +1940,7 @@ test.serial('reverse delete for taglike', async t => {
   for (let apiname of apis) {
     let {name, withname, model: tagModel} = apiname
     let id_name = name.slice(0,-1) + '_id'
-    console.log(`test ${name}`)
+    // console.log(`test ${name}`)
     let todos = WithsDict[withname]
     for (let model of todos) {
       if (pstep) console.log(`... ${model}`)

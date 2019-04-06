@@ -5,18 +5,16 @@
   "author": "Fmajor",
   "private": true,
   "scripts": {
-    "clean": "rm -rf server && mkdir -p server",
-    "watch": "npm run clean && bash -c \"$(../dev-scripts/backend/concurrently-command watch)\"",
+    "watch": "nodemon watch-for-test.js",
     "run": "cross-env NODE_ENV=development nodemon server/index.js --watch server",
-    "dev": "bash ../dev-scripts/backend/dev-debug",
+    "dev": "cross-env NODE_ENV=development nodemon --watch server --exec 'babel-node --inspect=\"localhost:12345\" server/index.js'",
     "build": "nuxt build",
     "start": "cross-env NODE_ENV=production node server/index.js",
     "generate": "nuxt generate",
     "lint": "eslint --ext .js,.vue --ignore-path .gitignore .",
     "precommit": "npm run lint",
-    "test": "npx ava -v --watch --fail-fast",
-    "test-inspect": "npx --node-arg=\"--inspect\" ava -v test.js",
-    "test-profile": "inspect node_modules/ava/profile.js test.js "
+    "test": "node ava --fail-fast",
+    "test-inspect": "cross-env NODE_ENV=development nodemon --watch test-final.js --watch server --exec 'babel-node --inspect node_modules/ava/profile.js test-final.js --fail-fast'"
   },
   "nodemonConfig": {
     "ignore": [
@@ -29,10 +27,16 @@
       "test-final.js"
     ],
     "sources": [
+      "./configs/**/*.js",
       "./server/**/*.js"
+    ],
+    "require": [
+      "babel-register",
+      "babel-polyfill"
     ]
   },
   "dependencies": {
+    "@babel/preset-stage-3": "^7.0.0",
     "@nuxtjs/axios": "^5.0.0",
     "axios": "^0.18.0",
     "axios-cookiejar-support": "^0.4.2",
@@ -49,7 +53,7 @@
     "iview": "^3.2.1",
     "lodash": "^4.17.11",
     "mongoose": "^5.4.16",
-    "node-yaml": "^3.1.1",
+    "node-yaml": "^3.2.0",
     "nuxt": "^2.0.0",
     "nuxt-sass-resources-loader": "^2.0.5",
     "passport": "^0.4.0",
@@ -61,8 +65,11 @@
     "tough-cookie": "^3.0.0"
   },
   "devDependencies": {
+    "@babel/polyfill": "^7.4.3",
+    "@babel/preset-env": "^7.4.3",
+    "@babel/register": "^7.4.0",
     "acorn": "^6.0.5",
-    "ava": "^1.1.0",
+    "ava": "^1.4.1",
     "babel-cli": "^6.26.0",
     "babel-core": "^6.26.3",
     "babel-eslint": "^8.2.1",
