@@ -84,9 +84,11 @@
     "eslint": "^5.0.1",
     "eslint-loader": "^2.0.0",
     "eslint-plugin-vue": "^4.0.0",
-    "node-sass": "^4.11.0",
+    "node-sass": "^4.12.0",
     "nodemon": "^1.18.9",
     "ps": "^1.0.0",
+    "random-int": "^2.0.0",
+    "random-words": "^1.1.0",
     "sass-loader": "^7.1.0"
   }
 }

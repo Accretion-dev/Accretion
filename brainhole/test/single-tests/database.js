@@ -1,245 +1,107 @@
-import debugSettings from '../server/debug-settings'
 import mongodb from 'mongodb'
 import yaml from 'node-yaml'
 let WebSocketServer = require('ws').Server
+const randomWords = require('random-words')
+const randomint = require('random-int')
 
-d = global.d
+const MAXINT = 99999
+const MINDATE = Number(new Date('2018-01-01'))
+const MAXDATE = Number(new Date('2020-01-01'))
+const MAXARRAY = 5
+
+function randomDate() {
+  let num = randomint(MINDATE, MAXDATE)
+  return new Date(num)
+}
+function randomInt() {
+  return randomint(MAXINT*2) - MAXINT
+}
+function randomMix() {
+  let flag = randomint(2)
+  if (flag===0) {
+    return randomInt()
+  } else if (flag===1) {
+    return randomWords()
+  } else {
+    return randomDate()
+  }
+}
+
+function randomData(level) {
+  let result = {
+    string: randomWords(),
+    string2: randomWords(),
+    strings: [...Array(randomint(7)).keys()].map(_ => randomWords()).join(' '),
+    number: randomInt(),
+    date: randomDate(),
+    bool: randomint(1),
+  }
+  if (level >= 0) {
+    let complex = {
+      array_number: [...Array(randomint(7)).keys()].map(_ => randomInt()),
+      array_string: [...Array(randomint(7)).keys()].map(_ => randomWords()),
+      array_date: [...Array(randomint(7)).keys()].map(_ => randomDate()),
+      array_mix: [...Array(randomint(7)).keys()].map(_ => randomMix()),
+      object: randomData(level-1),
+      array_object: [...Array(randomint(3)).keys()].map(_ => randomData(level-1)),
+    }
+    result = Object.assign(result, complex)
+  }
+  return result
+}
+
+
+console.log('restart')
+//const wss = new WebSocketServer({ port: 8888 })
 
 let databaseConfig = yaml.readSync('../configs/mongod.yml')
 let {bindIp: ip, port} = databaseConfig.net
 
+let d = global.d = {}
+
+
 async function init() {
   d.conn = await mongodb.connect(`mongodb://${ip}:${port}`, { useNewUrlParser: true })
   d.database = d.conn.db('test')
-  console.log(`connect to mongodb://${ip}:${port}`)
-}
-
-async function testNormalArray() {
-  let collection = d.col = d.database.collection('normalArray')
-  await collection.deleteMany({})
-  let values = [
-    { array: ["0"] },
-    { array: ["1"] },
-    { array: ["1","2"] },
-    { array: ["1","2","3"] },
-    { array: ["1","2","3","4"] },
-    { array: ["4"] },
-    { array: ["5"] },
-  ]
-  await collection.insertMany(values)
-  let result = await collection.aggregate([
-    {
-      $match: {
-        //array: {$not: {$in: ["1","3","2"]}},
-        //array: {$all: ["1","3","2"]},
-        $or: [
-          {array: {$gte:"4", $lte:"5"}},
-          {array: {$regex: "0"}},
-        ]
-      }
-    }
-  ]).toArray()
-  console.log(JSON.stringify(result, null, null))
-}
-async function testNestedArray() {
-  let collection = d.col = d.database.collection('nestedArray')
-  await collection.deleteMany({})
-  let values = [
-    { array: ["0"] },
-    { array: ["1"] },
-    { array: ["1","2"] },
-    { array: ["1","2","3"] },
-    { array: ["1","2","3","4"] },
-    { array: ["4"] },
-    { array: ["5"] },
-  ]
-  values = values.map(_=> ({array: _.array.map(__=>({value: __}))}))
-  values[5].array[0].flags = {}
-  values[5].array[0].flags.in_trash = true
-  values[6].array[0].metadatas = [
-    {flags: {in_trash: true}}
-  ]
-  await collection.insertMany(values)
-  let result = await collection.aggregate([
-    {
-      $match: {
-        array: {
-          $elemMatch: {
-            $and: [
-              { value: { $gte:"4"} },
-              { value: { $lte:"5"} },
-            ]
-          }
+  d.dq = d.database.collection('query')
+  let exists = await d.dq.countDocuments()
+  await d.dq.deleteMany({})
+  if (!exists) {
+    console.log('gen random data')
+    try {
+      await d.dq.dropIndex('TextIndex')
+    } catch (e) { }
+    try {
+      await d.dq.createIndex(
+        {
+          string: "text",
+          string2: "text",
+          strings: "text",
+          string_array: "text"
         },
-      }
+        {
+          weights: {
+            strings: 5,
+            string: 4,
+            string2: 3,
+          },
+          name: "TextIndex"
+        }
+      )
+    } catch (e) { }
+    let count = 99999
+    for (let i=0; i<count; i++) {
+      let data = randomData(2)
+      await d.dq.insertOne(data)
     }
-  ]).toArray()
-  console.log('level 1 test:', JSON.stringify(result, null, null))
-  result = await collection.aggregate([
-    {
-      $match: {
-        array: {
-          $elemMatch: {
-            $and: [
-              { 'flags.in_trash': true },
-            ]
-          }
-        },
-      }
-    }
-  ]).toArray()
-  console.log('level 2 test:', JSON.stringify(result, null, null))
-  result = await collection.aggregate([
-    {
-      $match: {
-        array: {
-          $elemMatch: {
-            $and: [
-              { metadatas: {
-                $elemMatch: {
-                  $and: [
-                    {'flags.in_trash': true }
-                  ]
-                }
-              } },
-            ]
-          }
-        },
-      }
-    }
-  ]).toArray()
-  console.log('level 3 test:', JSON.stringify(result, null, null))
-}
-async function testLookUp() {
-  console.log('begin test lookup')
-  let collection = d.col = d.database.collection('user')
-  await collection.deleteMany({})
-  let values = [
-    { username: 'user1', id: 1},
-    { username: 'user2', id: 2},
-    { username: 'user3', id: 3},
-  ]
-  await collection.insertMany(values)
-  collection = d.col = d.database.collection('metadata')
-  await collection.deleteMany({})
-  values = [
-    { name: 'metadata1', id: 1},
-    { name: 'metadata2', id: 2},
-    { name: 'metadata3', id: 3},
-  ]
-  await collection.insertMany(values)
-  collection = d.col = d.database.collection('tag')
-  await collection.deleteMany({})
-  values = [
-    { name: 'tag1', id: 1},
-    { name: 'tag2', id: 2},
-    { name: 'tag3', id: 3},
-  ]
-  await collection.insertMany(values)
-  collection = d.col = d.database.collection('article')
-  await collection.deleteMany({})
-  values = [
-    { title: 'article1', id: 1, user_id: 1, tags: [ ]},
-    { title: 'article2', id: 2, user_id: 2, tags: [
-      {tag_id: 1, metadatas: [
-        {metadata_id:1, value:1, }
-      ]},
-    ]},
-    { title: 'article3', id: 3, user_id: 3, tags: [
-      {tag_id: 1, metadatas: [
-        {metadata_id:1, value:1, }
-      ]},
-      {tag_id: 2, metadatas: [
-        {metadata_id:2, value:2, }
-      ]},
-      {tag_id: 3 }
-    ]},
-  ]
-  await collection.insertMany(values)
-  let result = await collection.aggregate([
-    // for user_id
-    {
-      $lookup: {
-        from: 'user',
-        localField: 'user_id',
-        foreignField: 'id',
-        as: 'user',
-      }
-    },
-    { $unwind: '$user', },
-    // for tags
-    { $unwind: {path: '$tags', preserveNullAndEmptyArrays: true}, },
-    { $unwind: {path:'$tags.metadatas', preserveNullAndEmptyArrays: true}, },
-    {
-      $lookup: {
-        from: 'metadata',
-        localField: 'tags.metadatas.metadata_id',
-        foreignField: 'id',
-        as: 'tags.metadatas.metadata',
-      }
-    },
-    { $unwind: {path:'$tags.metadatas.metadata', preserveNullAndEmptyArrays: true}, },
-    {
-      $lookup: {
-        from: 'tag',
-        localField: 'tags.tag_id',
-        foreignField: 'id',
-        as: 'tags.tag',
-      }
-    },
-    { $unwind: {path:'$tags.tag', preserveNullAndEmptyArrays: true}, },
-    { $group: {
-      _id: {_id: "$_id", tag_id: "$tags.tag_id"},
-      tag_metadatas: {$push: "$tags.metadatas"},
-      _full: {$first: "$$ROOT"}
-    }},
-    { $addFields: {
-      '_full.tags.metadatas': {$cond: {
-        if: {$eq:[{$arrayElemAt:["$tag_metadatas", 0]}, {}]},
-        then: [],
-        else: "$tag_metadatas",
-      }},
-    }},
-    {$replaceRoot: {newRoot: "$_full"}},
-
-    { $group: {
-      _id: "$_id",
-      tags: {$push: "$tags"},
-      _full: {$first: "$$ROOT"}
-    }},
-    { $addFields: {
-      '_full.tags': {$cond: {
-        if: { $eq:["$tags", [{metadatas:[]}]] },
-        then: [],
-        else: "$tags",
-      }},
-    }},
-    {$replaceRoot: {newRoot: "$_full"}},
-
-    {
-      $project: {
-        _id: 0,
-        "user._id": 0,
-        "tags._id": 0,
-        "tags.tag._id": 0,
-        "tags.metadatas._id": 0,
-      }
-    },
-    // match
-    {
-      $match: {
-      }
-    },
-    { $sort: {title:1}}
-  ]).toArray()
-  console.log('test user look raw data:', JSON.stringify(result, null, 2))
+    console.log('done')
+  } else {
+    console.log('use exists random data, count:', exists)
+  }
 }
 
 async function main() {
   await init()
-  await testNormalArray()
-  await testNestedArray()
-  await testLookUp()
 }
 
 main()

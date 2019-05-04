@@ -4,6 +4,7 @@ import _ from 'lodash'
 import passportLocalMongoose from 'passport-local-mongoose'
 import globals from "../globals"
 import cloneDeep from 'clone-deep'
+let ObjectId = mongoose.Schema.Types.ObjectId
 
 let clone = cloneDeep
 let Schema = mongoose.Schema
@@ -60,7 +61,8 @@ formatMap.set(String, 'string')
 formatMap.set(Boolean, 'boolean')
 formatMap.set(Date, 'date')
 formatMap.set(Schema.Types.Mixed, 'object')
-formatMap.set(Number, 'id')
+formatMap.set(Number, 'number')
+formatMap.set(ObjectId, 'id')
 const fieldMap = {
   Tag: 'tags',
   Catalogue: 'catalogues',
@@ -95,25 +97,51 @@ function J(obj) {
 }
 
 // stringify structTree
-function stringifyStructTree (input) {
-  let result = {}
+function stringifyStructTree (input, path, isArray) {
+  let result
   if (input instanceof Schema) {
+    let model, root
+    model = input.options.collection
+    result = {
+      type: 'object',
+      fields: {},
+    }
+    if (path === undefined) {
+      result.root = model
+      if (input.raw_config && input.raw_config.searchKeyArray) {
+        result.searchKey = input.raw_config.searchKeyArray
+      }
+    } else {
+      result.path = path
+    }
+    if (isArray) result.array = true
     let keys = Object.keys(input.tree)
     keys = keys.filter(_ => _ !== '__v')
     keys = keys.filter(_ => !(input.tree[_] instanceof mongoose.VirtualType))
     keys.forEach(key => {
-      result[key] = stringifyStructTree(input.tree[key])
+      if (path) {
+        result.fields[key] = stringifyStructTree(input.tree[key], `${path}.${key}`)
+      } else {
+        result.fields[key] = stringifyStructTree(input.tree[key], `${key}`)
+      }
     })
     return result
   } else if (Array.isArray(input)) {
-    return [stringifyStructTree(input[0])]
+    return stringifyStructTree(input[0], path, true)
   } else {
+    result = {
+      path,
+    }
+    if (isArray) result.array = true
     let keys = Object.keys(input)
     if (keys.includes('type') && typeof(input.type) === 'function') {
-      return formatMap.get(input.type)
-    } else {
+      result.type = formatMap.get(input.type)
+      return result
+    } else { // nested object
+      result.fields = {}
+      result.type = 'object'
       keys.forEach(key => {
-        result[key] = stringifyStructTree(input[key])
+        result.fields[key] = stringifyStructTree(input[key], `${path}.${key}`)
       })
       return result
     }
@@ -204,6 +232,9 @@ function initModels () {
     subSchema[type] = new Schema(schemaData)
     WithsDict[withName].forEach(key => {
       let Model = models[key]
+      if (Model.searchKeys) {
+        Model.searchKeys.push({[`${type}s.${type}_name`]: 1})
+      }
       let schemaDict = Model.schema
       schemaDict[`${type}s`] = [subSchema[type]]
     })
@@ -225,6 +256,9 @@ function initModels () {
   subSchema.relation = new Schema(schemaData)
   WithRelation.forEach(key => {
     let Model = models[key]
+    if (Model.searchKeys) {
+      Model.searchKeys.push({[`relations.relation_name`]: 1})
+    }
     let schemaDict = Model.schema
     schemaDict.relations = [subSchema.relation]
   })
@@ -252,6 +286,9 @@ function initModels () {
   subSchema.metadata = new Schema(schemaData)
   WithMetadata.forEach(key => {
     let Model = models[key]
+    if (Model.searchKeys) {
+      Model.searchKeys.push({[`metadatas.metadata_name`]: 1})
+    }
     let schemaDict = Model.schema
     schemaDict.metadatas = [subSchema.metadata]
   })
@@ -272,14 +309,17 @@ function initModels () {
     let schemaDict = Model.schema
     schemaDict.user = foreignSchemas.User
   })
-  // add comment, createdAt, modifiedAt, id for All and subSchema
+  // add comment, id for All and subSchema
   let extras = {
     id: { type: Number, auto: true },
-    comment: { type: String, index: true },
+    comment: { type: String },
     origin: [{ type: Schema.Types.Mixed }],
   }
   All.forEach(key => {
     let Model = models[key]
+    if (Model.searchKeys) {
+      Model.searchKeys.push({comment: 1})
+    }
     Object.assign(Model.schema, extras)
   })
   Object.keys(subSchema).forEach(key => {
@@ -287,13 +327,20 @@ function initModels () {
     let Model = subSchema[key]
     Model.add(extras)
   })
+  // add ctime(create), mtime(modify), mmtime(modify metadata), mctime(modify content)
   extras = {
-    createdAt: { type: Date, default: Date.now },
-    modifiedAt: { type: Date, default: Date.now },
+    ctime: { type: Date, default: Date.now, index:true },
+    mtime: { type: Date, default: Date.now, index: true },
+  }
+  let extraFull = {
+    ctime: { type: Date, default: Date.now, index:true },
+    mtime: { type: Date, default: Date.now, index: true },
+    mmtime: { type: Date, default: Date.now, index: true },
+    mctime: { type: Date, default: Date.now, index: true },
   }
   AllWithTimeComment.forEach(key => {
     let Model = models[key]
-    Object.assign(Model.schema, extras)
+    Object.assign(Model.schema, extraFull)
   })
   Object.keys(subSchema).forEach(key => {
     if (['family'].includes(key)) return // not add for these models
@@ -324,8 +371,24 @@ function initModels () {
     let Model = models[key]
     let schemaDict = Model.schema
     Schemas[key] = new Schema(schemaDict, {collection: key})
+    Schemas[key].raw_config = Model
+    if (Model.searchKeys) {
+      let weightDict = {}
+      let fullDict = {}
+      for (let each of Model.searchKeys) {
+        Object.assign(weightDict, each)
+        let key = Object.keys(each)[0]
+        fullDict[key] = "text"
+      }
+      Schemas[key].index(fullDict, {name: 'SearchIndex', weights: weightDict})
+      Model.weightDict = weightDict
+      Model.searchKeyArray = Object.keys(fullDict)
+    }
   })
-  let structTree = globals.structTree = stringifyStructTree(Schemas)
+  let structTree = globals.structTree = {}
+  for (let key of Object.keys(Schemas)) {
+    structTree[key] = stringifyStructTree(Schemas[key])
+  }
 
   // generate models
   modelAll.forEach(key => {

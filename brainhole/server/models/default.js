@@ -53,37 +53,41 @@ components.map(_ => Plugins.schema[_] = [{type: mongoose.Schema.Types.Mixed}])
 
 // four import meta info for all other model
 const Metadata = {
+  searchKeys: [{name:1}],
   schema: {
-    name: { type: String, index: true, required: true },
-    type: { type: String, index: true },
-    format: { type: String, index: true },
+    name: { type: String, required: true },
+    type: { type: String },
+    format: { type: String },
   }
 }
 const Relation = {
+  searchKeys: [{name:1}, {reverse_name:1}],
   schema: {
-    name: { type: String, index: true, required: true },
-    reverse_name: { type: String, index: true },
-    type: { type: String, index: true },
+    name: { type: String, required: true },
+    reverse_name: { type: String },
+    type: { type: String },
     onlyFor: [{ type: String }],
-    symmetric: { type: Boolean, index: true },
+    symmetric: { type: Boolean },
     hook: { type: String },
   }
 }
 const Tag = {
+  searchKeys: [{name:1}],
   schema: {
-    name: { type: String, index: true, required: true },
-    type: { type: String, index: true },
+    name: { type: String, text: true, required: true },
+    type: { type: String },
     description: { type: String },
     display_name: { type: String },
   }
 }
 const Catalogue = {
+  searchKeys: [{name:1}],
   projects: {
     simple: {name: 1, type: 1, comment: 1}
   },
   schema: {
-    name: { type: String, index: true, required: true },
-    type: { type: String, index: true },
+    name: { type: String, required: true },
+    type: { type: String },
     description: { type: String },
   }
 }
@@ -91,39 +95,38 @@ const Catalogue = {
 // top models
 //   have metadatas, relations, tags, catalogues, flags, fathers, children
 const Article = {
+  searchKeys: [{title:1}, {author:1}, {editor:1}, {abstract:1}],
   projects: {
     simple: {name: 1, type: 1, comment: 1},
-    nobulk: {content: 0},
   },
   schema: {
-    title: { type: String, index: true, required: true },
-    author: { type: String, index: true },
-    editor: { type: String, index: true },
-    abstract: { type: String, index: true },
-    type: { type: String, index: true },
+    title: { type: String, required: true },
+    author: { type: String, },
+    editor: { type: String, },
+    abstract: { type: String, },
+    type: { type: String },
     content: { type: String },
   }
 }
 const Website = {
+  searchKeys: [{title:1}, {url:1}],
   projects: {
     simple: {title: 1, url: 1, comment: 1},
   },
   schema: {
-    title: { type: String, index: true },
-    url: { type: String, index: true, required: true },
+    title: { type: String },
+    url: { type: String, required: true },
   }
 }
 const File = {
+  searchKeys: [{name:1}, {path:1}],
   projects: {
     simple: {name: 1, path: 1, comment: 1},
   },
   schema: {
-    name: { type: String, index: true, required: true },
-    path: { type: String, index: true, required: true },
-    description: { type: String, index: true },
-    bulk: {
-      content: { type: String },
-    }
+    name: { type: String, required: true },
+    path: { type: String, required: true },
+    content: { type: String },
   }
 }
 
@@ -136,13 +139,13 @@ const File = {
 // other models
 const Config = {
   schema: {
-    name: { type: String, index: true, required: true },
+    name: { type: String, required: true },
     value: { type: Schema.Types.Mixed }
   }
 }
 const UserConfig = {
   schema: {
-    name: { type: String, index: true, required: true },
+    name: { type: String, required: true },
     value: { type: Schema.Types.Mixed }
   }
 }
