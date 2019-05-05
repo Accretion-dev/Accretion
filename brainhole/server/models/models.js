@@ -115,6 +115,12 @@ function stringifyStructTree (input, path, isArray) {
       result.path = path
     }
     if (isArray) result.array = true
+    if (result.array) { // nested object array, should have primary_key
+      let lastkey = path
+      if (['tags', 'metadatas', 'catalogues', 'relations'].includes(lastkey)) {
+        result.primary_key = lastkey.slice(0,-1) + '_name'
+      }
+    }
     let keys = Object.keys(input.tree)
     keys = keys.filter(_ => _ !== '__v')
     keys = keys.filter(_ => !(input.tree[_] instanceof mongoose.VirtualType))
