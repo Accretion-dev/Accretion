@@ -122,12 +122,15 @@ Mongodb本身提供了强大的查询语法,简介如下
 3. 只含一个条目的嵌套字典输入简化
   * `number|gt: 10` => `{number:{$gt: 10}}`
   * `number|in: [1,2,3]` => `{number:{$in: [1,2,3]}}`
-4. 简单字符的输入不需要引号, 复杂的或者含空格的字符才需要引号, 如果输入可以解析为数字,则为数字
+4. 简化`$in`的输入: 如果value是个数组,而他的key并没有以`$`开头,那么自动将其包装为`$in:[]`
+  * `number: [1,2,3]` => `{number:{$in: [1,2,3]}}`
+  * `title: [foo,/bar/]` => `{title:{$in: ['foo',/bar/]}}`
+5. 简单字符的输入不需要引号, 复杂的或者含空格的字符才需要引号, 如果输入可以解析为数字,则为数字
   * `tags.tag_name: haha` => `{'tags.tag_name': 'haha'}`
   * `tags.tag_name|in: [foo, bar, 'foo bar', '\'foo\tbar\\']` =>
     `{'tags.tag_name': {$in: ['foo', 'bar', 'foo bar', "'foo\tbar\\"]}}`
   * `tags:{$gt: 123, $lt:123asd}` => `{tags: {$gt: 123, $lt: '123asd'}}`
-5. 放在末尾的若干字符会合并,使用`$text`做全文搜索,放在逻辑最顶端,与其他查询部分呈and关系. 具体的搜索字段见源代码. 对于Article的索引字段,见上面`Mongodb查询语法`章节的最后部分
+6. 放在末尾的若干字符会合并,使用`$text`做全文搜索,放在逻辑最顶端,与其他查询部分呈and关系. 具体的搜索字段见源代码. 对于Article的索引字段,见上面`Mongodb查询语法`章节的最后部分
   * `python 'parallel programming' -node` =>
     `{$text:{$search: 'python "parallel programming" -node'}}`
   * `tags.tag_name: astronomy title:/astronomy/ blackhole mass` =>
@@ -148,7 +151,13 @@ Mongodb本身提供了强大的查询语法,简介如下
         {$text:{$search:'blackhole mass'}}
       ]}
     ```
-6. 提供快速的关于数组长度数据的搜索
+7. 对于`metadatas`,`tags`,`catalogues`,`relations`这四个nested object array的直接搜索编译为对其中name的搜索, 除非后面的操作符为`$el`, `$elemMatch`或`$len`
+  * `metadatas: /good/` => `metadatas.metadatas_name: /good/`
+  * `metadatas|in: [/good/]` => `metadatas.metadatas_name: {$in:[/good/]}`
+  * `metadatas: [/good/]` => `metadatas.metadatas_name: {$in:[/good/]}`
+  * `metadatas: {gt: 'foo'}` => `metadatas.metadata_name: {$gt:'foo'}`
+  * `metadatas|el: {metadata_name: 'foo'}` => `metadatas: {$el:{metadata_name: 'foo'}}`
+8. 提供快速的关于数组长度数据的搜索
   * `tags|len|gt: 5 tags|len|lt:10` =>
     ```
     // 这个数组供aggregate查询函数使用
@@ -160,7 +169,7 @@ Mongodb本身提供了强大的查询语法,简介如下
       ]}}
     ]
     ```
-7. Horizon语法还实现了一个超级直观的日期过滤器(搜索的字段格式必须是日期, 且搜索逻辑在`$elemMatch`之外)
+9. Horizon语法还实现了一个超级直观的日期过滤器(搜索的字段格式必须是日期, 且搜索逻辑在`$elemMatch`之外)
   * `date: '>2018-10-10T12:00:00'`: date大于当地时间`2018-10-10T12:00:00`
   * `date: '<2018-10-10T12:00:00+08:00'`: date小于`2018-10-10T12:00:00+08:00`
   * 这里的日期需要符合ISO格式
@@ -179,10 +188,10 @@ Mongodb本身提供了强大的查询语法,简介如下
   * `date: '>-3d <-1d'`: date在过去3天之内,1天之外
   * `date: '>-30h <-10h'`: date在过去30小时之内,10小时之外
   * 负时间支持的单位有'y年','M月','d日','h小时','m分钟','s秒'
-8. 将`$elemMatch`简化为`$el`
+10. 将`$elemMatch`简化为`$el`
   * `tags|el:{tag_name:astronomy, ctime|lt:'2019-01-01'}` =>
     `{tags:{$elemMatch:{tag_name:'astronomy', ctime:{$lt:'2019-01-01'}}}}`
-9. 在输入查询语句的过程中提供动态的自动补全功能,让用户快速输入以及实时了解自己可以在此字段下搜索什么
-10. 实时的搜索结构高亮显示
+11. 在输入查询语句的过程中提供动态的自动补全功能,让用户快速输入以及实时了解自己可以在此字段下搜索什么
+12. 实时的搜索结构高亮显示
 ## 演示视频
 ...制作中
