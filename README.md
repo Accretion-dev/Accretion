@@ -55,8 +55,3 @@ cd brainhole; npm i
 预计开发时长: 半年以上(因为是个人的业余项目)
 
 项目设计思路: https://zhuanlan.zhihu.com/p/57614943
-
-项目Teleram讨论群: https://t.me/accretionDevOffTopic
-
-# 更新注意事项
-目前项目处于设计、开发的初级阶段，master分支可能长期不更新。对项目进度感兴趣的同学请移步develop分支。
